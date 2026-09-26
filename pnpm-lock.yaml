@@ -60,7 +60,11 @@ importers:
 
   packages/clock: {}
 
-  packages/config: {}
+  packages/config:
+    dependencies:
+      '@orrery/clock':
+        specifier: workspace:*
+        version: link:../clock
 
   packages/db:
     dependencies:
