@@ -23,6 +23,10 @@
     "./token": {
       "types": "./dist/token.d.ts",
       "default": "./dist/token.js"
+    },
+    "./lifecycle": {
+      "types": "./dist/lifecycle.d.ts",
+      "default": "./dist/lifecycle.js"
     }
   },
   "scripts": {

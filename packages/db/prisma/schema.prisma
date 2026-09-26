@@ -96,6 +96,7 @@ model User {
   verdicts              IntegrityVerdict[]
   feedback              Feedback[]
   auditEvents           AuditEvent[]
+  securityEvents        SecurityEvent[]
   notifications         Notification[]
   simDrafts             SimulationDraft[]
   assets                Asset[]
@@ -116,6 +117,54 @@ enum UserStatus {
   SUSPENDED
   DELETING
   DELETED
+}
+
+/// A security-relevant EVENT, distinct from AuditEvent.
+///
+/// The split is load-bearing and the reason both tables exist:
+///
+///   · `AuditEvent` answers "who did what to what, and can we explain it to a teacher?"
+///   · `SecurityEvent` answers "did something happen that a human should look at?"
+///
+/// A security event is a SIGNAL, never a verdict. `plans/09` is explicit that integrity and
+/// account telemetry are evidence for a human, not an automated judgement — so this table
+/// records that a pattern was seen and deliberately carries no `severity` that anything is
+/// allowed to branch on automatically. Automatic consequences live in the state machine
+/// (INV-AUTH-1: reuse of a revoked token revokes the family), which is decided at write time
+/// by a human-readable rule, not by reading this table back.
+///
+/// `dedupeKey` exists because the events worth raising are the ones that repeat, and a
+/// repeated MFA failure should be one row that increments, not ten thousand rows.
+model SecurityEvent {
+  id          String   @id @default(uuid(7))
+  /// Which family of signal: reuseOfRevokedToken, mfaFailure, impossibleTravel, …
+  kind        String
+  /// The account the signal is about. NOT NULL: a security event nobody is accountable for
+  /// is a log line, and log lines do not get investigated. Set to the user involved even when
+  /// the event is about an attempt against them.
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// How many times this exact signal has been seen. A first MFA typo is noise; the fifth
+  /// is a takeover attempt, and the difference is the count.
+  occurrences Int      @default(1)
+  /// Stable key for the counter, e.g. `mfa-failure:{userId}:{ipPseudonym}:{10-minute bucket}`.
+  /// Without it, deduplication would have to guess.
+  dedupeKey   String
+  /// Structured detail. Secrets never go here — it is read by humans in a review queue, and
+  /// a review queue is exactly the wrong place to store a token or a raw IP.
+  meta        Json     @default("{}")
+  /// Set once a human has looked. The packet's "anomaly signals to a review queue" is this
+  /// column plus the queue; the queue is P8, the column is here so the rows are not lost when
+  /// it arrives.
+  reviewedAt  DateTime? @db.Timestamptz(3)
+  reviewedBy  String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([dedupeKey])
+  @@index([userId, createdAt])
+  @@index([kind, createdAt])
+  @@index([reviewedAt, createdAt])
 }
 
 model Account {
