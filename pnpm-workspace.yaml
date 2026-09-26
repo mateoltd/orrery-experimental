@@ -1,0 +1,6 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+# sims/ is deliberately NOT a workspace. Simulations are built by their own CI job
+# (plans/20 P6-T4) and are never installed as dependencies. A sim may depend only on
+# @orrery/sim-sdk and a small allowlist; there is no per-sim install (ADR-0013).

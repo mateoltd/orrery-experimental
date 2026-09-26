@@ -33,6 +33,7 @@
 | 20 | [`20-PHASE-PACKETS.md`](20-PHASE-PACKETS.md) | The task tables. Task IDs are stable. |
 | 21 | [`21-RESEARCH-NOTES.md`](21-RESEARCH-NOTES.md) | Why the design is what it is. Citations. |
 | 22 | [`22-ADRS.md`](22-ADRS.md) | Before arguing with a decision. |
+| 23 | [`23-REVIEW-ACTIONS.md`](23-REVIEW-ACTIONS.md) | **Read this.** Every finding from three independent reviews, with its disposition. |
 | — | [`BOARD.md`](BOARD.md) | Live task state. |
 
 ---
@@ -49,6 +50,14 @@
 
 ## Current state
 
-Planning. Nothing is implemented. The repository contains this plan set, the earlier `../docs/` draft, and a git history with the plan commits.
+**Phase P0 — Foundation.** Execution started. Working state is tracked in `.tmp/TRACKER.md`.
+
+> The plan was reviewed three times before execution began and the reviews found real
+> defects: a Prisma schema that did not validate, a release design that could not meet its
+> own SLO, a citation that had been edited to support the opposite of what it says, a
+> sizing model that understated the work by 2.7×, and a gate on 220 simulations that could
+> not pass against its own catalogue. All of it is recorded with a disposition in
+> [`23-REVIEW-ACTIONS.md`](23-REVIEW-ACTIONS.md). **The corrected sizing is ~4,500–5,500 h
+> over 15–21 weeks in two releases, not the 7–10 weeks originally claimed.** The repository contains this plan set, the earlier `../docs/` draft, and a git history with the plan commits.
 
 The first executable unit is **P0-T1** in `20-PHASE-PACKETS.md`.
