@@ -43,15 +43,12 @@ describe('toSessionState', () => {
   });
 
   it('carries a real revocation through with its reason', () => {
-    const s = toSessionState(
-      row({
-        revokedAt: new Date('2026-09-26T12:30:00.000Z'),
-        revokedReason: 'passwordChanged',
-      }),
-    );
-    expect(s.revokedAt).toBe(
-      row({ revokedAt: new Date('2026-09-26T12:30:00.000Z') }).revokedAt!.getTime(),
-    );
+    const revokedAt = new Date('2026-09-26T12:30:00.000Z');
+    const s = toSessionState(row({ revokedAt, revokedReason: 'passwordChanged' }));
+    // The expected value is built from the SAME Date object rather than re-deriving it from a
+    // second `row(...)` call with a `!` on a nullable field. Asserting against the input is
+    // clearer and needs no assertion that the linter has to be told to ignore.
+    expect(s.revokedAt).toBe(revokedAt.getTime());
     expect(s.revokedReason).toBe('passwordChanged');
   });
 });

@@ -80,12 +80,16 @@ export interface SessionCacheOptions {
 
 export class SessionCache {
   private readonly entries = new Map<string, CacheEntry>();
+
+  // `options` is a plain parameter, not a `private readonly` property: everything it supplies
+  // is destructured into a field below, so keeping a reference to the whole object would be a
+  // second copy of the same truth that can drift from the fields derived from it.
   private readonly ttl: Millis;
   private readonly now: () => Millis;
 
   constructor(
     private readonly store: SessionStore,
-    private readonly options: SessionCacheOptions,
+    options: SessionCacheOptions,
   ) {
     this.ttl = options.ttl ?? SESSION_CACHE_TTL;
     this.now = options.now;
@@ -114,9 +118,11 @@ export class SessionCache {
         this.entries.delete(tokenHash);
         return { session: null, fromCache: false, discardedBecause: 'epochMoved' };
       }
-      // eslint-disable-next-line no-fallthrough -- intentional: a stale entry is discarded and
-      // the reload below is the answer. Falling through is the fix, not an oversight.
       // TTL expiry is NOT a negative answer. Drop the entry and FALL THROUGH to a reload.
+      // There is no `break` and no `case` here, so `no-fallthrough` does not apply and no
+      // suppression is needed. An unused eslint-disable is itself an error, and worse than
+      // none: it advertises a suppression that is not happening, so a REAL fallthrough added
+      // later would sail through unreviewed.
       //
       // The first version returned `{ session: null }` here, which meant that after 60 seconds
       // EVERY session in the system started resolving as `unknownToken` — a total outage that
