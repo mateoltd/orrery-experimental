@@ -1,0 +1,1205 @@
+// Orrery — data model. The machine-readable contract behind plans/01-DOMAIN-MODEL.md.
+//
+// Conventions
+//   • IDs: uuid(7) (time-ordered). Never reuse an ID in a reference field; soft-delete user content.
+//   • tenantId is reserved on every tenant-scoped table (D2: single-tenant-ready from day one).
+//     Nullable and unused in the single-tenant launch; backfilling later is far cheaper than adding later.
+//   • Points/weights: Decimal(9,2). Never Float.
+//   • Instants: DateTime @db.Timestamptz(3), UTC. Rendering is the client's problem.
+//   • JSONB holds: block content, question specs (THE ANSWER KEY), policy, manifest, evidence payload.
+//   • Every consequential mutation writes an AuditEvent in the same transaction.
+//
+// P0-T4 turns this into a real migration. P0-T9 is expected to change it; that is the point.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────────────────────────────────────── identity
+
+model User {
+  id            String     @id @default(uuid(7))
+  tenantId      String?
+  email         String     @unique
+  emailVerified Boolean    @default(false)
+  name          String
+  avatarUrl     String?
+  status        UserStatus @default(ACTIVE)
+  locale        String     @default("en-GB")
+  timezone      String     @default("UTC")
+
+  // minors posture (15-A11Y-I18N.md, 14-SECURITY-PRIVACY.md §7.4)
+  isMinor         Boolean @default(false)
+  guardianEmail   String?
+  guardianConsentAt DateTime?
+
+  // lifecycle
+  deletingAt   DateTime?
+  deletedAt    DateTime?
+  anonymisedAt DateTime?
+  suspendedReason String?
+  lastLoginAt  DateTime?
+
+  mfaEnabled   Boolean   @default(false)
+  mfaSecretEnc String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  accounts           Account[]
+  sessions           Session[]
+  verificationTokens VerificationToken[]
+  resources          Resource[]
+  resourceVersions   ResourceVersion[]
+  banks              QuestionBank[]
+  classroomsOwned    Classroom[]            @relation("ClassroomOwner")
+  enrollments        Enrollment[]
+  invitesSent        ClassroomInvitation[]  @relation("InviteSent")
+  invitesAccepted    ClassroomInvitation[]  @relation("InviteAccepted")
+  assignmentsCreated Assignment[]           @relation("AssignmentAuthor")
+  attempts           ExamAttempt[]
+  responsesGraded    QuestionResponse[]     @relation("ResponseGrader")
+  reviewTasks        ReviewTask[]
+  releaseBatches     ReleaseBatch[]
+  verdicts           IntegrityVerdict[]
+  feedback           Feedback[]
+  auditEvents        AuditEvent[]
+  notifications      Notification[]
+  simDrafts          SimulationDraft[]
+  assets             Asset[]
+  ratings            Rating[]
+  comments           Comment[]
+  accommodationsGranted Accommodation[]      @relation("AccommodationGrantor")
+  accommodationsHeld    Accommodation[]      @relation("AccommodationStudent")
+
+  @@index([status, createdAt])
+  @@index([tenantId])
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETING
+  DELETED
+}
+
+model Account {
+  id                    String    @id @default(uuid(7))
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String? // argon2id
+  createdAt             DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+// INV-AUTH-1: sessions live in Postgres so they can be revoked. No JWT-only sessions.
+model Session {
+  id           String    @id @default(uuid(7))
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash    String    @unique
+  familyId     String // rotates on password change / MFA change; reuse detection
+  expiresAt    DateTime  @db.Timestamptz(3)
+  ipHash       String?
+  userAgent    String?
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  revokedAt    DateTime?
+  revokedReason String?
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@index([familyId])
+}
+
+model VerificationToken {
+  id         String   @id @default(uuid(7))
+  identifier String
+  tokenHash  String   @unique
+  expiresAt  DateTime @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([identifier])
+}
+
+// ───────────────────────────────────────────────────────── taxonomy
+
+model Subject {
+  id        String  @id @default(uuid(7))
+  slug      String  @unique
+  name      String
+  description String?
+  colour    String?
+  position  Int     @default(0)
+  parentId  String?
+  parent    Subject?  @relation("SubjectTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Subject[] @relation("SubjectTree")
+
+  resources Resource[]
+  sims      Simulation[]
+
+  @@index([parentId, position])
+}
+
+model Tag {
+  id        String   @id @default(uuid(7))
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  resources ResourceTag[]
+  questions QuestionTag[]
+}
+
+// ─────────────────────────────────────────────────────────── content
+
+enum ResourceKind {
+  LESSON
+  QUIZ
+  EXAM
+}
+
+enum ResourceStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum Visibility {
+  PRIVATE
+  UNLISTED
+  PUBLIC
+}
+
+model Resource {
+  id         String         @id @default(uuid(7))
+  tenantId   String?
+  ownerId    String
+  owner      User           @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  kind       ResourceKind   @default(LESSON)
+  status     ResourceStatus @default(DRAFT)
+  visibility Visibility     @default(PRIVATE)
+  title      String
+  slug       String
+  summary    String?
+  subjectId  String?
+  subject    Subject?       @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  currentVersionId String?          @unique
+  currentVersion   ResourceVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+  archivedAt DateTime?
+  publishedAt DateTime? @db.Timestamptz(3)
+
+  versions   ResourceVersion[] @relation("VersionChain")
+  tags       ResourceTag[]
+  assignments Assignment[]
+  simRefs    ResourceSimRef[]
+  ratings    Rating[]
+  comments   Comment[]
+
+  @@unique([ownerId, slug])
+  @@index([kind, status, visibility, updatedAt])
+  @@index([subjectId, kind, status])
+  @@index([tenantId, status])
+}
+
+// INV-CONTENT-1: write-once. packages/db exposes createResourceVersion and NO content update.
+model ResourceVersion {
+  id         String   @id @default(uuid(7))
+  resourceId String
+  resource   Resource @relation("VersionChain", fields: [resourceId], references: [id], onDelete: Cascade)
+  version    Int
+  blocks        Json
+  blocksChecksum String
+  meta          Json
+  // resolved assessment slots: FIXED(questionId) | POOLED(poolId, drawCount)
+  assessmentSpec  Json?
+  assessmentPolicy Json?
+  blueprintId     String?
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  currentOf   Resource?  @relation("CurrentVersion")
+  assignments Assignment[]
+  questions   Question[]
+  pools       AssessmentSlot[]
+
+  @@unique([resourceId, version])
+  @@index([resourceId, version])
+}
+
+model ResourceTag {
+  resourceId String
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  tagId      String
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([resourceId, tagId])
+  @@index([tagId])
+}
+
+// denormalised index of simulations a version references: publish validation + "who uses this sim?"
+model ResourceSimRef {
+  id         String   @id @default(uuid(7))
+  resourceId String
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  version    Int
+  blockId    String
+  simId      String
+  simVersion String
+
+  @@unique([resourceId, version, blockId])
+  @@index([simId, simVersion])
+}
+
+// ─────────────────────────────────────────────────── question banks
+
+model QuestionBank {
+  id          String   @id @default(uuid(7))
+  tenantId    String?
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  name        String
+  description String?
+  visibility  Visibility @default(PRIVATE)
+  // can other teachers in the owner's classrooms read this bank?
+  sharedWithClassroomIds String[]
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  questions Question[]
+  pools     QuestionPool[]
+
+  @@index([ownerId])
+  @@index([tenantId])
+}
+
+// INV-BANK-3: a bank item is edited freely; the VERSION SNAPSHOT below is what students see.
+model Question {
+  id         String       @id @default(uuid(7))
+  tenantId   String?
+  bankId     String
+  bank       QuestionBank @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  type       String
+  // ── INV-Q-1: this column is the answer key. Never projected to a student client.
+  spec       Json
+  points     Decimal      @default(1) @db.Decimal(9, 2)
+  gradingMode GradingMode @default(AUTO)
+  timeLimitSec Int?
+  shuffleOptions Boolean  @default(false)
+  estimatedSeconds Int?
+  modelAnswer String?
+  rubric     Json?
+  tags       QuestionTag[]
+  language   String       @default("en-GB")
+
+  // simulation binding (INV-SIM-2)
+  simId      String?
+  simVersion String?
+  simConfig  Json?
+
+  // cognitive demand, for blueprint coverage reporting (08-ITEM-ANALYSIS.md)
+  cognitiveDemand String?
+
+  // snapshot rows: created when a resource version is published, keyed to that version
+  snapshotOfId String?
+  snapshots   Question[]  @relation("QuestionSnapshot")
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  snapshotsOf Question? @relation("QuestionSnapshot", fields: [snapshotOfId], references: [id], onDelete: SetNull)
+  snapshotFor ResourceVersion? @relation(fields: [resourceVersionId], references: [id], onDelete: Cascade)
+  resourceVersionId String? @unique
+
+  responses    QuestionResponse[]
+  versionSnapshots ResourceVersion[] @relation("SnapshotVersion")
+  poolItems    QuestionPoolItem[]
+  revision     Int @default(0)
+
+  @@index([bankId, type])
+  @@index([simId])
+  @@index([snapshotOfId])
+  @@index([cognitiveDemand])
+}
+
+model QuestionTag {
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  tagId      String
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, tagId])
+  @@index([tagId])
+}
+
+enum QuestionPoolStrategy {
+  RANDOM_WITHOUT_REPLACEMENT
+  RANDOM_BALANCED_TOPICS
+  RANDOM_BALANCED_DEMAND
+  FIXED
+}
+
+model QuestionPool {
+  id          String   @id @default(uuid(7))
+  bankId      String
+  bank        QuestionBank @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  name        String
+  strategy    QuestionPoolStrategy @default(RANDOM_WITHOUT_REPLACEMENT)
+  drawCount   Int      // N
+  filter      Json?    // optional JSON-Schema filter over bank items
+  // minimum distinct items the pool must hold to be publishable (INV-BANK-1)
+  minDistinct Int      @default(1)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  items    QuestionPoolItem[]
+  slots    AssessmentSlot[]
+
+  @@index([bankId])
+}
+
+model QuestionPoolItem {
+  poolId     String
+  pool       QuestionPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  weight     Int          @default(1)
+
+  @@id([poolId, questionId])
+  @@index([questionId])
+}
+
+// Blueprint: coverage map used to check an assessment before publishing.
+model Blueprint {
+  id          String   @id @default(uuid(7))
+  tenantId    String?
+  name        String
+  description String?
+  // matrix: { topics: [{ topic, demand, points }] } — the coverage contract
+  matrix      Json
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  versions    ResourceVersion[]
+  checks      BlueprintCheck[]
+
+  @@index([tenantId])
+}
+
+// a machine-checkable coverage report, produced at publish and on demand
+model BlueprintCheck {
+  id          String   @id @default(uuid(7))
+  blueprintId String
+  blueprint   Blueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  resourceVersionId String?
+  pass        Boolean
+  report      Json     // { cell, required, actual, status }[]
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([blueprintId, createdAt])
+}
+
+// one slot of a version's assessmentSpec
+model AssessmentSlot {
+  id                String   @id @default(uuid(7))
+  resourceVersionId String
+  resourceVersion   ResourceVersion @relation(fields: [resourceVersionId], references: [id], onDelete: Cascade)
+  position          Int
+  kind              String   // 'FIXED' | 'POOLED'
+  questionId        String?  // FIXED — the version snapshot
+  poolId            String?  // POOLED
+  drawCount         Int?
+  strategy          QuestionPoolStrategy?
+
+  @@unique([resourceVersionId, position])
+  @@index([poolId])
+}
+
+// ────────────────────────────────────────────── simulation registry
+
+enum SimulationStatus {
+  REGISTERED
+  DEPRECATED
+  DISABLED
+}
+
+model Simulation {
+  id      String
+  version String
+  status  SimulationStatus @default(REGISTERED)
+
+  title       String
+  description String
+  subjects    String[]
+  tags        String[]
+  subjectId   String?
+  subject     Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  manifest    Json
+  bundlePath  String
+  bundleSha256 String
+  byteSize    Int
+  graderEntry String?
+  capturesPath String?
+
+  licence    String
+  provenance String
+  authors    String[]
+
+  replacedById String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  retiredAt DateTime?
+
+  @@unique([id, version])
+  @@index([id, status])
+  @@index([subjects])
+}
+
+// INV-TELEMETRY-2 / ADR-0018: declarative only. No user code is ever executed.
+model SimulationDraft {
+  id        String   @id @default(uuid(7))
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  title     String
+  kind      String   // one of the closed primitive kinds
+  spec      Json
+  compiled  Json?
+  status    String   @default("DRAFT")
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([authorId, status])
+}
+
+// ───────────────────────────────────────────────────────── classroom
+
+enum ClassroomRole {
+  OWNER
+  TEACHER
+  STUDENT
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  REMOVED
+  LEFT
+}
+
+model Classroom {
+  id      String   @id @default(uuid(7))
+  tenantId String?
+  ownerId String
+  owner   User     @relation("ClassroomOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  name    String
+  slug    String
+  description String?
+  archivedAt DateTime?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  enrollments    Enrollment[]
+  invitations    ClassroomInvitation[]
+  assignments    Assignment[]
+  attempts       ExamAttempt[]
+  releaseBatches ReleaseBatch[]
+  rosterImports  RosterImport[]
+  accommodations Accommodation[]
+  blueprints     Blueprint[]
+
+  @@unique([ownerId, slug])
+  @@index([tenantId, archivedAt])
+}
+
+model Enrollment {
+  id          String           @id @default(uuid(7))
+  classroomId String
+  classroom   Classroom        @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        ClassroomRole    @default(STUDENT)
+  status      EnrollmentStatus @default(ACTIVE)
+  displayNameOverride String?
+  joinedAt    DateTime         @default(now()) @db.Timestamptz(3)
+  endedAt     DateTime?
+  invitedById String?
+
+  @@unique([classroomId, userId])
+  @@index([userId, status])
+  @@index([classroomId, role, status])
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+model ClassroomInvitation {
+  id          String           @id @default(uuid(7))
+  classroomId String
+  classroom   Classroom        @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  role        ClassroomRole    @default(STUDENT)
+  email       String?
+  codeHash    String?          @unique
+  codeHint    String?
+  status      InvitationStatus @default(PENDING)
+  expiresAt   DateTime         @db.Timestamptz(3)
+  sentById    String
+  sentBy      User             @relation("InviteSent", fields: [sentById], references: [id], onDelete: Restrict)
+  acceptedById String?
+  acceptedBy  User?            @relation("InviteAccepted", fields: [acceptedById], references: [id], onDelete: SetNull)
+  acceptedAt  DateTime?
+  resendCount Int              @default(0)
+  lastSentAt  DateTime?
+  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
+
+  @@index([classroomId, status])
+  @@index([email, status])
+}
+
+model RosterImport {
+  id          String   @id @default(uuid(7))
+  classroomId String
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  actorId     String
+  filename    String
+  dryRun      Boolean  @default(true)
+  summary     Json
+  errors      Json
+  appliedAt   DateTime?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([classroomId, createdAt])
+}
+
+// ──────────────────────────────────────────────────────── assignment
+
+enum AssignmentMode {
+  ASSIGNMENT
+  EXAM
+}
+
+enum AssignmentStatus {
+  DRAFT
+  PUBLISHED
+  WITHDRAWN
+}
+
+model Assignment {
+  id          String           @id @default(uuid(7))
+  tenantId    String?
+  classroomId String
+  classroom   Classroom        @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  resourceId  String
+  resource    Resource         @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+  // INV-ASSIGN-1: the ONLY thing a student is assessed on.
+  resourceVersionId String
+  resourceVersion   ResourceVersion @relation(fields: [resourceVersionId], references: [id], onDelete: Restrict)
+
+  mode           AssignmentMode   @default(ASSIGNMENT)
+  status         AssignmentStatus @default(DRAFT)
+  titleOverride  String?
+  instructions   Json?
+  availableFrom  DateTime?        @db.Timestamptz(3)
+  availableUntil DateTime?        @db.Timestamptz(3)
+  maxAttempts    Int              @default(1)
+  weight         Decimal          @default(100) @db.Decimal(9, 2)
+  latePenaltyPercent Decimal       @default(0) @db.Decimal(5, 2)
+  policyOverride Json?
+  createdById    String
+  createdBy      User             @relation("AssignmentAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  publishedAt    DateTime?        @db.Timestamptz(3)
+  withdrawnAt    DateTime?
+  createdAt      DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @db.Timestamptz(3)
+
+  attempts       ExamAttempt[]
+  releaseBatches ReleaseBatch[]
+  studentOverrides AssignmentStudentOverride[]
+  accommodations Accommodation[]
+
+  @@index([classroomId, status])
+  @@index([status, availableFrom, availableUntil])
+  @@index([tenantId, status])
+}
+
+// per-student exceptions: window, extra attempts, extra time, accommodation reference
+model AssignmentStudentOverride {
+  id           String   @id @default(uuid(7))
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId    String
+  availableFrom  DateTime? @db.Timestamptz(3)
+  availableUntil DateTime? @db.Timestamptz(3)
+  maxAttempts   Int?
+  extraTimePercent Decimal? @db.Decimal(5, 2)
+  policyOverride Json?
+  reason       String
+  grantedById  String
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([assignmentId, studentId])
+  @@index([studentId])
+}
+
+// INV-ACC-1: a first-class auditable object, not a flag.
+model Accommodation {
+  id           String   @id @default(uuid(7))
+  tenantId     String?
+  classroomId  String
+  classroom    Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      User     @relation("AccommodationStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  assignmentId String?
+  assignment   Assignment? @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  relaxations  String[]
+  extraTimePercent Decimal? @db.Decimal(5, 2)
+  reason       String
+  status       String   @default("ACTIVE")
+  grantedById  String
+  grantedBy    User     @relation("AccommodationGrantor", fields: [grantedById], references: [id], onDelete: Restrict)
+  grantedAt    DateTime @default(now()) @db.Timestamptz(3)
+  expiresAt    DateTime? @db.Timestamptz(3)
+  revokedAt    DateTime? @db.Timestamptz(3)
+
+  @@index([studentId, status])
+  @@index([assignmentId])
+  @@index([classroomId, status])
+}
+
+// ─────────────────────────────────────────────────────────── attempts
+
+enum AttemptStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  EXPIRED
+  TERMINATED
+  PENDING_REVIEW
+  GRADED
+  RELEASED
+  EXCUSED
+  VOIDED
+}
+
+enum AttemptSource {
+  CLIENT
+  CRON
+  TEACHER
+}
+
+model ExamAttempt {
+  id           String   @id @default(uuid(7))
+  tenantId     String?
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  classroomId  String
+  classroom    Classroom  @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      User       @relation(fields: [studentId], references: [id], onDelete: Restrict)
+
+  attemptNumber Int
+  status        AttemptStatus @default(NOT_STARTED)
+
+  // INV-POLICY-1: frozen at first start, never rewritten
+  policySnapshot Json
+  // INV-RNG-1 + INV-BANK-2: seed and the resolved per-student draw, written once
+  rngSeed    String
+  variantMap Json
+  variantSource String @default("VERSION") // VERSION | BANK (explicitly opted out, INV-BANK-3)
+
+  startedAt  DateTime? @db.Timestamptz(3)
+  deadlineAt DateTime? @db.Timestamptz(3)
+  gracePeriodSec Int   @default(60) // RN-04: Moodle's default; 60s absorbs network jitter honestly
+  submittedAt DateTime? @db.Timestamptz(3)
+  submittedBy AttemptSource?
+  submissionReceipt String?
+  isLate     Boolean @default(false)
+  releasedAt DateTime? @db.Timestamptz(3)
+  regradeNoticePendingAt DateTime? @db.Timestamptz(3)
+  terminatedReason String?
+  voidedReason     String?
+
+  // ── SEALED until releaseBatchId is set. INV-ATTEMPT-2 / INV-RELEASE-1
+  autoScore   Decimal? @db.Decimal(9, 2)
+  manualScore Decimal? @db.Decimal(9, 2)
+  finalScore  Decimal? @db.Decimal(9, 2)
+  maxScore    Decimal? @db.Decimal(9, 2)
+  percentage  Decimal? @db.Decimal(6, 3)
+  latePenaltyApplied Decimal? @db.Decimal(5, 2)
+
+  accommodations Json?
+  accommodationId String?
+
+  strikeCount  Int @default(0)
+  preflight    Json?
+  clientInfo   Json? // userAgent, viewport, screen — from preflight only
+  ipHash       String?
+  userAgent    String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  responses       QuestionResponse[]
+  sessions        AttemptSession[]
+  events          AttemptEvent[]
+  integrityEvents IntegrityEvent[]
+  answerRevisions AnswerRevision[]
+  reviewTasks     ReviewTask[]
+  feedback        Feedback[]
+  gradeChanges    GradeChange[]
+  verdict         IntegrityVerdict?
+  releaseBatch    ReleaseBatch? @relation(fields: [releaseBatchId], references: [id], onDelete: SetNull)
+  releaseBatchId  String?
+
+  @@unique([assignmentId, studentId, attemptNumber])
+  @@index([assignmentId, status])
+  @@index([classroomId, studentId])
+  @@index([status, deadlineAt])
+  @@index([releaseBatchId, status])
+  @@index([tenantId, status])
+}
+
+enum AttemptEvent {
+  STARTED
+  RESUMED
+  SAVED
+  LATE_SAVE_REJECTED
+  QUESTION_WINDOW_CLOSED
+  SUBMITTED
+  AUTO_SUBMITTED
+  EXPIRED
+  AUTO_GRADED
+  MANUAL_GRADED
+  GRADED
+  RELEASED
+  REGRADED
+  TERMINATED
+  REINSTATED
+  VOIDED
+  EXCUSED
+  DEADLINE_EXTENDED
+  POLICY_OVERRIDDEN
+  ACCOMMODATION_APPLIED
+  VIOLATION_THRESHOLD_REACHED
+}
+
+model AttemptEvent {
+  id        BigInt   @id @default(autoincrement())
+  attemptId String
+  attempt   ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  type      AttemptEvent
+  actorId   String?
+  serverTs  DateTime @default(now()) @db.Timestamptz(3)
+  payload   Json
+
+  @@index([attemptId, id])
+}
+
+model AttemptSession {
+  id         String   @id @default(uuid(7))
+  attemptId  String
+  attempt    ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  tabId      String?  // client-generated; concurrency signal only, never authoritative
+  issuedAt   DateTime @default(now()) @db.Timestamptz(3)
+  lastSeenAt DateTime @db.Timestamptz(3)
+  expiresAt  DateTime @db.Timestamptz(3)
+  revokedAt  DateTime?
+  revokedReason String?
+  userAgent  String?
+  ipHash     String?
+
+  @@index([attemptId, revokedAt])
+  @@index([expiresAt])
+}
+
+// ────────────────────────────────────────────────────────── responses
+
+enum GradingMode {
+  AUTO
+  MANUAL
+  HYBRID
+}
+
+model QuestionResponse {
+  id         String   @id @default(uuid(7))
+  attemptId  String
+  attempt    ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  // position in the RESOLVED variant, not the authored order
+  position   Int
+
+  answer   Json
+  simState Json?
+  revision Int @default(0)
+  isExcused Boolean @default(false)
+  flagged  Boolean @default(false)
+  timeSpentMs Int?
+  editCount Int @default(0)
+
+  // per-question timing, set server-side on first accepted interaction, then immutable
+  questionOpenedAt   DateTime? @db.Timestamptz(3)
+  questionDeadlineAt DateTime? @db.Timestamptz(3)
+  questionClosedReason String?
+  lastSavedAt DateTime? @db.Timestamptz(3)
+  saveState   String @default("UNSAVED")
+
+  // ── SEALED
+  autoScore    Decimal? @db.Decimal(9, 2)
+  autoCorrect  Boolean?
+  autoGradedAt DateTime? @db.Timestamptz(3)
+  autoRationale Json?
+  autoGraderVersion String?
+
+  manualScore    Decimal? @db.Decimal(9, 2)
+  manualFeedback String?
+  rubricScores   Json?
+  graderId       String?
+  grader         User?     @relation("ResponseGrader", fields: [graderId], references: [id], onDelete: SetNull)
+  gradedAt       DateTime? @db.Timestamptz(3)
+  needsHuman     Boolean  @default(false) // e.g. a sim state failed its schema
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  revisions AnswerRevision[]
+  feedback  Feedback[]
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId, position])
+  @@index([questionId, autoCorrect])
+  @@index([needsHuman])
+}
+
+enum AnswerSource {
+  CLIENT
+  TEACHER
+  GRADE
+  SYSTEM
+}
+
+model AnswerRevision {
+  id         BigInt   @id @default(autoincrement())
+  responseId String
+  response   QuestionResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  attemptId  String
+  attempt    ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  revision   Int
+  source     AnswerSource
+  actorId    String?
+  previousHash String?
+  answerHash String
+  serverTs   DateTime @default(now()) @db.Timestamptz(3)
+  clientTs   DateTime? @db.Timestamptz(3)
+  idemKey    String?
+  accepted   Boolean  @default(true)
+  rejectReason String?
+
+  @@unique([responseId, revision])
+  @@unique([attemptId, idemKey])
+  @@index([attemptId, revision])
+}
+
+// ─────────────────────────────────────────────────────────── grading
+
+enum ReviewTaskStatus {
+  PENDING
+  CLAIMED
+  DONE
+}
+
+model ReviewTask {
+  id        String   @id @default(uuid(7))
+  attemptId String
+  attempt   ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  graderId  String?
+  grader    User?    @relation(fields: [graderId], references: [id], onDelete: SetNull)
+  status    ReviewTaskStatus @default(PENDING)
+  claimedAt DateTime? @db.Timestamptz(3)
+  priority  Int      @default(0)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([attemptId])
+  @@index([status, priority, createdAt])
+  @@index([graderId, status])
+}
+
+enum ReleaseBatchStatus {
+  DRAFT
+  READY
+  RELEASING
+  RELEASED
+  CANCELED
+}
+
+model ReleaseBatch {
+  id           String   @id @default(uuid(7))
+  tenantId     String?
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  classroomId  String
+  classroom    Classroom  @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  label        String?
+  status       ReleaseBatchStatus @default(DRAFT)
+  membership   Json      // frozen attemptIds once status enters RELEASING
+  overrideReason String?
+  releasedById String?
+  releasedBy   User?     @relation(fields: [releasedById], references: [id], onDelete: SetNull)
+  releasedAt   DateTime? @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
+
+  attempts ExamAttempt[]
+
+  @@index([assignmentId, status])
+  @@index([classroomId, status])
+  @@index([tenantId, status])
+}
+
+enum FeedbackVisibility {
+  TEACHER_ONLY
+  STUDENT_AFTER_RELEASE
+}
+
+model Feedback {
+  id         String   @id @default(uuid(7))
+  attemptId  String
+  attempt    ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  responseId String?
+  response   QuestionResponse? @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  body       String
+  visibility FeedbackVisibility @default(STUDENT_AFTER_RELEASE)
+  isDraft    Boolean  @default(false)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([attemptId, visibility])
+}
+
+model GradeChange {
+  id         String   @id @default(uuid(7))
+  responseId String?
+  attemptId  String
+  attempt    ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  actorId    String
+  before     Json
+  after      Json
+  reason     String
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([attemptId, createdAt])
+  @@index([responseId])
+}
+
+// ───────────────────────────────────────────── integrity evidence
+
+enum EventSeverity {
+  INFO
+  WARN
+  VIOLATION
+}
+
+model IntegrityEvent {
+  id         BigInt   @id @default(autoincrement())
+  attemptId  String
+  attempt    ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  sessionId  String?
+  seq        Int
+  type       String
+  severity   EventSeverity @default(INFO)
+  // INV-TELEMETRY-1: the client cannot set this
+  serverTs   DateTime @default(now()) @db.Timestamptz(3)
+  clientTs   DateTime? @db.Timestamptz(3)
+  // INV-TELEMETRY-2: closed schema, allowlisted keys, no content, no PII
+  payload    Json
+  receivedBy String?
+  dropped    Boolean  @default(false)
+  // accommodations route here instead of counting as a violation (INV-ACC-1)
+  accommodationRelaxed Boolean @default(false)
+
+  @@unique([attemptId, seq])
+  @@index([attemptId, severity, serverTs])
+  @@index([type, serverTs])
+}
+
+// The human disposition of an attempt's evidence. The machine may recommend; only a human disposes.
+model IntegrityVerdict {
+  id         String   @id @default(uuid(7))
+  attemptId  String   @unique
+  attempt    ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  outcome    String   // NO_CONCERN | NOTED | REVIEW | VOIDED
+  reason     String
+  decidedById String
+  decidedBy  User     @relation(fields: [decidedById], references: [id], onDelete: Restrict)
+  decidedAt  DateTime @default(now()) @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([outcome, decidedAt])
+}
+
+// ─────────────────────────────────────────────── platform concerns
+
+model AuditEvent {
+  id         BigInt   @id @default(autoincrement())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  targetType String
+  targetId   String
+  classroomId String?
+  meta       Json
+  ipHash     String?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([targetType, targetId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@index([classroomId, createdAt])
+}
+
+model Notification {
+  id        String   @id @default(uuid(7))
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      String
+  title     String
+  body      String
+  href      String?
+  data      Json?
+  readAt    DateTime? @db.Timestamptz(3)
+  emailedAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([userId, readAt, createdAt])
+}
+
+model Asset {
+  id          String   @id @default(uuid(7))
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  kind        String   // IMAGE | VIDEO | SUBMISSION | EXPORT
+  key         String   @unique
+  contentType String
+  byteSize    Int
+  width       Int?
+  height      Int?
+  altText     String?
+  checksum    String
+  status      String   @default("READY") // PENDING | READY | REJECTED
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([ownerId, kind])
+}
+
+model Rating {
+  id         String   @id @default(uuid(7))
+  resourceId String
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  userId     String
+  value      Int
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([resourceId, userId])
+}
+
+model Comment {
+  id         String   @id @default(uuid(7))
+  resourceId String
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  authorId   String
+  body       String
+  status     String   @default("VISIBLE")
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([resourceId, status, createdAt])
+}
+
+// idempotency for every state-changing external call
+model IdempotencyKey {
+  key         String   @id
+  scope       String
+  requestHash String
+  response    Json?
+  status      String   @default("IN_PROGRESS")
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  expiresAt   DateTime @db.Timestamptz(3)
+
+  @@index([scope, createdAt])
+  @@index([expiresAt])
+}
+
+model EmailOutbox {
+  id          String   @id @default(uuid(7))
+  toEmail     String
+  template    String
+  payload     Json
+  dedupeKey   String   @unique
+  status      String   @default("QUEUED") // QUEUED | SENT | FAILED | SUPPRESSED
+  attempts    Int      @default(0)
+  lastError   String?
+  scheduledAt DateTime @default(now()) @db.Timestamptz(3)
+  sentAt      DateTime? @db.Timestamptz(3)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([status, scheduledAt])
+}
+
+// denormalised list counters. NEVER the source of truth.
+model AssignmentCounter {
+  assignmentId  String @id
+  total         Int    @default(0)
+  started       Int    @default(0)
+  submitted     Int    @default(0)
+  pendingReview Int    @default(0)
+  released      Int    @default(0)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+}
+
+// ───────────────────────────────────────── interop (plans/16)
+
+// QTI / OneRoster / LTI external resource bindings
+model ExternalBinding {
+  id          String   @id @default(uuid(7))
+  kind        String   // QTI_ASSESSMENT | ONEROSTER_CLASS | ONEROSTER_USER | LTI_PLATFORM
+  externalId  String
+  localType   String   // Resource | QuestionBank | Classroom | User
+  localId     String
+  direction   String   // IMPORT | EXPORT | BIDIRECTIONAL
+  lastSyncedAt DateTime? @db.Timestamptz(3)
+  lastHash    String?
+  meta        Json
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([kind, externalId, localType, localId])
+  @@index([localType, localId])
+}

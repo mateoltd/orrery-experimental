@@ -2,7 +2,9 @@
 
 An educational portal where anyone can register and create content, quizzes and exams; embed hundreds of interactive simulations; run classrooms; and grade submitted work.
 
-**→ The build plan is [`PLAN.md`](PLAN.md). Read that first.**
+**→ The build plan is [`plans/`](plans/). Start at [`plans/00-MASTER-PLAN.md`](plans/00-MASTER-PLAN.md).**
+
+`PLAN.md` and `docs/` are an earlier, higher-level draft, retained for history. `plans/` supersedes them.
 
 ---
 
