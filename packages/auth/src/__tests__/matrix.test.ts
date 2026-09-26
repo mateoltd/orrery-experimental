@@ -18,6 +18,7 @@ import { describe, expect, it } from 'vitest';
 import { assertObligations, can, missingObligations } from '../can.js';
 import { checkKernelObligations, isKernelEnforced } from '../decide.js';
 import { cells, MATRIX } from '../matrix.js';
+import { totalityGaps } from '../totality.js';
 import {
   ACTIONS,
   type Actor,
@@ -51,13 +52,10 @@ const subject = (over: Partial<Subject> = {}): Subject => ({
 
 describe('totality — every claimed (action, type) pair has a rule', () => {
   it('every action has a rule for every implemented type', () => {
-    const missing: string[] = [];
-    for (const type of IMPLEMENTED_TYPES) {
-      const rules = (MATRIX as Record<string, Record<string, unknown>>)[type];
-      for (const action of ACTIONS) {
-        if (typeof rules?.[action] !== 'function') missing.push(`${type}/${action}`);
-      }
-    }
+    // Delegates to the SAME pure checker that totality-d14.test.ts runs against deliberately
+    // broken matrices. One check, not two that can drift — the two-test version is exactly the
+    // shape that lets the strict one rot while the loose one keeps passing.
+    const missing = totalityGaps(MATRIX, IMPLEMENTED_TYPES, ACTIONS);
     // Naming the missing pairs is the whole value of this assertion. A bare
     // `expect(missing).toHaveLength(0)` tells a developer nothing about where to look.
     expect(missing, `matrix has no rule for: ${missing.join(', ')}`).toEqual([]);
@@ -167,14 +165,17 @@ describe('no cell grants allowed:true with a contradictory obligation', () => {
 });
 
 describe('an unrecognised pair is loud in development and safe in production', () => {
-  const unknown: Subject = { type: 'Classroom', id: 'c-1' };
+  // A type the matrix genuinely does not implement. This was `Classroom`, which is now
+  // implemented — the test failed when reality changed underneath it, which is the correct
+  // outcome for a test whose subject is "a type with no rules".
+  const unknown: Subject = { type: 'ExamAttempt', id: 'a-1' };
 
   it('throws in development, naming the pair', () => {
     const prev = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';
     try {
       expect(() => can({ actor: actor(), action: 'read', subject: unknown })).toThrowError(
-        /action=read, type=Classroom/,
+        /action=read, type=ExamAttempt/,
       );
     } finally {
       process.env.NODE_ENV = prev;

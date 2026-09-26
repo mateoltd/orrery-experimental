@@ -102,7 +102,17 @@ export type ResourceType = (typeof ALL_RESOURCE_TYPES)[number];
 // WIDENS the literal union back to `ResourceType`, which silently defeats the point: the
 // matrix's `satisfies` clause needs the narrow tuple so that "every implemented type has
 // every action" is checked against the types actually claimed, and not against all 22.
-export const IMPLEMENTED_TYPES = ['User', 'Asset'] as const satisfies readonly ResourceType[];
+export const IMPLEMENTED_TYPES = [
+  'User',
+  'Asset',
+  // Classroom-scoped types. Added together because INV-CLASS-1 is a property of the GROUP: a
+  // rule that reads a classroom without checking membership is only wrong in combination with
+  // the others, and adding them one at a time would have shipped an intermediate state where
+  // a student could read a Classroom they were not enrolled in.
+  'Classroom',
+  'Enrollment',
+  'Invitation',
+] as const satisfies readonly ResourceType[];
 
 /**
  * The union of implemented types, published from HERE.
@@ -186,6 +196,15 @@ export interface Subject {
   readonly ownerId?: string;
   /** ResourceVersion is immutable once sealed; so is a released ExamAttempt. */
   readonly immutable?: boolean;
+  /**
+   * The user this subject is ABOUT, as distinct from the user who owns it.
+   *
+   * Needed for Invitation, where `ownerId` is the teacher who sent it and the invitee is a
+   * different person — without this, "the invitee may read their own invitation" is not
+   * expressible, because the invitee is not the owner of anything. Found by the scenario test
+   * that says so, which is the entire reason that test exists.
+   */
+  readonly forUserId?: string;
 }
 
 export interface Context {

@@ -51,6 +51,10 @@
     "./deletion": {
       "types": "./dist/deletion.d.ts",
       "default": "./dist/deletion.js"
+    },
+    "./totality": {
+      "types": "./dist/totality.d.ts",
+      "default": "./dist/totality.js"
     }
   },
   "scripts": {

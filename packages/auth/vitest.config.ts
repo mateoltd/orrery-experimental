@@ -27,6 +27,7 @@ export default defineConfig({
         'src/guard.ts',
         'src/routes.ts',
         'src/deletion.ts',
+        'src/totality.ts',
       ],
       thresholds: { branches: 100, functions: 100, lines: 100, statements: 100 },
     },
