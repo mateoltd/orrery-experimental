@@ -23,6 +23,7 @@ export default defineConfig({
         'src/lifecycle.ts',
         'src/password.ts',
         'src/throttle.ts',
+        'src/profile.ts',
       ],
       thresholds: { branches: 100, functions: 100, lines: 100, statements: 100 },
     },

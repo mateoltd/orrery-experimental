@@ -70,16 +70,33 @@ export default [
       // `no-restricted-globals` cannot see `new Date()` once the global is declared in
       // languageOptions — it only inspects unresolved references. This is the rule that
       // actually catches the constructor, verified by the gate test.
+      // INV-TIME-1 bans READING THE HOST CLOCK. It does not ban CONVERTING A NUMBER INTO A
+      // DATE, and the difference is not pedantic: `Intl.DateTimeFormat.format()` takes a
+      // `Date`, so a module that renders an injected `Millis` has to write
+      // `new Date(instant)` exactly once. The previous selector matched every `new Date(...)`
+      // regardless of arguments, and a blanket `no-restricted-globals` on `Date` banned the
+      // identifier entirely — so the only options were a suppression or a broken module.
+      //
+      // That is the ADR-0027 trap again, and it is the second time this rule has been
+      // over-broad. `lint-rules.verify.test.ts` now asserts the precision, so it cannot widen
+      // a third time without a test failing.
       'no-restricted-syntax': [
         'error',
         {
-          selector: "NewExpression[callee.name='Date']",
-          message: 'INV-TIME-1: use @orrery/clock. `new Date()` in logic is a second clock.',
+          // ONLY the no-argument form, which is the one that reads the wall clock.
+          selector: "NewExpression[callee.name='Date'][arguments.length=0]",
+          message:
+            'INV-TIME-1: `new Date()` with no argument reads the host clock. ' +
+            'Inject a Millis and use @orrery/clock. `new Date(injectedMillis)` is a ' +
+            'conversion and is fine.',
         },
       ],
       'no-restricted-globals': [
         'error',
-        { name: 'Date', message: 'INV-TIME-1: use @orrery/clock.' },
+        // `Date.now` is caught precisely by `no-restricted-properties` below. The bare
+        // identifier is NOT banned, because `Date.parse` and `Date.UTC` are static and
+        // `new Date(millis)` is a conversion — none of which read a clock.
+        { name: 'Date.now', message: 'INV-TIME-1: use @orrery/clock.' },
       ],
 
       // NOTE: the `next` ban is deliberately NOT here. It lives in the `packages/*/src/**`

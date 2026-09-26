@@ -82,6 +82,25 @@ describe('INV-TIME-1 — no second clock', () => {
   it('rejects the Date constructor (via no-restricted-syntax, the mechanism that works)', async () => {
     fired(await lint('export const a = new Date().getTime();'), 'no-restricted-syntax');
   });
+  it('rejects `new Date()` with NO argument — the form that reads the host clock', async () => {
+    // This rule previously banned EVERY `new Date(...)`, which made it impossible to write
+    // `new Date(injectedMillis)` — the one line any module rendering a date through Intl must
+    // have. The over-broad version would have forced a suppression, which is how a security
+    // rule quietly stops being one (ADR-0027). @orrery/i18n hit exactly this.
+    fired(await lint('export const a = new Date().getTime();'), 'no-restricted-syntax');
+  });
+
+  it('ALLOWS `new Date(injectedMillis)` — a conversion, not a clock read', async () => {
+    const rules = await lint(
+      'export const toDate = (ms: number) => new Date(ms);\n' +
+        'export const p = Date.parse("2026-01-01T00:00:00Z");',
+    );
+    expect(rules, `a conversion must be allowed, got: ${JSON.stringify(rules)}`).not.toContain(
+      'no-restricted-syntax',
+    );
+    expect(rules, 'Date.parse is static, not a clock read').not.toContain('no-restricted-globals');
+  });
+
   it('ALLOWS the injected clock', async () => {
     const rules = await lint(
       `import { systemClock } from '@orrery/clock';\nexport const a = systemClock.now();`,

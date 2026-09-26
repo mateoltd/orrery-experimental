@@ -35,6 +35,10 @@
     "./throttle": {
       "types": "./dist/throttle.d.ts",
       "default": "./dist/throttle.js"
+    },
+    "./profile": {
+      "types": "./dist/profile.d.ts",
+      "default": "./dist/profile.js"
     }
   },
   "scripts": {
