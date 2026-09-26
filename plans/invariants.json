@@ -3,11 +3,14 @@
   "invariants": [
     {
       "id": "INV-AUTH-1",
-      "summary": "Sessions live in Postgres, so revocation takes effect on the next request.",
-      "status": "staged",
-      "enforcedFrom": "P1",
-      "files": ["packages/auth/src/session.ts"],
-      "gates": []
+      "summary": "Sessions live in Postgres with a per-user epoch, so a revoke or a suspension takes effect on the next request even with a warm cache.",
+      "status": "active",
+      "files": [
+        "packages/auth/src/session.ts",
+        "packages/auth/src/guard.ts",
+        "packages/db/src/sessions.ts"
+      ],
+      "gates": ["gate:authz", "test:integration"]
     },
     {
       "id": "INV-CONTENT-1",
@@ -19,11 +22,10 @@
     },
     {
       "id": "INV-CLASSROOM-1",
-      "summary": "Effective role is the max of active enrollments.",
-      "status": "staged",
-      "enforcedFrom": "P1",
-      "files": ["packages/auth/src/can.ts"],
-      "gates": []
+      "summary": "Effective role is the max of ACTIVE enrollments, derived rather than claimed by the session, and a non-ACTIVE account holds no roles at all.",
+      "status": "active",
+      "files": ["packages/auth/src/roles.ts", "packages/auth/src/matrix.ts"],
+      "gates": ["gate:invariants", "gate:authz"]
     },
     {
       "id": "INV-CLASSROOM-2",

@@ -55,6 +55,14 @@
     "./totality": {
       "types": "./dist/totality.d.ts",
       "default": "./dist/totality.js"
+    },
+    "./totp": {
+      "types": "./dist/totp.d.ts",
+      "default": "./dist/totp.js"
+    },
+    "./roles": {
+      "types": "./dist/roles.d.ts",
+      "default": "./dist/roles.js"
     }
   },
   "scripts": {

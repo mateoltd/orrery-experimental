@@ -28,6 +28,8 @@ export default defineConfig({
         'src/routes.ts',
         'src/deletion.ts',
         'src/totality.ts',
+        'src/totp.ts',
+        'src/roles.ts',
       ],
       thresholds: { branches: 100, functions: 100, lines: 100, statements: 100 },
     },
