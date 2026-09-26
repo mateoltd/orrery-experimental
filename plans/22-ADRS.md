@@ -176,6 +176,51 @@ Each record states Context, Decision, Consequences, and at least one rejected al
 **Reversible:** yes, in v2, if demand appears — the version model is already a reasonable base.
 **Rejected:** CRDTs (Yjs/Automerge) up front (a quarter of engineering for a feature nobody asked for); last-write-wins (silent data loss).
 
+### ADR-0025 — The pinning invariant is enforced by a path ban, not taint analysis
+**Status:** Accepted
+**Context:** `INV-ASSIGN-1` says no code path may read `Resource.currentVersionId` when rendering an assessment. The plan's stated enforcement was "a lint rule on the assessment routers" (`D-29`).
+**Decision:** Decide what is checkable. A generic ESLint rule cannot do taint analysis — the forbidden value reaches the renderer through a dozen frames. So the enforcement is: **the identifier `currentVersionId` is forbidden by path under the assessment, exam, grading, `packages/exam-engine` and `packages/grading` globs.** The only way to get a draft head onto an assessment surface is to rename a local, which shows up in review. Implemented as `scripts/pinning-gate.mjs`, with `comments` exempted so the rule can explain itself. The complementary data-level check is `INV-SLOT-1` in `P5-T12`, and the stronger assertion is in `P5-T5` (24 MISSED-6).
+**Consequences:** A real, decidable, enforced constraint rather than an unimplementable aspiration. Cost: a legitimate future need (say an authoring preview) must live outside these globs and be documented in the gate.
+**Verified:** the gate is non-inert — a planted violation fails it, and the comment exemption was verified separately.
+
+### ADR-0026 — The deadline sweep runs on Postgres, not the job queue
+**Status:** Accepted
+**Context:** `C3` found Inngest does not support sub-minute cron, so the 30-second deadline sweep was never schedulable as specified. The plan claimed a 30 s cron, a 60 s SLO and a `+30 s` buffer — three inconsistent latency numbers.
+**Decision:** The sweep runs on **`pg_cron` at 10 s, behind a Postgres advisory lock**. Everything else runs on the queue (Inngest) at 30 s or slower. Postgres advisory locks rather than Redis, because the lock and the data it protects are in the same database and therefore cannot disagree. A crashed job rolls back its transaction and the connection close releases the lock, so a crashed job cannot wedge the sweep shut.
+**Consequences:** The sweep is on its own, correct clock, and two workers cannot double-submit. A missed sweep is an alert; two consecutive misses page a human, because an unsubmitted attempt is a student waiting for a grade they already earned.
+**Verified:** `apps/worker/src/jobs.verify.test.ts` asserts the sweep is ≤ 10 s and is **not** on the general queue. Moving it to 60 s fails two tests.
+
+### ADR-0027 — Every gate must be mutation-verified, and must fail loudly on its own errors
+**Status:** Accepted
+**Context:** The delivery review's sharpest criticism (D-35) was that every gate in the plan is local, and therefore bypassable by editing the gate. The plan's own protocol example showed skipped tests in the model PR body. And `D-31` found a fourteen-box security checklist shipped with every box pre-ticked.
+**Decision:** Three commitments.
+1. **A gate that has never been run against real data is not a gate.** `check-bundle-budget.mjs` used `require()` in an `.mjs` file, threw on the happy path, and passed every "mutation test" I gave it because all of them exercised the *no-build* branch. It had never once measured a bundle. It now never exits 0 on an internal error, and prints its measurement unconditionally so "0 KB" is visibly wrong.
+2. **A gate's own test must fail when the gate is broken.** Each of the five gates has been broken on purpose and observed failing: over budget, sim leak, absent route, missing build, untyped timestamp, missing primary key, invalid schema, lowered threshold, wrong board total, sweep on the wrong queue, `answer` dropped from the redaction pattern, recursion bound removed.
+3. **Fix the mechanism, not the rule.** When the `INV-TIME-1` rule caught `new Date()` on the healthz route, the fix was to add `toIso`/`isoNow` to `@orrery/clock` — the sanctioned module — not to weaken the rule. A banned construct that everyone needs a workaround for is a banned construct with a missing function.
+**Consequences:** Slower, and worth it. The expected defect rate for a brand-new gate is treated as high, and a passing gate is treated as unproven until something has tried to break it.
+
+### ADR-0028 — Invariants are registered with a mechanism and a due phase, or they are wishes
+**Status:** Accepted
+**Context:** `01-DOMAIN-MODEL.md` §14 lists 26–28 invariants each with an "Enforced by" column asserting a test, a gate, or a code path. **None had been checked.** It is the same shape as the pre-ticked sandbox checklist `D-31` called "rigorous-looking theatre".
+**Decision:** `plans/invariants.json` registers every invariant with its mechanism (a gate command that must exist in `package.json`, or a file that must exist) and a status.
+- **active** — hard-checked now. The gate must exist, the file must exist, the gate must not be a stub.
+- **staged** — the mechanism is declared and dated by a phase. Being honestly staged is fine; being silently unenforced is not. With `REACHED_PHASE` set, a staged invariant past its due phase **fails**.
+**Consequences:** 2 active, 26 staged, all dated. An invariant cannot be added without saying what enforces it, and deleting an enforcing file breaks the build. The gate found a real gap on first run: `INV-ASSIGN-1`'s declared enforcement was not implementable, which is what produced `ADR-0025`.
+**Consequences, honestly:** a staged invariant is a promise with a date, and this repository has not yet earned the right to be believed about the 26 that are staged. They become checkable as their phases land, or they are theatre with extra steps.
+
+### ADR-0029 — The exam budget is measured per route from Next's own manifest
+**Status:** Accepted
+**Context:** `plans/03` §8 sets per-route JS budgets, with the exam runtime's as a release gate. The first implementation gzipped a concatenation of every chunk in the build, which includes server-only chunks, the marketing page and the not-found page — things a student never downloads when starting an exam. It reported 339.8 KB for a route Next itself reports as 102 KB.
+**Decision:** Measure the **exam route's first load** using `app-build-manifest.json`, Next's own answer to "which files does this route pull". Simulation bundles are excluded, and their absence from the app's static output is a **separate** check that walks the directory — because a leaked sim bundle is by definition not in the app manifest, and scanning the manifest is what made that check vacuous the first time.
+**Consequences:** The number is comparable to what Next prints, so a reviewer is not asked to reconcile two different figures. Current: **99.3 KB gzipped against a 250 KB budget**, with a 40 KB regression guard that warns before the hard limit.
+**Consequences, honestly:** the guard is set at 40 KB against a 99.3 KB measurement, so it warns on day one. That is intentional — the framework baseline is most of the current number, and the first real measurement of the exam surface's own code does not exist until P8. Re-baseline it then, with `GATE-CHANGE:` and a reason.
+
+### ADR-0030 — The task total is derived, never asserted
+**Status:** Accepted
+**Context:** `BOARD.md`'s total was wrong three times — 173, then 183, then 189 — and survived an entire review cycle because nobody counted. `K6` caught it, and it was still wrong a week later.
+**Decision:** `scripts/count-tasks.mjs` derives the total from the task tables (in `20-PHASE-PACKETS.md` plus the per-document tables for P4, P13 and P16, which live elsewhere), checks the numbering is continuous within every phase, and **fails when `BOARD.md` disagrees**. A deferred task keeps its number, because task ids are stable: they appear in commit trailers and PR descriptions, and renumbering one invalidates history.
+**Consequences:** 191 active tasks, and the number cannot drift without failing the build. A board whose totals are fiction cannot answer the only question it exists to answer.
+
 ---
 
 ## Index
@@ -206,3 +251,9 @@ Each record states Context, Decision, Consequences, and at least one rejected al
 | 0022 | Atomic result withholding | Accepted |
 | 0023 | No user-uploaded sim code | Accepted |
 | 0024 | Optimistic concurrency, not CRDTs | Accepted |
+| 0025 | Pinning enforced by a path ban, not taint analysis | Accepted |
+| 0026 | Deadline sweep on Postgres, not the job queue | Accepted |
+| 0027 | Every gate mutation-verified, fails loudly on its own errors | Accepted |
+| 0028 | Invariants registered with a mechanism and a due phase | Accepted |
+| 0029 | Exam budget measured per route from Next's manifest | Accepted |
+| 0030 | The task total is derived, never asserted | Accepted |
