@@ -14,6 +14,9 @@ importers:
       better-auth:
         specifier: 1.7.6
         version: 1.7.6(@prisma/client@6.19.3(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3))(next@15.5.25(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(vitest@3.2.7(@types/node@24.19.0)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@2.4.0)))
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.0.0
@@ -66,9 +69,6 @@ importers:
       vitest:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@24.19.0)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@2.4.0))
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
 
   apps/web:
     dependencies:
@@ -129,6 +129,12 @@ importers:
       '@orrery/clock':
         specifier: workspace:*
         version: link:../clock
+
+  packages/contracts:
+    dependencies:
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
 
   packages/db:
     dependencies:
