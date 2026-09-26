@@ -1,0 +1,32 @@
+# Local collector. Traces and metrics only; production adds Grafana/Tempo/Sentry
+# (18 §3). The `attemptId` spine (18 §4.2) is what makes one grep reconstruct a
+# student's whole exam, so the resource attributes here are not optional decoration.
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+      http: { endpoint: 0.0.0.0:4318 }
+
+processors:
+  batch: {}
+  # Scrub before export. INV-TELEMETRY-2 / 14 §4.1: logs and traces carry no answer
+  # content, no PII and no credentials. This is the last line of defence if an
+  # instrument forgets.
+  attributes/redact:
+    actions:
+      - { key: http.request.header.authorization, action: delete }
+      - { key: http.request.header.cookie, action: delete }
+      - { key: db.statement, action: delete }
+      - { key: enduser.id, action: hash }
+
+exporters:
+  debug: { verbosity: normal }
+  otlphttp/tempo:
+    endpoint: http://tempo:4318
+  prometheus:
+    endpoint: 0.0.0.0:8889
+
+service:
+  pipelines:
+    traces: { receivers: [otlp], processors: [attributes/redact, batch], exporters: [debug, otlphttp/tempo] }
+    metrics: { receivers: [otlp], processors: [batch], exporters: [prometheus] }
