@@ -30,6 +30,7 @@ export default defineConfig({
         'src/totality.ts',
         'src/totp.ts',
         'src/roles.ts',
+        'src/impersonation.ts',
       ],
       thresholds: { branches: 100, functions: 100, lines: 100, statements: 100 },
     },

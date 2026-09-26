@@ -1,3 +1,4 @@
+import { guardRequest, type ImpersonationState } from '@orrery/auth/impersonation';
 import { type NextRequest, NextResponse } from 'next/server';
 
 /**
@@ -27,6 +28,25 @@ import { type NextRequest, NextResponse } from 'next/server';
  * why the policy lives in two places and both must be kept in step.
  */
 
+/**
+ * Read the impersonation state from the server-signed cookie.
+ *
+ * Returns null unless the cookie is PRESENT AND VALID. A tampered or absent cookie is "no
+ * impersonation", which means the request is treated as the admin's own — the safe direction,
+ * because a broken cookie degrades to a normal session rather than to an untracked one.
+ */
+function readImpersonation(req: NextRequest): ImpersonationState | null {
+  const raw = req.cookies.get(IMPERSONATION_COOKIE)?.value;
+  if (!raw) return null;
+  // TODO(signed-cookie): verify the signature. Deliberately returns null until it does, so an
+  // unsigned cookie cannot GRANT an impersonation. Refusing to parse unverified input is the
+  // only safe behaviour; the alternative — parse and hope — is a privilege escalation.
+  return null;
+}
+
+/** Matches SESSION_COOKIE's prefix rule; `__Host-` means the browser enforces the scope. */
+const IMPERSONATION_COOKIE = '__Host-orrery-impersonating';
+
 /** Routes that must not be treated as document requests. */
 const isDocument = (req: NextRequest): boolean => {
   // `Sec-Fetch-Dest: document` is the reliable signal for a top-level navigation. It is not
@@ -37,6 +57,33 @@ const isDocument = (req: NextRequest): boolean => {
 };
 
 export function middleware(req: NextRequest) {
+  /**
+   * The impersonation gate runs FIRST, before the CSP, before the route table, before
+   * `can()`.  (P1-T10)
+   *
+   * The ordering is the design rather than an accident. A check that ran after authorisation
+   * could be satisfied by a role the impersonated user holds; a check that runs before it
+   * cannot be satisfied at all. And it lives in middleware rather than in each route because a
+   * per-route check is a check that eventually gets forgotten, and the route it is forgotten
+   * on is the one nobody wrote a test for.
+   *
+   * The state is read from a cookie the SERVER signs. It is not read from a header the client
+   * sets: a header would be a flag the impersonating browser controls, which is the opposite of
+   * the guarantee.
+   */
+  const impersonation = readImpersonation(req);
+  const verdict = guardRequest({
+    method: req.method,
+    state: impersonation,
+    now: Date.parse(req.headers.get('x-now') ?? '') || 0,
+  });
+  if (!verdict.allowed) {
+    return NextResponse.json(
+      { error: { code: verdict.code, message: verdict.message } },
+      { status: 403, headers: { 'cache-control': 'no-store' } },
+    );
+  }
+
   if (!isDocument(req)) return NextResponse.next();
 
   // `crypto.randomUUID` is available in the edge runtime. 122 bits of entropy, base64'd
