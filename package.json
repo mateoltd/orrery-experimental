@@ -23,13 +23,15 @@
     "gate:board": "node scripts/count-tasks.mjs",
     "gate:bundle": "node scripts/check-bundle-budget.mjs",
     "gate:schema": "node scripts/schema-gate.mjs",
-    "gates": "pnpm gate:schema && pnpm gate:board && pnpm gate:invariants && pnpm gate:pinning && pnpm gate:bundle"
+    "gates": "pnpm run gate:schema && pnpm run gate:board && pnpm run gate:invariants && pnpm run gate:pinning && pnpm run gate:bundle && pnpm run gate:authz",
+    "gate:authz": "node scripts/authz-ownership-gate.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@eslint/js": "^9",
     "@prisma/client": "^6",
     "@types/node": "^24.0.0",
+    "@vitest/coverage-v8": "3.2.7",
     "eslint": "^9.0.0",
     "globals": "17.11.0",
     "prisma": "^6",
