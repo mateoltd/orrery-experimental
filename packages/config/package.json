@@ -1,0 +1,12 @@
+{
+  "name": "@orrery/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./lint-rules.verify": "./src/lint-rules.verify.test.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  }
+}

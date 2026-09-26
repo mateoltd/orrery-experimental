@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { JOIN_CODE_ALPHABET, fixedId, isUuid, joinCode, secretId, secretToken, shortCode } from './index.js';
+import {
+  fixedId,
+  isUuid,
+  JOIN_CODE_ALPHABET,
+  joinCode,
+  secretId,
+  secretToken,
+  shortCode,
+} from './index.js';
 
 describe('ids', () => {
   it('generates valid, distinct uuids', () => {

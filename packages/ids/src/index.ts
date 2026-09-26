@@ -16,7 +16,7 @@
  * review claim tokens, and anything else a URL can reach.
  */
 
-import { randomUUID, randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 
 const B62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
