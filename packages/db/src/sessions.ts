@@ -140,3 +140,79 @@ export function prismaSessionStore(prisma: PrismaClient) {
     readEpoch: (userId: string): Promise<number> => readSessionsEpoch(prisma, userId),
   };
 }
+
+/**
+ * A session as the DEVICE LIST needs it.
+ *
+ * Deliberately carries NO raw user agent. `Session.userAgent` is stored because it is evidence
+ * in an investigation, but sending the raw string to the browser puts a fingerprintable value
+ * on the wire, into a log, and into a screenshot a student might take of their own account. The
+ * client gets a coarse human label instead — "Chrome on Windows" — which is what somebody
+ * recognising their own laptop actually needs.
+ *
+ * This is the same reasoning as `ipPseudonym`: store the evidence, expose the summary.
+ */
+export interface SessionSummary {
+  readonly id: string;
+  readonly lastSeenAt: Date;
+  readonly createdAt: Date;
+  readonly device: string;
+  readonly current: boolean;
+}
+
+/** Coarse, non-fingerprintable device label. UNRECOGNISED values become "Unknown device". */
+export function describeDevice(userAgent: string | null | undefined): string {
+  if (!userAgent) return 'Unknown device';
+  const ua = userAgent.toLowerCase();
+  const os = ua.includes('windows')
+    ? 'Windows'
+    : ua.includes('mac os') || ua.includes('macintosh')
+      ? 'macOS'
+      : ua.includes('android')
+        ? 'Android'
+        : ua.includes('iphone') || ua.includes('ipad')
+          ? 'iOS'
+          : ua.includes('linux')
+            ? 'Linux'
+            : null;
+  // An unrecognised user agent yields "Unknown device" rather than a guess. Guessing wrong is
+  // worse than not knowing: a student told "Chrome on Windows" when they are on a Chromebook
+  // will revoke the wrong session.
+  if (os === null) return 'Unknown device';
+  const browser = ua.includes('edg/')
+    ? 'Edge'
+    : ua.includes('opr/') || ua.includes('opera')
+      ? 'Opera'
+      : ua.includes('firefox')
+        ? 'Firefox'
+        : ua.includes('chrome')
+          ? 'Chrome'
+          : ua.includes('safari')
+            ? 'Safari'
+            : 'a browser';
+  return `${browser} on ${os}`;
+}
+
+/**
+ * Every live session for a user, newest first.
+ *
+ * `currentSessionId` marks the row the reader is using, so the UI can say "this device" rather
+ * than making them work out which row is theirs.
+ */
+export async function listSessions(
+  tx: TxClient,
+  input: { userId: string; currentSessionId?: string },
+): Promise<SessionSummary[]> {
+  const rows = await tx.session.findMany({
+    where: { userId: input.userId, revokedAt: null },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, createdAt: true, userAgent: true, lastSeenAt: true },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    createdAt: r.createdAt,
+    lastSeenAt: r.lastSeenAt ?? r.createdAt,
+    device: describeDevice(r.userAgent),
+    current: r.id === input.currentSessionId,
+  }));
+}

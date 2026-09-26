@@ -215,7 +215,17 @@ model Session {
   familyId      String
   expiresAt     DateTime  @db.Timestamptz(3)
   ipHash        String?
+  // Stored as evidence for an investigation, but NEVER sent to the browser: the device list
+  // shows a coarse label (describeDevice) so a fingerprintable string does not end up on the
+  // wire or in a screenshot of a student's own account page.
   userAgent     String?
+  // P1-T4 requires the sessions page to show "last seen". Absent originally, which the
+  // integration suite caught the moment listSessions selected it — the third schema gap the
+  // real-database run has found, and the reason it keeps finding them.
+  //
+  // Written on a slide, not on every request: an UPDATE per request on the hottest table during
+  // an assessment window is a real cost for a field a human reads once a month.
+  lastSeenAt    DateTime? @db.Timestamptz(3)
   createdAt     DateTime  @default(now()) @db.Timestamptz(3)
   revokedAt     DateTime? @db.Timestamptz(3)
   revokedReason String?

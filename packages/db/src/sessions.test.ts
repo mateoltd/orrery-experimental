@@ -11,7 +11,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { type SessionRow, toSessionState } from './sessions.js';
+import { describeDevice, type SessionRow, toSessionState } from './sessions.js';
 
 const row = (over: Partial<SessionRow> = {}): SessionRow => ({
   id: 's-1',
@@ -50,5 +50,16 @@ describe('toSessionState', () => {
     // clearer and needs no assertion that the linter has to be told to ignore.
     expect(s.revokedAt).toBe(revokedAt.getTime());
     expect(s.revokedReason).toBe('passwordChanged');
+  });
+});
+
+// The device LABEL lives in an integration test, but the one thing that is pure and easy to
+// get wrong belongs here: an unrecognised user agent must not be guessed at. Guessing wrong is
+// worse than not knowing, because a student told "Chrome on Windows" while holding a Chromebook
+// will revoke the wrong session — and on a security page, a wrong label costs trust in the
+// whole page.
+describe('describeDevice never guesses', () => {
+  it('admits when it does not recognise the agent', () => {
+    expect(describeDevice('SomeCustomAgent/1.0')).toBe('Unknown device');
   });
 });
