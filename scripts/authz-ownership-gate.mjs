@@ -28,7 +28,7 @@
  * to move the comparison into `packages/auth` and call `can()`, not to widen this list.
  */
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const ROOT = process.cwd();
@@ -38,7 +38,14 @@ const ALLOWED_PREFIX = 'packages/auth/';
 
 /** Directories never worth scanning. */
 const SKIP_DIRS = new Set([
-  'node_modules', '.git', '.next', 'dist', 'coverage', 'build', '.tmp', '.turbo',
+  'node_modules',
+  '.git',
+  '.next',
+  'dist',
+  'coverage',
+  'build',
+  '.tmp',
+  '.turbo',
 ]);
 
 const SCAN_EXT = /\.(ts|tsx|js|jsx|mts|mjs)$/;
@@ -49,10 +56,16 @@ const SCAN_EXT = /\.(ts|tsx|js|jsx|mts|mjs)$/;
  */
 const PATTERNS = [
   // ownerId / createdBy / authorId / teacherId compared against a user/session id.
-  ['owner-id comparison', /\b\w*(?:owner|owned|createdBy|author|teacher|user)_?[Ii]d\b\s*(?:===|!==|==|!=)/],
+  [
+    'owner-id comparison',
+    /\b\w*(?:owner|owned|createdBy|author|teacher|user)_?[Ii]d\b\s*(?:===|!==|==|!=)/,
+  ],
   ['author-id comparison', /\b\w*(?:author|creator|createdBy)_?[Ii]d\b\s*(?:===|!==|==|!=)/],
   // The reverse order: session.userId === resource.ownerId
-  ['session-id on the left', /\b(?:session|auth|currentUser|viewer|me)\??\.\w*[Ii]d\b\s*(?:===|!==|==|!=)/],
+  [
+    'session-id on the left',
+    /\b(?:session|auth|currentUser|viewer|me)\??\.\w*[Ii]d\b\s*(?:===|!==|==|!=)/,
+  ],
   // React Router loaders comparing a path param to a user id.
   ['param-id comparison', /\bparams\.\w+[Ii]d\b\s*(?:===|!==|==|!=)/],
 ];

@@ -5,7 +5,6 @@ import type { NextConfig } from 'next';
  * real rather than advisory. It needs a frame-ancestors allowance from the app, and the
  * app needs `frame-src` for it. Keeping them on one origin would make the sandbox a promise.
  */
-const SIMS_ORIGIN = process.env.SIMS_ORIGIN ?? 'http://localhost:4400';
 
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },

@@ -28,7 +28,7 @@
  * sweep executes per tick, and the others return immediately.
  */
 
-import { createLogger, httpLogger } from '@orrery/config/logging';
+import { createLogger } from '@orrery/config/logging';
 
 const log = createLogger('job', { service: 'worker' });
 

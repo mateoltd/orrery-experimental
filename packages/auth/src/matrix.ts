@@ -23,7 +23,7 @@
  */
 
 import { deny, grant } from './decide.js';
-import { IMPLEMENTED_TYPES, type Action, type ResourceType, type Rule } from './types.js';
+import type { Action, ImplementedResourceType, Rule } from './types.js';
 
 /**
  * Rules for `User`.
@@ -67,13 +67,19 @@ const userRules: Record<Action, Rule> = {
   release: () => deny('roleForbidden'),
   viewEvidence: () => deny('roleForbidden'),
   void: (i) =>
-    i.actor.roles.includes('platformAdmin') ? grant(['audit', 'reasonRequired']) : deny('roleForbidden'),
+    i.actor.roles.includes('platformAdmin')
+      ? grant(['audit', 'reasonRequired'])
+      : deny('roleForbidden'),
 
   excuse: (i) =>
-    i.actor.roles.includes('teacher') ? grant(['audit', 'reasonRequired', 'sameClassroom']) : deny('roleForbidden'),
+    i.actor.roles.includes('teacher')
+      ? grant(['audit', 'reasonRequired', 'sameClassroom'])
+      : deny('roleForbidden'),
 
   regrade: (i) =>
-    i.actor.roles.includes('platformAdmin') ? grant(['audit', 'twoPersonRelease']) : deny('roleForbidden'),
+    i.actor.roles.includes('platformAdmin')
+      ? grant(['audit', 'twoPersonRelease'])
+      : deny('roleForbidden'),
 
   invite: (i) =>
     i.actor.roles.includes('teacher') ? grant(['audit', 'sameClassroom']) : deny('roleForbidden'),
@@ -82,19 +88,24 @@ const userRules: Record<Action, Rule> = {
     i.actor.roles.includes('teacher') ? grant(['audit', 'sameClassroom']) : deny('roleForbidden'),
 
   changeRole: (i) =>
-    i.actor.roles.includes('platformAdmin') ? grant(['audit', 'reasonRequired', 'twoPersonRelease']) : deny('roleForbidden'),
+    i.actor.roles.includes('platformAdmin')
+      ? grant(['audit', 'reasonRequired', 'twoPersonRelease'])
+      : deny('roleForbidden'),
 
   importRoster: (i) =>
     i.actor.roles.includes('teacher') ? grant(['audit', 'sameClassroom']) : deny('roleForbidden'),
 
-  export: (i) => (i.actor.roles.includes('platformAdmin') ? grant(['audit']) : deny('roleForbidden')),
+  export: (i) =>
+    i.actor.roles.includes('platformAdmin') ? grant(['audit']) : deny('roleForbidden'),
 
   // INV-AUTH-4: impersonation is the highest-privilege action in the system, so it is
   // never self-serve and never available to a teacher.
   impersonate: () => deny('roleForbidden'),
 
   suspend: (i) =>
-    i.actor.roles.includes('platformAdmin') ? grant(['audit', 'reasonRequired', 'twoPersonRelease']) : deny('roleForbidden'),
+    i.actor.roles.includes('platformAdmin')
+      ? grant(['audit', 'reasonRequired', 'twoPersonRelease'])
+      : deny('roleForbidden'),
 };
 
 /**
@@ -114,7 +125,8 @@ const assetRules: Record<Action, Rule> = {
 
   update: (i) => {
     const a = i.actor;
-    if (!a.roles.includes('teacher') && !a.roles.includes('platformAdmin')) return deny('roleForbidden');
+    if (!a.roles.includes('teacher') && !a.roles.includes('platformAdmin'))
+      return deny('roleForbidden');
     if (i.subject.immutable) return deny('immutable');
     // Authors edit their own; admins edit any. Ownership is compared HERE, inside
     // packages/auth, which is the only place the pattern is allowed (eslint rule + CI grep).
@@ -133,7 +145,8 @@ const assetRules: Record<Action, Rule> = {
 
   delete: (i) => {
     const a = i.actor;
-    if (!a.roles.includes('platformAdmin') && !a.roles.includes('teacher')) return deny('roleForbidden');
+    if (!a.roles.includes('platformAdmin') && !a.roles.includes('teacher'))
+      return deny('roleForbidden');
     if (i.subject.immutable) return deny('immutable');
     if (a.id !== i.subject.ownerId && !a.roles.includes('platformAdmin')) return deny('notOwner');
     return grant(['audit', ...(i.subject.owningClassroomId ? (['sameClassroom'] as const) : [])]);
@@ -141,7 +154,8 @@ const assetRules: Record<Action, Rule> = {
 
   publish: (i) => {
     const a = i.actor;
-    if (!a.roles.includes('teacher') && !a.roles.includes('platformAdmin')) return deny('roleForbidden');
+    if (!a.roles.includes('teacher') && !a.roles.includes('platformAdmin'))
+      return deny('roleForbidden');
     if (i.subject.immutable) return deny('immutable');
     // Publishing is scoped too. A teacher who authored an asset in a classroom they have
     // left must not be able to release it to students there.
@@ -158,15 +172,20 @@ const assetRules: Record<Action, Rule> = {
   submit: (i) => (i.actor.id === i.subject.ownerId ? grant([]) : deny('notOwner')),
   grade: () => deny('roleForbidden'),
   release: () => deny('roleForbidden'),
-  viewEvidence: (i) => (i.actor.roles.includes('reviewer') ? grant(['retainEvidence']) : deny('reviewerForbidden')),
-  void: (i) => (i.actor.roles.includes('platformAdmin') ? grant(['audit', 'reasonRequired']) : deny('roleForbidden')),
+  viewEvidence: (i) =>
+    i.actor.roles.includes('reviewer') ? grant(['retainEvidence']) : deny('reviewerForbidden'),
+  void: (i) =>
+    i.actor.roles.includes('platformAdmin')
+      ? grant(['audit', 'reasonRequired'])
+      : deny('roleForbidden'),
   excuse: () => deny('roleForbidden'),
   regrade: () => deny('roleForbidden'),
   invite: () => deny('roleForbidden'),
   removeMember: () => deny('roleForbidden'),
   changeRole: () => deny('roleForbidden'),
   importRoster: () => deny('roleForbidden'),
-  export: (i) => (i.actor.roles.includes('platformAdmin') ? grant(['audit']) : deny('roleForbidden')),
+  export: (i) =>
+    i.actor.roles.includes('platformAdmin') ? grant(['audit']) : deny('roleForbidden'),
   impersonate: () => deny('roleForbidden'),
   suspend: () => deny('roleForbidden'),
 };
@@ -190,7 +209,7 @@ export const MATRIX = {
   // list and matches the matrix's own keys exactly. Two tests, because there are two
   // different mistakes to catch: claiming a type you did not implement, and implementing a
   // type you did not claim.
-} satisfies Record<(typeof IMPLEMENTED_TYPES)[number], Record<Action, Rule>>;
+} satisfies Record<ImplementedResourceType, Record<Action, Rule>>;
 
 export type ImplementedType = keyof typeof MATRIX;
 

@@ -42,10 +42,22 @@ describe('parseEnv — accepts a well-formed environment', () => {
   });
 });
 
+/**
+ * Build an env object with one key removed.
+ *
+ * The tests below were written as `const { KEY: _drop, ...rest } = good`, which leaves an
+ * unused binding that ESLint correctly reports — four times. Naming the intent is better
+ * than a throwaway variable, and it makes each test say which key it is removing.
+ */
+function omit(source: Record<string, unknown>, key: string): Record<string, unknown> {
+  const copy: Record<string, unknown> = { ...source };
+  delete copy[key];
+  return copy;
+}
+
 describe('parseEnv — refuses rather than defaulting', () => {
   it('rejects a missing DATABASE_URL, and names it', () => {
-    const { DATABASE_URL: _drop, ...rest } = good;
-    const r = parseEnv(rest);
+    const r = parseEnv(omit(good, 'DATABASE_URL'));
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.issues.join(' ')).toContain('DATABASE_URL');
@@ -81,22 +93,19 @@ describe('parseEnv — refuses rather than defaulting', () => {
   });
 
   it('requires SMTP_URL when the provider is smtp', () => {
-    const { SMTP_URL: _drop, ...rest } = good;
-    const r = parseEnv(rest);
+    const r = parseEnv(omit(good, 'SMTP_URL'));
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.issues.join(' ')).toContain('SMTP_URL');
   });
 
   it('requires RESEND_API_KEY when the provider is resend', () => {
-    const { RESEND_API_KEY: _drop, ...rest } = good;
-    const r = parseEnv({ ...rest, EMAIL_PROVIDER: 'resend' });
+    const r = parseEnv({ ...omit(good, 'RESEND_API_KEY'), EMAIL_PROVIDER: 'resend' });
     expect(r.ok).toBe(false);
   });
 
   it('does not require SMTP_URL for the noop provider', () => {
-    const { SMTP_URL: _drop, ...rest } = good;
-    expect(parseEnv({ ...rest, EMAIL_PROVIDER: 'noop' }).ok).toBe(true);
+    expect(parseEnv({ ...omit(good, 'SMTP_URL'), EMAIL_PROVIDER: 'noop' }).ok).toBe(true);
   });
 
   it('rejects an EMAIL_FROM without @', () => {

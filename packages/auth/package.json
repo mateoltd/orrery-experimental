@@ -4,14 +4,34 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./can": { "types": "./dist/can.d.ts", "default": "./dist/can.js" },
-    "./matrix": { "types": "./dist/matrix.d.ts", "default": "./dist/matrix.js" },
-    "./types": { "types": "./dist/types.d.ts", "default": "./dist/types.js" }
+    "./can": {
+      "types": "./dist/can.d.ts",
+      "default": "./dist/can.js"
+    },
+    "./matrix": {
+      "types": "./dist/matrix.d.ts",
+      "default": "./dist/matrix.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    },
+    "./session": {
+      "types": "./dist/session.d.ts",
+      "default": "./dist/session.js"
+    },
+    "./token": {
+      "types": "./dist/token.d.ts",
+      "default": "./dist/token.js"
+    }
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "clean": "rm -rf dist *.tsbuildinfo coverage"
+  },
+  "dependencies": {
+    "@orrery/clock": "workspace:*"
   }
 }

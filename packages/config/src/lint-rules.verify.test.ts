@@ -122,8 +122,10 @@ describe('ADR-0005 — packages stay framework-light', () => {
       "import { NextResponse } from 'next/server';\nexport const x = NextResponse;",
       appSrc,
     );
-    expect(rules, `app must be allowed to import next, got: ${JSON.stringify(rules)}`)
-      .not.toContain('no-restricted-imports');
+    expect(
+      rules,
+      `app must be allowed to import next, got: ${JSON.stringify(rules)}`,
+    ).not.toContain('no-restricted-imports');
   });
 
   it('rejects `next` in scripts/ too — only the APP is exempt', async () => {

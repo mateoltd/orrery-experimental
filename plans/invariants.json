@@ -6,9 +6,7 @@
       "summary": "Sessions live in Postgres, so revocation takes effect on the next request.",
       "status": "staged",
       "enforcedFrom": "P1",
-      "files": [
-        "packages/auth/src/session.ts"
-      ],
+      "files": ["packages/auth/src/session.ts"],
       "gates": []
     },
     {
@@ -16,21 +14,15 @@
       "summary": "ResourceVersion is write-once; the db layer exposes no content update path.",
       "status": "staged",
       "enforcedFrom": "P2",
-      "files": [
-        "packages/db/src/resource-version.ts"
-      ],
-      "gates": [
-        "test"
-      ]
+      "files": ["packages/db/src/resource-version.ts"],
+      "gates": ["test"]
     },
     {
       "id": "INV-CLASSROOM-1",
       "summary": "Effective role is the max of active enrollments.",
       "status": "staged",
       "enforcedFrom": "P1",
-      "files": [
-        "packages/auth/src/can.ts"
-      ],
+      "files": ["packages/auth/src/can.ts"],
       "gates": []
     },
     {
@@ -38,24 +30,16 @@
       "summary": "Departure revokes classroom access but keeps the student's own records.",
       "status": "staged",
       "enforcedFrom": "P4",
-      "files": [
-        "packages/auth/src/can.ts"
-      ],
-      "gates": [
-        "test:integration"
-      ]
+      "files": ["packages/auth/src/can.ts"],
+      "gates": ["test:integration"]
     },
     {
       "id": "INV-ASSIGN-1",
       "summary": "Assessment reads the pinned version and the policy snapshot only; enforced by a path ban on currentVersionId (a taint analysis is not implementable \u2014 D-29) plus the pinning test.",
       "status": "staged",
       "enforcedFrom": "P5",
-      "files": [
-        "scripts/pinning-gate.mjs"
-      ],
-      "gates": [
-        "test"
-      ]
+      "files": ["scripts/pinning-gate.mjs"],
+      "gates": ["test"]
     },
     {
       "id": "INV-ASSIGN-2",
@@ -63,18 +47,14 @@
       "status": "staged",
       "enforcedFrom": "P5",
       "files": [],
-      "gates": [
-        "test:integration"
-      ]
+      "gates": ["test:integration"]
     },
     {
       "id": "INV-POLICY-1",
       "summary": "policySnapshot is frozen at first start.",
       "status": "staged",
       "enforcedFrom": "P8",
-      "files": [
-        "packages/exam-engine/src/policy.ts"
-      ],
+      "files": ["packages/exam-engine/src/policy.ts"],
       "gates": []
     },
     {
@@ -82,9 +62,7 @@
       "summary": "Policies are consistency-checked at authoring time.",
       "status": "staged",
       "enforcedFrom": "P8",
-      "files": [
-        "packages/exam-engine/src/policy.ts"
-      ],
+      "files": ["packages/exam-engine/src/policy.ts"],
       "gates": []
     },
     {
@@ -92,9 +70,7 @@
       "summary": "A pool must be drawable or the assessment cannot publish.",
       "status": "staged",
       "enforcedFrom": "P5",
-      "files": [
-        "packages/analytics/src/pool-health.ts"
-      ],
+      "files": ["packages/analytics/src/pool-health.ts"],
       "gates": []
     },
     {
@@ -102,9 +78,7 @@
       "summary": "variantMap is written once and read forever.",
       "status": "staged",
       "enforcedFrom": "P5",
-      "files": [
-        "packages/analytics/src/draw.ts"
-      ],
+      "files": ["packages/analytics/src/draw.ts"],
       "gates": []
     },
     {
@@ -112,9 +86,7 @@
       "summary": "Question content is version-snapshotted.",
       "status": "staged",
       "enforcedFrom": "P5",
-      "files": [
-        "packages/db/src/snapshot.ts"
-      ],
+      "files": ["packages/db/src/snapshot.ts"],
       "gates": []
     },
     {
@@ -123,19 +95,14 @@
       "status": "staged",
       "enforcedFrom": "P7",
       "files": [],
-      "gates": [
-        "audit:seals",
-        "audit:payloads"
-      ]
+      "gates": ["audit:seals", "audit:payloads"]
     },
     {
       "id": "INV-ATTEMPT-1",
       "summary": "Scores come only from the pure grader over stored answers.",
       "status": "staged",
       "enforcedFrom": "P7",
-      "files": [
-        "packages/grading/src/index.ts"
-      ],
+      "files": ["packages/grading/src/index.ts"],
       "gates": []
     },
     {
@@ -143,21 +110,15 @@
       "summary": "No partial result visibility, structurally.",
       "status": "staged",
       "enforcedFrom": "P7",
-      "files": [
-        "packages/grading/src/index.ts"
-      ],
-      "gates": [
-        "audit:seals"
-      ]
+      "files": ["packages/grading/src/index.ts"],
+      "gates": ["audit:seals"]
     },
     {
       "id": "INV-LATE-1",
       "summary": "Late writes are rejected; the last accepted value is retained.",
       "status": "staged",
       "enforcedFrom": "P8",
-      "files": [
-        "packages/exam-engine/src/deadline.ts"
-      ],
+      "files": ["packages/exam-engine/src/deadline.ts"],
       "gates": []
     },
     {
@@ -165,9 +126,7 @@
       "summary": "Release is a single-row gate, so atomicity is structural.",
       "status": "staged",
       "enforcedFrom": "P10",
-      "files": [
-        "packages/db/src/release.ts"
-      ],
+      "files": ["packages/db/src/release.ts"],
       "gates": []
     },
     {
@@ -176,18 +135,14 @@
       "status": "staged",
       "enforcedFrom": "P10",
       "files": [],
-      "gates": [
-        "audit:seals"
-      ]
+      "gates": ["audit:seals"]
     },
     {
       "id": "INV-ACC-1",
       "summary": "Accommodations produce zero violation events.",
       "status": "staged",
       "enforcedFrom": "P8",
-      "files": [
-        "packages/exam-engine/src/accommodations.ts"
-      ],
+      "files": ["packages/exam-engine/src/accommodations.ts"],
       "gates": []
     },
     {
@@ -195,9 +150,7 @@
       "summary": "Telemetry is evidence, never truth.",
       "status": "staged",
       "enforcedFrom": "P8",
-      "files": [
-        "packages/exam-engine/src/evidence.ts"
-      ],
+      "files": ["packages/exam-engine/src/evidence.ts"],
       "gates": []
     },
     {
@@ -206,9 +159,7 @@
       "status": "staged",
       "enforcedFrom": "P8",
       "files": [],
-      "gates": [
-        "audit:payloads"
-      ]
+      "gates": ["audit:payloads"]
     },
     {
       "id": "INV-SIM-1",
@@ -216,9 +167,7 @@
       "status": "staged",
       "enforcedFrom": "P6",
       "files": [],
-      "gates": [
-        "sim:sandbox-escape"
-      ]
+      "gates": ["sim:sandbox-escape"]
     },
     {
       "id": "INV-SIM-2",
@@ -226,42 +175,30 @@
       "status": "staged",
       "enforcedFrom": "P6",
       "files": [],
-      "gates": [
-        "sim:conformance"
-      ]
+      "gates": ["sim:conformance"]
     },
     {
       "id": "INV-TIME-1",
       "summary": "All time flows through @orrery/clock; the database is the deadline authority.",
       "status": "active",
       "enforcedFrom": null,
-      "files": [
-        "packages/clock/src/index.ts"
-      ],
-      "gates": [
-        "lint"
-      ]
+      "files": ["packages/clock/src/index.ts"],
+      "gates": ["lint"]
     },
     {
       "id": "INV-RNG-1",
       "summary": "All randomness flows through seeded @orrery/rng.",
       "status": "active",
       "enforcedFrom": null,
-      "files": [
-        "packages/rng/src/index.ts"
-      ],
-      "gates": [
-        "lint"
-      ]
+      "files": ["packages/rng/src/index.ts"],
+      "gates": ["lint"]
     },
     {
       "id": "INV-ABUSE-1",
       "summary": "Aggregate abuse limits are keyed on the actor, never the container.",
       "status": "staged",
       "enforcedFrom": "P4",
-      "files": [
-        "packages/auth/src/rate-limits.ts"
-      ],
+      "files": ["packages/auth/src/rate-limits.ts"],
       "gates": []
     },
     {
@@ -269,9 +206,7 @@
       "summary": "Every user-controlled byte write has a quota in the storing transaction.",
       "status": "staged",
       "enforcedFrom": "P2",
-      "files": [
-        "packages/db/src/quota.ts"
-      ],
+      "files": ["packages/db/src/quota.ts"],
       "gates": []
     },
     {
@@ -279,9 +214,7 @@
       "summary": "No stored block requires a human to fix it.",
       "status": "staged",
       "enforcedFrom": "P2",
-      "files": [
-        "packages/contracts/src/migrations.ts"
-      ],
+      "files": ["packages/contracts/src/migrations.ts"],
       "gates": []
     },
     {
@@ -289,9 +222,7 @@
       "summary": "AssessmentSlot and the Question rows it references agree.",
       "status": "staged",
       "enforcedFrom": "P5",
-      "files": [
-        "packages/db/src/slots.ts"
-      ],
+      "files": ["packages/db/src/slots.ts"],
       "gates": []
     }
   ]

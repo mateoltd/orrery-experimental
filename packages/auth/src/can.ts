@@ -30,7 +30,13 @@
 
 import { checkKernelObligations, deny } from './decide.js';
 import { MATRIX } from './matrix.js';
-import { ALL_RESOURCE_TYPES, type Action, type CanInput, type Decision, type ResourceType, type Rule } from './types.js';
+import {
+  type Action,
+  ALL_RESOURCE_TYPES,
+  type CanInput,
+  type Decision,
+  type Rule,
+} from './types.js';
 
 const isDev = (): boolean => {
   // Read through `process.env` directly, deliberately: @orrery/config is not a dependency of
@@ -84,7 +90,9 @@ export function can(input: CanInput): Decision {
  */
 export function assertObligations(decision: Decision, required: readonly string[]): void {
   if (!decision.allowed) {
-    throw new Error(`assertObligations(): decision is a DENY (${decision.reason}); cannot rely on it.`);
+    throw new Error(
+      `assertObligations(): decision is a DENY (${decision.reason}); cannot rely on it.`,
+    );
   }
   const missing = required.filter((r) => !decision.obligations.includes(r as never));
   if (missing.length > 0) {
@@ -103,5 +111,15 @@ export function missingObligations(decision: Decision, required: readonly string
 }
 
 export { MATRIX } from './matrix.js';
+export type {
+  Action,
+  Actor,
+  CanInput,
+  Context,
+  Decision,
+  Obligation,
+  ResourceType,
+  Role,
+  Subject,
+} from './types.js';
 export { ACTIONS, ALL_RESOURCE_TYPES, IMPLEMENTED_TYPES, ROLES } from './types.js';
-export type { Action, Decision, ResourceType, CanInput, Actor, Subject, Context, Role, Obligation } from './types.js';

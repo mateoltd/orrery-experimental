@@ -6,14 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": [
-      "**",
-      "!**/dist/**",
-      "!**/.next/**",
-      "!**/node_modules/**",
-      "!**/.tmp/**",
-      "!**/coverage/**"
-    ]
+    "includes": ["**", "!**/dist", "!**/.next", "!**/node_modules", "!**/.tmp", "!**/coverage"]
   },
   "formatter": {
     "enabled": true,
@@ -43,5 +36,17 @@
       "semicolons": "always",
       "trailingCommas": "all"
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["scripts/**"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noUndeclaredEnvVars": "off"
+          }
+        }
+      }
+    }
+  ]
 }

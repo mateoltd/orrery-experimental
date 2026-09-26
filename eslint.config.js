@@ -13,7 +13,24 @@ import tseslint from 'typescript-eslint';
 export default [
   // NOTE: `.tmp/**` is deliberately absent. The lint-rule verification test writes its
   // fixtures there and needs ESLint to lint them; `.tmp/` is gitignored so nothing leaks.
-  { ignores: ['**/dist/**', '**/.next/**', '**/node_modules/**', '**/*.d.ts'] },
+  {
+    // The Prisma client's generated output. Gitignored, but gitignoring a file does not tell
+    // ESLint about it — `eslint .` walked `packages/db/prisma/generated/**` and reported 3,121
+    // problems inside generated runtime code. Only visible after actually running
+    // `pnpm db:generate`, which is why it survived every earlier check.
+    ignores: [
+      '**/dist/**',
+      '**/.next/**',
+      '**/node_modules/**',
+      '**/*.d.ts',
+      '**/prisma/generated/**',
+      // `.tmp/` is deliberately NOT ignored. `lint-rules.verify.test.ts` writes its fixtures
+      // there and needs ESLint to lint them — that file is the proof every invariant rule can
+      // actually fire. Ignoring `.tmp` silenced the harness's 7 assertions, which is the exact
+      // "make the gate pass by breaking it" failure the test exists to prevent. A stray file
+      // in `.tmp` failing lint is correct behaviour, not a nuisance.
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -89,6 +106,23 @@ export default [
     },
   },
   {
+    // The gate scripts in `scripts/**` are plain ESM CLIs, run by `node` directly. They were
+    // matching no block at all, so they were linted with NO declared globals — which produced
+    // 3,204 `no-undef` errors on `console` and `process` and buried the handful of real
+    // problems underneath them.
+    //
+    // A gate that cannot be linted cleanly is a gate nobody re-reads, so this block exists to
+    // make the output mean something. Note these are `.mjs`, deliberately outside the
+    // `no-restricted-globals` block above: a gate script printing PASSED is the one place
+    // `console.log` is the correct thing to do.
+    files: ['scripts/**/*.mjs', 'scripts/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: 'module',
+      globals: globals.node,
+    },
+  },
+  {
     // ADR-0005: a package importing `next` cannot be tested in isolation and drags React
     // into every consumer's bundle. Scoped to packages/* — the app is the one place that
     // legitimately imports the framework.
@@ -104,12 +138,38 @@ export default [
         'error',
         {
           patterns: [
-            { group: ['next', 'next/*'], message: 'ADR-0005: packages/* must not import next. Move it to apps/web.' },
-            { group: ['@prisma/client', '.prisma/client'], message: 'Only packages/db may import Prisma, and it exports functions, never a client.' },
-            { group: ['**/index'], message: 'ADR-0016: no barrel files. Use an explicit subpath export.' },
+            {
+              group: ['next', 'next/*'],
+              message: 'ADR-0005: packages/* must not import next. Move it to apps/web.',
+            },
+            {
+              group: ['@prisma/client', '.prisma/client'],
+              message:
+                'Only packages/db may import Prisma, and it exports functions, never a client.',
+            },
+            {
+              group: ['**/index'],
+              message: 'ADR-0016: no barrel files. Use an explicit subpath export.',
+            },
           ],
         },
       ],
+    },
+  },
+  {
+    // INV-TIME-1 needs exactly one exemption, and it is this one.
+    //
+    // `@orrery/clock` exists to be the only module that touches the host clock. If the rule
+    // applied to it, the package could not be written. Scoped to `src/**` rather than the
+    // whole package, tests included: the tests compare `systemClock.now()` against a real
+    // `Date.now()` to prove the real clock tracks real time, and a test that cannot name
+    // `Date` cannot make that point. (An `ignores` for the test files was here first and was
+    // simply wrong — it did the opposite of what the comment above it claimed.)
+    files: ['packages/clock/src/**/*.ts'],
+    rules: {
+      'no-restricted-globals': 'off',
+      'no-restricted-properties': 'off',
+      'no-restricted-syntax': 'off',
     },
   },
   {

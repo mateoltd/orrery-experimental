@@ -73,7 +73,11 @@ importers:
         specifier: workspace:*
         version: link:../../packages/config
 
-  packages/auth: {}
+  packages/auth:
+    dependencies:
+      '@orrery/clock':
+        specifier: workspace:*
+        version: link:../clock
 
   packages/clock: {}
 

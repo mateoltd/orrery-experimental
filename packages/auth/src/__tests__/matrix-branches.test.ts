@@ -51,14 +51,18 @@ describe('Asset — actions with no caller yet still need their negative branch'
 
   it('save requires the actor to own the asset', () => {
     expect(can({ actor: actor(), action: 'save', subject: asset() }).allowed).toBe(true);
-    expect(can({ actor: actor(), action: 'save', subject: asset({ ownerId: 't-2' }) }))
-      .toEqual({ allowed: false, reason: 'notOwner' });
+    expect(can({ actor: actor(), action: 'save', subject: asset({ ownerId: 't-2' }) })).toEqual({
+      allowed: false,
+      reason: 'notOwner',
+    });
   });
 
   it('submit requires the actor to own the asset', () => {
     expect(can({ actor: actor(), action: 'submit', subject: asset() }).allowed).toBe(true);
-    expect(can({ actor: actor(), action: 'submit', subject: asset({ ownerId: 't-2' }) }))
-      .toEqual({ allowed: false, reason: 'notOwner' });
+    expect(can({ actor: actor(), action: 'submit', subject: asset({ ownerId: 't-2' }) })).toEqual({
+      allowed: false,
+      reason: 'notOwner',
+    });
   });
 
   it('a student MAY start an asset but may NOT save or submit one', () => {
@@ -70,11 +74,15 @@ describe('Asset — actions with no caller yet still need their negative branch'
     // platform's read/run surface is intentionally open to students. `save` and `submit` deny
     // on OWNERSHIP, not role, which is the distinction this test now pins.
     const student = actor({ roles: ['student'], id: 's-1' });
-    expect(can({ actor: student, action: 'start', subject: asset() }).allowed,
-      'a student must be able to run a simulation').toBe(true);
+    expect(
+      can({ actor: student, action: 'start', subject: asset() }).allowed,
+      'a student must be able to run a simulation',
+    ).toBe(true);
     for (const action of ['save', 'submit'] as const) {
-      expect(can({ actor: student, action, subject: asset() }).allowed,
-        `a student must not ${action} an asset they do not own`).toBe(false);
+      expect(
+        can({ actor: student, action, subject: asset() }).allowed,
+        `a student must not ${action} an asset they do not own`,
+      ).toBe(false);
     }
   });
 });
@@ -94,8 +102,14 @@ describe('User — save and submit are self-only', () => {
   it('a student cannot save or submit another User record', () => {
     const me = actor({ roles: ['student'], id: 'u-1' });
     const other: Subject = { type: 'User', id: 'u-2' };
-    expect(can({ actor: me, action: 'save', subject: other })).toEqual({ allowed: false, reason: 'notSelf' });
-    expect(can({ actor: me, action: 'submit', subject: other })).toEqual({ allowed: false, reason: 'notSelf' });
+    expect(can({ actor: me, action: 'save', subject: other })).toEqual({
+      allowed: false,
+      reason: 'notSelf',
+    });
+    expect(can({ actor: me, action: 'submit', subject: other })).toEqual({
+      allowed: false,
+      reason: 'notSelf',
+    });
   });
 });
 
@@ -106,7 +120,11 @@ describe('User — the role negative for read', () => {
     // student records are read through an enrollment-scoped projection, not through User.
     // Conflating the two is how a teacher ends up with a directory of every child in the
     // system, so the deny is asserted deliberately.
-    const d = can({ actor: actor({ id: 't-1' }), action: 'read', subject: { type: 'User', id: 'u-9' } });
+    const d = can({
+      actor: actor({ id: 't-1' }),
+      action: 'read',
+      subject: { type: 'User', id: 'u-9' },
+    });
     expect(d).toEqual({ allowed: false, reason: 'notSelf' });
   });
 
@@ -130,38 +148,53 @@ describe('Asset — delete and publish negative paths', () => {
   });
 
   it('delete requires a teacher or admin role', () => {
-    expect(can({ actor: actor({ roles: ['student'], id: 's-1' }), action: 'delete', subject: asset() }))
-      .toEqual({ allowed: false, reason: 'roleForbidden' });
+    expect(
+      can({ actor: actor({ roles: ['student'], id: 's-1' }), action: 'delete', subject: asset() }),
+    ).toEqual({ allowed: false, reason: 'roleForbidden' });
   });
 
   it('delete refuses an immutable asset', () => {
-    expect(can({ actor: actor(), action: 'delete', subject: asset({ immutable: true }) }))
-      .toEqual({ allowed: false, reason: 'immutable' });
+    expect(can({ actor: actor(), action: 'delete', subject: asset({ immutable: true }) })).toEqual({
+      allowed: false,
+      reason: 'immutable',
+    });
   });
 
   it('delete refuses another teacher’s asset, and an admin may delete it', () => {
-    expect(can({ actor: actor(), action: 'delete', subject: asset({ ownerId: 't-2' }) }))
-      .toEqual({ allowed: false, reason: 'notOwner' });
+    expect(can({ actor: actor(), action: 'delete', subject: asset({ ownerId: 't-2' }) })).toEqual({
+      allowed: false,
+      reason: 'notOwner',
+    });
     expect(
-      can({ actor: actor({ roles: ['platformAdmin'] }), action: 'delete', subject: asset({ ownerId: 't-2' }) })
-        .allowed,
+      can({
+        actor: actor({ roles: ['platformAdmin'] }),
+        action: 'delete',
+        subject: asset({ ownerId: 't-2' }),
+      }).allowed,
     ).toBe(true);
   });
 
   it('publish requires an actor, a role, and a mutable subject', () => {
-    expect(can({ actor: null, action: 'publish', subject: asset() }))
-      .toEqual({ allowed: false, reason: 'noActor' });
-    expect(can({ actor: actor({ roles: ['student'], id: 's-1' }), action: 'publish', subject: asset() }))
-      .toEqual({ allowed: false, reason: 'roleForbidden' });
-    expect(can({ actor: actor(), action: 'publish', subject: asset({ immutable: true }) }))
-      .toEqual({ allowed: false, reason: 'immutable' });
+    expect(can({ actor: null, action: 'publish', subject: asset() })).toEqual({
+      allowed: false,
+      reason: 'noActor',
+    });
+    expect(
+      can({ actor: actor({ roles: ['student'], id: 's-1' }), action: 'publish', subject: asset() }),
+    ).toEqual({ allowed: false, reason: 'roleForbidden' });
+    expect(can({ actor: actor(), action: 'publish', subject: asset({ immutable: true }) })).toEqual(
+      { allowed: false, reason: 'immutable' },
+    );
   });
 
   it('update requires a role and refuses an immutable asset', () => {
-    expect(can({ actor: actor({ roles: ['student'], id: 's-1' }), action: 'update', subject: asset() }))
-      .toEqual({ allowed: false, reason: 'roleForbidden' });
-    expect(can({ actor: actor(), action: 'update', subject: asset({ immutable: true }) }))
-      .toEqual({ allowed: false, reason: 'immutable' });
+    expect(
+      can({ actor: actor({ roles: ['student'], id: 's-1' }), action: 'update', subject: asset() }),
+    ).toEqual({ allowed: false, reason: 'roleForbidden' });
+    expect(can({ actor: actor(), action: 'update', subject: asset({ immutable: true }) })).toEqual({
+      allowed: false,
+      reason: 'immutable',
+    });
   });
 
   it('an admin may update an immutable asset — the immutability rule is not role-gated', () => {
@@ -181,10 +214,13 @@ describe('Asset — delete and publish negative paths', () => {
   });
 
   it('create requires a teacher or admin role', () => {
-    expect(can({ actor: actor({ roles: ['student'], id: 's-1' }), action: 'create', subject: asset() }))
-      .toEqual({ allowed: false, reason: 'roleForbidden' });
-    expect(can({ actor: actor({ roles: ['platformAdmin'] }), action: 'create', subject: asset() }).allowed)
-      .toBe(true);
+    expect(
+      can({ actor: actor({ roles: ['student'], id: 's-1' }), action: 'create', subject: asset() }),
+    ).toEqual({ allowed: false, reason: 'roleForbidden' });
+    expect(
+      can({ actor: actor({ roles: ['platformAdmin'] }), action: 'create', subject: asset() })
+        .allowed,
+    ).toBe(true);
   });
 
   it('read is open to any authenticated actor and closed to none', () => {
@@ -192,10 +228,14 @@ describe('Asset — delete and publish negative paths', () => {
     // restriction to apply. Pinned here so that when P8-T1 introduces reviewers, this test is
     // the thing that has to change deliberately.
     for (const role of ['student', 'teacher', 'reviewer', 'platformAdmin'] as const) {
-      expect(can({ actor: actor({ roles: [role] }), action: 'read', subject: asset() }).allowed,
-        `role=${role}`).toBe(true);
+      expect(
+        can({ actor: actor({ roles: [role] }), action: 'read', subject: asset() }).allowed,
+        `role=${role}`,
+      ).toBe(true);
     }
-    expect(can({ actor: null, action: 'read', subject: asset() }))
-      .toEqual({ allowed: false, reason: 'noActor' });
+    expect(can({ actor: null, action: 'read', subject: asset() })).toEqual({
+      allowed: false,
+      reason: 'noActor',
+    });
   });
 });

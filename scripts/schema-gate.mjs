@@ -77,6 +77,9 @@ try {
   if (/is valid/.test(out)) ok('schema is valid');
   else bad(`unexpected validate output:\n${out.slice(0, 400)}`);
 } catch (e) {
+  // The binding is used. An earlier bulk `catch (e) {` -> `catch {` rewrite removed it and
+  // left `e.stdout` referencing an undeclared identifier — which ESLint caught immediately,
+  // which is the only reason to be glad the gate scripts are linted at all.
   bad(`schema does not validate:\n${(e.stdout ?? '') + (e.stderr ?? '')}`.slice(0, 2000));
 }
 
@@ -103,7 +106,7 @@ try {
       },
     },
   );
-} catch (e) {
+} catch {
   // Older CLIs support --output. Try that before giving up.
   try {
     sh(

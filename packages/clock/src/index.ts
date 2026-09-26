@@ -36,9 +36,14 @@ export interface Clock {
   monotonic(): number;
 }
 
-export interface SystemClock extends Clock {}
+/**
+ * The real clock. Spelled as an alias rather than `interface SystemClock extends Clock {}`,
+ * which is an empty interface and means exactly the same thing while inviting structural
+ * extension that would let a second clock claim to be the system clock.
+ */
+export type SystemClock = Clock;
 
-/** The real clock. The only implementation permitted to touch the host. */
+/** The only implementation permitted to touch the host. */
 export const systemClock: SystemClock = {
   now: () => Date.now(),
   // performance.now() is monotonic; fall back to Date.now() where it is absent.

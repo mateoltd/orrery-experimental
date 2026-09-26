@@ -12,7 +12,15 @@
  * from the other direction.
  */
 
-import type { Decision, KernelObligation, Obligation, DenyCode, Actor, Context, Subject } from './types.js';
+import type {
+  Actor,
+  Context,
+  Decision,
+  DenyCode,
+  KernelObligation,
+  Obligation,
+  Subject,
+} from './types.js';
 
 export function deny(reason: DenyCode): Decision {
   return { allowed: false, reason };
@@ -22,7 +30,11 @@ export function deny(reason: DenyCode): Decision {
  * Obligations the kernel promises to have checked. A rule asks for them; `can()` verifies
  * them against the actual actor and downgrades to a deny if unmet.
  */
-export const GRANT_REQUIRES = ['requireMfa', 'noSelfGrade', 'sameClassroom'] as const satisfies readonly KernelObligation[];
+export const GRANT_REQUIRES = [
+  'requireMfa',
+  'noSelfGrade',
+  'sameClassroom',
+] as const satisfies readonly KernelObligation[];
 
 export function grant(obligations: readonly Obligation[] = []): Decision {
   return { allowed: true, obligations: [...obligations] };
@@ -52,7 +64,8 @@ export function checkKernelObligations(
         if (!actor.mfaVerified) return 'lastActorMfa';
         break;
       case 'noSelfGrade':
-        if (context?.subjectOwnerId !== undefined && context.subjectOwnerId === actor.id) return 'notSelf';
+        if (context?.subjectOwnerId !== undefined && context.subjectOwnerId === actor.id)
+          return 'notSelf';
         break;
       case 'sameClassroom': {
         const scope = context?.scopeClassroomId;

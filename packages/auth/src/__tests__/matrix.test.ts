@@ -15,20 +15,20 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { can, assertObligations, missingObligations } from '../can.js';
+import { assertObligations, can, missingObligations } from '../can.js';
 import { checkKernelObligations, isKernelEnforced } from '../decide.js';
-import { MATRIX, cells } from '../matrix.js';
+import { cells, MATRIX } from '../matrix.js';
 import {
   ACTIONS,
+  type Actor,
   ALL_RESOURCE_TYPES,
+  type CanInput,
   IMPLEMENTED_TYPES,
   KERNEL_ENFORCED_OBLIGATIONS,
-  ROLES,
-  SERVICE_ENFORCED_OBLIGATIONS,
-  type Actor,
-  type CanInput,
   type Obligation,
+  ROLES,
   type Role,
+  SERVICE_ENFORCED_OBLIGATIONS,
   type Subject,
 } from '../types.js';
 
@@ -110,8 +110,11 @@ describe('no cell grants allowed:true with a contradictory obligation', () => {
       for (const role of ROLES) {
         for (const mfaVerified of [true, false]) {
           for (const member of [true, false]) {
+            // A non-null local, not `input.actor!`. The grid always supplies an actor, and a
+            // cast would hide that.
+            const a = actor({ roles: [role], mfaVerified });
             const input: CanInput = {
-              actor: actor({ roles: [role], mfaVerified }),
+              actor: a,
               action,
               subject: subject({ type }),
               context: {
@@ -122,7 +125,7 @@ describe('no cell grants allowed:true with a contradictory obligation', () => {
             };
             const d = can(input);
             if (!d.allowed) continue;
-            const unmet = checkKernelObligations(d.obligations, input.actor!, input.subject, input.context);
+            const unmet = checkKernelObligations(d.obligations, a, input.subject, input.context);
             if (unmet !== null) {
               violations.push(
                 `${action}/${type}/${role}/mfa=${mfaVerified}/member=${member} ` +
@@ -140,7 +143,10 @@ describe('no cell grants allowed:true with a contradictory obligation', () => {
   it('every obligation name is either kernel-enforced or service-enforced — never neither', () => {
     // A typo'd obligation would satisfy every structural check and enforce nothing. This is
     // the cheapest possible guard against the most expensive possible bug.
-    const known = new Set<string>([...KERNEL_ENFORCED_OBLIGATIONS, ...SERVICE_ENFORCED_OBLIGATIONS]);
+    const known = new Set<string>([
+      ...KERNEL_ENFORCED_OBLIGATIONS,
+      ...SERVICE_ENFORCED_OBLIGATIONS,
+    ]);
     const seen = new Set<Obligation>();
     for (const { type, action } of cells()) {
       const d = can({
@@ -152,7 +158,10 @@ describe('no cell grants allowed:true with a contradictory obligation', () => {
       if (d.allowed) for (const o of d.obligations) seen.add(o);
     }
     for (const o of seen) {
-      expect(known.has(o), `obligation "${o}" is in neither the kernel-enforced nor the service-enforced set`).toBe(true);
+      expect(
+        known.has(o),
+        `obligation "${o}" is in neither the kernel-enforced nor the service-enforced set`,
+      ).toBe(true);
     }
   });
 });
@@ -192,8 +201,9 @@ describe('an unrecognised pair is loud in development and safe in production', (
     process.env.NODE_ENV = 'production';
     try {
       (MATRIX as Record<string, unknown>).Probe = { read: null };
-      expect(can({ actor: actor(), action: 'read', subject: { type: 'Probe' as never, id: 'x' } }))
-        .toEqual({ allowed: false, reason: 'unknownPair' });
+      expect(
+        can({ actor: actor(), action: 'read', subject: { type: 'Probe' as never, id: 'x' } }),
+      ).toEqual({ allowed: false, reason: 'unknownPair' });
     } finally {
       delete (MATRIX as Record<string, unknown>).Probe;
       process.env.NODE_ENV = prev;
@@ -238,9 +248,11 @@ describe('obligations are assertable at the call site', () => {
   });
 
   it('missingObligations returns the list instead of throwing', () => {
-    expect(missingObligations(granted, ['twoPersonRelease', 'retainEvidence']))
-      .toEqual(['retainEvidence']);
-    expect(missingObligations(can({ actor: null, action: 'read', subject: subject() }), ['audit']))
-      .toEqual(['audit']);
+    expect(missingObligations(granted, ['twoPersonRelease', 'retainEvidence'])).toEqual([
+      'retainEvidence',
+    ]);
+    expect(
+      missingObligations(can({ actor: null, action: 'read', subject: subject() }), ['audit']),
+    ).toEqual(['audit']);
   });
 });

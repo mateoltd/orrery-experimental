@@ -95,7 +95,9 @@ for (const inv of registry.invariants) {
       continue;
     }
     staged.push(inv);
-    const problems = [];
+    // No `problems` array here: this was a second, shadowed declaration, shadowed by the one
+    // below that the ACTIVE branch also uses. A staged invariant with no mechanism at all is
+    // reported further down, and the duplicate made it look like it was checked twice.
     if (!(inv.gates?.length || inv.files?.length)) {
       bad(`${inv.id}: staged with no declared mechanism at all`);
       continue;

@@ -104,7 +104,6 @@ try {
   // The route the budget is actually about. Named explicitly so that renaming or splitting
   // the exam surface cannot silently remove it from the measurement.
   const EXAM_ROUTES = ['/exam/[attemptId]/page', '/exam/[attemptId]/layout', '/layout'];
-  const allFiles = [...new Set(Object.values(pages).flat())];
 
   const missing = EXAM_ROUTES.filter((r) => !(r in pages));
   if (missing.length > 0) {

@@ -24,8 +24,11 @@ import type { Actor, Obligation, Subject } from '../types.js';
 const actor: Actor = { id: 't-1', roles: ['teacher'], mfaVerified: false, suspended: false };
 const subject: Subject = { type: 'Asset', id: 'a-1', owningClassroomId: 'c-1', ownerId: 't-1' };
 
-const check = (obligations: Obligation[], ctx?: Parameters<typeof checkKernelObligations>[3], a: Actor = actor) =>
-  checkKernelObligations(obligations, a, subject, ctx);
+const check = (
+  obligations: Obligation[],
+  ctx?: Parameters<typeof checkKernelObligations>[3],
+  a: Actor = actor,
+) => checkKernelObligations(obligations, a, subject, ctx);
 
 describe('requireMfa', () => {
   it('denies an actor with no verified factor', () => {
@@ -65,21 +68,25 @@ describe('sameClassroom — the branches that fail open if written carelessly', 
   });
 
   it('denies when the subject is scoped to a different classroom than the action', () => {
-    expect(check(['sameClassroom'], { scopeClassroomId: 'c-9', actorClassroomIds: new Set(['c-9']) }))
-      .toBe('wrongClassroom');
+    expect(
+      check(['sameClassroom'], { scopeClassroomId: 'c-9', actorClassroomIds: new Set(['c-9']) }),
+    ).toBe('wrongClassroom');
   });
 
   it('denies when the subject has no classroom at all — unprovable is not permitted', () => {
     const orphan: Subject = { type: 'Asset', id: 'a-2' };
-    expect(checkKernelObligations(['sameClassroom'], actor, orphan, {
-      scopeClassroomId: 'c-1',
-      actorClassroomIds: new Set(['c-1']),
-    })).toBe('wrongClassroom');
+    expect(
+      checkKernelObligations(['sameClassroom'], actor, orphan, {
+        scopeClassroomId: 'c-1',
+        actorClassroomIds: new Set(['c-1']),
+      }),
+    ).toBe('wrongClassroom');
   });
 
   it('denies when the actor is not enrolled in the scope', () => {
-    expect(check(['sameClassroom'], { scopeClassroomId: 'c-1', actorClassroomIds: new Set<string>() }))
-      .toBe('notMember');
+    expect(
+      check(['sameClassroom'], { scopeClassroomId: 'c-1', actorClassroomIds: new Set<string>() }),
+    ).toBe('notMember');
   });
 
   it('denies when the actor has no membership set at all', () => {
@@ -87,14 +94,21 @@ describe('sameClassroom — the branches that fail open if written carelessly', 
   });
 
   it('allows when scope, subject and membership all agree', () => {
-    expect(check(['sameClassroom'], { scopeClassroomId: 'c-1', actorClassroomIds: new Set(['c-1']) }))
-      .toBeNull();
+    expect(
+      check(['sameClassroom'], { scopeClassroomId: 'c-1', actorClassroomIds: new Set(['c-1']) }),
+    ).toBeNull();
   });
 });
 
 describe('service-enforced obligations pass straight through', () => {
   it('reports them without evaluating them', () => {
-    for (const o of ['audit', 'reasonRequired', 'twoPersonRelease', 'gradeDoubleEntry', 'retainEvidence'] as const) {
+    for (const o of [
+      'audit',
+      'reasonRequired',
+      'twoPersonRelease',
+      'gradeDoubleEntry',
+      'retainEvidence',
+    ] as const) {
       expect(isKernelEnforced(o), `${o} must not be claimed as kernel-enforced`).toBe(false);
       expect(check([o])).toBeNull();
     }
@@ -124,7 +138,13 @@ describe('the decision constructors', () => {
     for (const o of ['requireMfa', 'noSelfGrade', 'sameClassroom'] as const) {
       expect(isKernelEnforced(o)).toBe(true);
     }
-    for (const o of ['audit', 'reasonRequired', 'twoPersonRelease', 'gradeDoubleEntry', 'retainEvidence'] as const) {
+    for (const o of [
+      'audit',
+      'reasonRequired',
+      'twoPersonRelease',
+      'gradeDoubleEntry',
+      'retainEvidence',
+    ] as const) {
       expect(isKernelEnforced(o)).toBe(false);
     }
   });

@@ -70,10 +70,34 @@ export function getPrisma(options: DbOptions = {}): PrismaClient {
   if (!g.__orreryPrisma) {
     g.__orreryPrisma = new PrismaClient({
       log: logQueries ? ['query', 'warn', 'error'] : ['warn', 'error'],
-      datasources: url ? { db: { url } } : undefined,
+      datasources: url ? { db: { url: withConnectionLimit(url, connectionLimit) } } : undefined,
     });
   }
   return g.__orreryPrisma;
+}
+
+/**
+ * Attach the pool size to the datasource URL.
+ *
+ * `connectionLimit` was previously destructured and then silently discarded — the option
+ * existed, was documented, and had no effect, which is the worst of the three outcomes. It
+ * is honoured here by Prisma's own Postgres pool parameter.
+ *
+ * An existing `connection_limit` in the URL WINS, because an operator who pinned it in the
+ * connection string meant it: silently overriding a configured value to apply a default is
+ * how a production pool size gets changed by a code deploy.
+ */
+export function withConnectionLimit(url: string, limit: number): string {
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new Error(
+      `withConnectionLimit: limit must be a positive integer, got ${limit}. ` +
+        'A pool that is too large is the most common cause of a database collapsing under ' +
+        'load while reporting low CPU.',
+    );
+  }
+  if (/[?&]connection_limit=/.test(url)) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}connection_limit=${limit}`;
 }
 
 /**

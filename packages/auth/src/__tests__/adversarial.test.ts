@@ -46,11 +46,19 @@ const expectDeny = (d: Decision, reason: string, because: string): void => {
 describe('A student cannot reach anything that is not their own', () => {
   it('a student cannot read another student’s account', () => {
     const d = can({ actor: actor({ id: 'u-1' }), action: 'read', subject: subject({ id: 'u-2' }) });
-    expectDeny(d, 'notSelf', 'reading another account must be denied as not-self, not as role-forbidden');
+    expectDeny(
+      d,
+      'notSelf',
+      'reading another account must be denied as not-self, not as role-forbidden',
+    );
   });
 
   it('a student cannot update another student’s account', () => {
-    const d = can({ actor: actor({ id: 'u-1' }), action: 'update', subject: subject({ id: 'u-2' }) });
+    const d = can({
+      actor: actor({ id: 'u-1' }),
+      action: 'update',
+      subject: subject({ id: 'u-2' }),
+    });
     expectDeny(d, 'notSelf', 'a student must not be able to edit a peer');
   });
 
@@ -70,7 +78,11 @@ describe('A student cannot reach anything that is not their own', () => {
     // The positive case. Without it the only covered path through `update` was a deny, which
     // is how a rule ends up permanently rejecting the one request it exists to allow —
     // self-service profile edits are the single most common authenticated write in the app.
-    const d = can({ actor: actor({ id: 'u-1' }), action: 'update', subject: subject({ id: 'u-1' }) });
+    const d = can({
+      actor: actor({ id: 'u-1' }),
+      action: 'update',
+      subject: subject({ id: 'u-1' }),
+    });
     expect(d.allowed, 'a student must be able to edit their own profile').toBe(true);
   });
 
@@ -85,7 +97,11 @@ describe('A student cannot reach anything that is not their own', () => {
   });
 
   it('a suspended student cannot update their own account', () => {
-    const d = can({ actor: actor({ suspended: true }), action: 'update', subject: subject({ id: 'u-1' }) });
+    const d = can({
+      actor: actor({ suspended: true }),
+      action: 'update',
+      subject: subject({ id: 'u-1' }),
+    });
     expectDeny(d, 'suspended', 'suspension must apply even to self-service edits');
   });
 
@@ -175,8 +191,10 @@ describe('Immutability and publication', () => {
     });
     expect(d.allowed).toBe(true);
     if (d.allowed) {
-      expect(d.obligations, 'a single teacher must not be able to self-publish unreviewed')
-        .toContain('twoPersonRelease');
+      expect(
+        d.obligations,
+        'a single teacher must not be able to self-publish unreviewed',
+      ).toContain('twoPersonRelease');
     }
   });
 });

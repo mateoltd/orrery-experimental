@@ -33,9 +33,28 @@ export type Role = (typeof ROLES)[number];
  * written without changing this file, which is the point.
  */
 export const ACTIONS = [
-  'create', 'read', 'update', 'delete', 'publish', 'assign', 'start', 'save', 'submit',
-  'grade', 'release', 'viewEvidence', 'void', 'excuse', 'regrade', 'invite',
-  'removeMember', 'changeRole', 'importRoster', 'export', 'impersonate', 'suspend',
+  'create',
+  'read',
+  'update',
+  'delete',
+  'publish',
+  'assign',
+  'start',
+  'save',
+  'submit',
+  'grade',
+  'release',
+  'viewEvidence',
+  'void',
+  'excuse',
+  'regrade',
+  'invite',
+  'removeMember',
+  'changeRole',
+  'importRoster',
+  'export',
+  'impersonate',
+  'suspend',
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -45,10 +64,27 @@ export type Action = (typeof ACTIONS)[number];
  * type appears here without rules.
  */
 export const ALL_RESOURCE_TYPES = [
-  'User', 'Resource', 'ResourceVersion', 'QuestionBank', 'Question', 'QuestionPool',
-  'Blueprint', 'Classroom', 'Enrollment', 'Invitation', 'Assignment', 'ExamAttempt',
-  'QuestionResponse', 'IntegrityEvidence', 'ReviewTask', 'ReleaseBatch', 'Asset',
-  'AuditEvent', 'Simulation', 'SimulationDraft', 'ExternalBinding',
+  'User',
+  'Resource',
+  'ResourceVersion',
+  'QuestionBank',
+  'Question',
+  'QuestionPool',
+  'Blueprint',
+  'Classroom',
+  'Enrollment',
+  'Invitation',
+  'Assignment',
+  'ExamAttempt',
+  'QuestionResponse',
+  'IntegrityEvidence',
+  'ReviewTask',
+  'ReleaseBatch',
+  'Asset',
+  'AuditEvent',
+  'Simulation',
+  'SimulationDraft',
+  'ExternalBinding',
 ] as const;
 export type ResourceType = (typeof ALL_RESOURCE_TYPES)[number];
 
@@ -67,6 +103,17 @@ export type ResourceType = (typeof ALL_RESOURCE_TYPES)[number];
 // matrix's `satisfies` clause needs the narrow tuple so that "every implemented type has
 // every action" is checked against the types actually claimed, and not against all 22.
 export const IMPLEMENTED_TYPES = ['User', 'Asset'] as const satisfies readonly ResourceType[];
+
+/**
+ * The union of implemented types, published from HERE.
+ *
+ * `matrix.ts` needs `(typeof IMPLEMENTED_TYPES)[number]` for its `satisfies` clause, but
+ * `typeof` on an *imported* value is a type-only usage, so an `import type` is required —
+ * and a linter reading that as "the import is unused" then demands the import be removed.
+ * Deriving the union next to the constant breaks the loop, and the type lives with the data
+ * it describes.
+ */
+export type ImplementedResourceType = (typeof IMPLEMENTED_TYPES)[number];
 
 export type DenyCode =
   | 'unknownPair'
@@ -98,7 +145,11 @@ export type DenyCode =
  */
 export const KERNEL_ENFORCED_OBLIGATIONS = ['requireMfa', 'noSelfGrade', 'sameClassroom'] as const;
 export const SERVICE_ENFORCED_OBLIGATIONS = [
-  'audit', 'reasonRequired', 'twoPersonRelease', 'gradeDoubleEntry', 'retainEvidence',
+  'audit',
+  'reasonRequired',
+  'twoPersonRelease',
+  'gradeDoubleEntry',
+  'retainEvidence',
 ] as const;
 
 export type KernelObligation = (typeof KERNEL_ENFORCED_OBLIGATIONS)[number];

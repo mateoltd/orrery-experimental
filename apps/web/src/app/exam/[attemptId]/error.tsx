@@ -47,7 +47,15 @@ export default function ExamError({
         </p>
       ) : null}
 
-      <button type="button" onClick={reset} autoFocus>
+      {/*
+        No `autoFocus` on this button. It fires on mount, which yanks focus mid-sentence for
+        a screen-reader user and is exactly the kind of "helpful" focus management that makes
+        an error state harder to read. The heading above is the thing that should receive
+        focus, and only if the user has not already moved focus themselves — which is what
+        the `focusManagement` helper in this directory does. Asserted by the exam a11y
+        test rather than left to review.
+      */}
+      <button type="button" onClick={reset}>
         Try again
       </button>
     </main>
