@@ -6,12 +6,14 @@ import {
   FrozenClock,
   formatDuration,
   HOUR,
+  isoNow,
   isPastDeadline,
   MINUTE,
   SECOND,
   seconds,
   secondsRemaining,
   systemClock,
+  toIso,
 } from './index.js';
 
 describe('FrozenClock', () => {
@@ -134,6 +136,26 @@ describe('formatDuration', () => {
     [-1, '0:00'],
   ])('formatDuration(%i) === %s', (ms, expected) => {
     expect(formatDuration(ms)).toBe(expected);
+  });
+});
+
+describe('ISO formatting', () => {
+  // The INV-TIME-1 rule bans `new Date()`, so this is the ONLY sanctioned way to render a
+  // timestamp. It exists because the rule caught a real violation in the healthz route.
+  it('formats an instant as ISO-8601 UTC', () => {
+    expect(toIso(0)).toBe('1970-01-01T00:00:00.000Z');
+    expect(toIso(1_700_000_000_000)).toBe('2023-11-14T22:13:20.000Z');
+  });
+
+  it('isoNow reads from the injected clock, so it is testable', () => {
+    expect(isoNow(new FrozenClock(0))).toBe('1970-01-01T00:00:00.000Z');
+    expect(isoNow(new FrozenClock(60_000))).toBe('1970-01-01T00:01:00.000Z');
+  });
+
+  it('defaults to the system clock and produces a parseable value', () => {
+    const s = isoNow();
+    expect(s).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    expect(Number.isNaN(Date.parse(s))).toBe(false);
   });
 });
 

@@ -135,6 +135,24 @@ export function clockOffset(serverNow: Millis, rttMs: number): Duration {
   return serverNow + rttMs / 2 - Date.now();
 }
 
+/**
+ * Format an instant as an ISO-8601 UTC string.
+ *
+ * This exists because the INV-TIME-1 lint rule bans the `Date` constructor outright, and
+ * `new Date(millis).toISOString()` is the only way most people would have produced a
+ * timestamp. The rule caught exactly that in the healthz route during `next build`.
+ *
+ * The correct resolution is to close the gap in the module the rule points at, not to
+ * weaken the rule or add an exception for `new Date(ms)`. A banned construct that
+ * everyone needs a workaround for is a banned construct with a missing function.
+ */
+export function toIso(at: Millis): string {
+  return new Date(at).toISOString();
+}
+
+/** The current instant as an ISO-8601 UTC string, via the injected clock. */
+export const isoNow = (clock: Clock = systemClock): string => toIso(clock.now());
+
 /** `m:ss` / `h:mm:ss`, for countdowns. Always non-negative. */
 export function formatDuration(ms: Duration): string {
   const total = Math.max(0, Math.floor(ms / SECOND));

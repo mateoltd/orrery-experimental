@@ -23,7 +23,7 @@
     "gate:board": "node scripts/count-tasks.mjs",
     "gate:bundle": "node scripts/check-bundle-budget.mjs",
     "gate:schema": "node scripts/schema-gate.mjs",
-    "gates": "pnpm gate:schema && pnpm gate:board && pnpm gate:invariants && pnpm gate:pinning"
+    "gates": "pnpm gate:schema && pnpm gate:board && pnpm gate:invariants && pnpm gate:pinning && pnpm gate:bundle"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
