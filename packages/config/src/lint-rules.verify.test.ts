@@ -26,8 +26,12 @@ afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 const eslint = new ESLint({ cwd: root, overrideConfigFile: join(root, 'eslint.config.js') });
 
-async function lint(code: string, filename = 'packages/x/src/fixture.ts') {
-  const file = join(scratch, 'fixture.ts');
+let fixtureCount = 0;
+
+async function lint(code: string) {
+  // A UNIQUE path per call. Reusing one path risks ESLint serving a cached result, which
+  // would let a dead rule look alive — the exact failure this test exists to prevent.
+  const file = join(scratch, `fixture-${fixtureCount++}.ts`);
   writeFileSync(file, code, 'utf8');
   const results = await eslint.lintFiles([file], { warnIgnored: false });
   return results.flatMap((r) => r.messages).map((m) => m.ruleId ?? m.message);
