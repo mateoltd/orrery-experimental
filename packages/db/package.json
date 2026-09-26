@@ -13,6 +13,10 @@
     "./sessions": {
       "types": "./dist/sessions.d.ts",
       "default": "./dist/sessions.js"
+    },
+    "./deletion": {
+      "types": "./dist/deletion.d.ts",
+      "default": "./dist/deletion.js"
     }
   },
   "scripts": {

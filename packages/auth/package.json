@@ -47,6 +47,10 @@
     "./routes": {
       "types": "./dist/routes.d.ts",
       "default": "./dist/routes.js"
+    },
+    "./deletion": {
+      "types": "./dist/deletion.d.ts",
+      "default": "./dist/deletion.js"
     }
   },
   "scripts": {
