@@ -65,17 +65,15 @@ export default [
         { name: 'Date', message: 'INV-TIME-1: use @orrery/clock.' },
       ],
 
-      // ── ADR-0005: packages stay framework-light ────────────────────────────────
-      // A package importing next cannot be tested in isolation and drags React into
-      // every consumer's bundle.
+      // NOTE: the `next` ban is deliberately NOT here. It lives in the `packages/*/src/**`
+      // block below, because it is a framework-boundary rule and only applies to packages.
+      // It was originally global and fired on apps/web/src/middleware.ts — a legitimate
+      // framework import — which would have taught every future agent to add a suppression
+      // instead of fixing the rule (ADR-0027: an over-broad rule is as bad as none).
       'no-restricted-imports': [
         'error',
         {
           patterns: [
-            {
-              group: ['next', 'next/*'],
-              message: 'packages/* must not import next. Move it to apps/web (ADR-0005).',
-            },
             {
               group: ['@prisma/client', '.prisma/client'],
               message:
@@ -91,7 +89,31 @@ export default [
     },
   },
   {
-    // packages/db is the single, narrow exception — and it is narrow on purpose.
+    // ADR-0005: a package importing `next` cannot be tested in isolation and drags React
+    // into every consumer's bundle. Scoped to packages/* — the app is the one place that
+    // legitimately imports the framework.
+    files: [
+      'packages/*/src/**/*.ts',
+      'packages/*/src/**/*.tsx',
+      // `scripts/` too. The rule's real intent is "framework imports belong in apps/", and a
+      // ban that leaks in a build script is the same defect in a different place.
+      'scripts/**/*.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            { group: ['next', 'next/*'], message: 'ADR-0005: packages/* must not import next. Move it to apps/web.' },
+            { group: ['@prisma/client', '.prisma/client'], message: 'Only packages/db may import Prisma, and it exports functions, never a client.' },
+            { group: ['**/index'], message: 'ADR-0016: no barrel files. Use an explicit subpath export.' },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // packages/db is the single, narrow Prisma exception — and it is narrow on purpose.
     files: ['packages/db/src/**/*.ts'],
     rules: { 'no-restricted-imports': 'off' },
   },

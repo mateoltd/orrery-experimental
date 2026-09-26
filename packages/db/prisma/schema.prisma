@@ -27,6 +27,13 @@
 
 generator client {
   provider = "prisma-client-js"
+  // An EXPLICIT output is required under pnpm's isolated node_modules. Without it the
+  // default target `node_modules/.prisma/client` is not resolvable from the package, and
+  // `prisma generate` fails with "Could not resolve @prisma/client" — a message that
+  // points at installation rather than at output resolution. Found by reading the actual
+  // failure, not by reading the docs.
+  // Relative to the SCHEMA directory, not the package root.
+  output   = "./generated/client"   // -> packages/db/prisma/generated/client
 }
 
 datasource db {

@@ -21,18 +21,50 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 // Inside the repo, because ESLint refuses to lint files outside its base path.
 // `.tmp/` is gitignored, and eslint.config.js deliberately does not ignore it.
 const scratch = join(root, '.tmp', 'lint-fixtures');
+// Path-SCOPED rules need fixtures at the paths the rule is scoped to. This harness used to
+// write every fixture to `.tmp/lint-fixtures/`, which is never `packages/*/src/**`, so the
+// test named "rejects `import 'next'` inside a package" was actually asserting a GLOBAL ban
+// and would have kept passing after the rule was correctly scoped to packages only.
+//
+// That is the failure this file exists to prevent: a test that looks like it covers a rule
+// and covers something else instead. A probe package gives the harness a real path to lint.
+//
+// Named `zz-` so it sorts last, holds no package.json (so pnpm never treats it as a
+// workspace package), and is removed in afterAll.
 mkdirSync(scratch, { recursive: true });
-afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+const probe = join(root, 'packages', 'zz-lint-probe');
+const probeSrc = join(probe, 'src');
+const appSrc = join(root, 'apps', 'web', 'src', 'zz-lint-probe');
+// The rule scopes the `next` ban to `packages/*` and `scripts/`, so a fixture that claims
+// to test "outside the app" has to actually live in one of those. An earlier version of this
+// test wrote to `.tmp/` — which is exempt by both globs — and therefore asserted a rule that
+// did not exist. The test now names the path it means.
+const scriptsSrc = join(root, 'scripts');
+mkdirSync(probeSrc, { recursive: true });
+mkdirSync(appSrc, { recursive: true });
+afterAll(() => {
+  rmSync(scratch, { recursive: true, force: true });
+  rmSync(probe, { recursive: true, force: true });
+  rmSync(appSrc, { recursive: true, force: true });
+  // Fixtures written into the real `scripts/` directory. Removing them is not tidiness: a
+  // leftover `scripts/fixture-N.ts` is a stray source file that ESLint, tsc and git will all
+  // try to treat as real. `pnpm lint` and `pnpm typecheck` must be unaffected by having run
+  // the test suite.
+  for (const f of written) rmSync(f, { force: true });
+});
 
 const eslint = new ESLint({ cwd: root, overrideConfigFile: join(root, 'eslint.config.js') });
 
 let fixtureCount = 0;
+/** Every fixture path written, so a test run cannot leave files in a real source directory. */
+const written: string[] = [];
 
-async function lint(code: string) {
+async function lint(code: string, dir: string = scratch) {
   // A UNIQUE path per call. Reusing one path risks ESLint serving a cached result, which
   // would let a dead rule look alive — the exact failure this test exists to prevent.
-  const file = join(scratch, `fixture-${fixtureCount++}.ts`);
+  const file = join(dir, `fixture-${fixtureCount++}.ts`);
   writeFileSync(file, code, 'utf8');
+  written.push(file);
   const results = await eslint.lintFiles([file], { warnIgnored: false });
   return results.flatMap((r) => r.messages).map((m) => m.ruleId ?? m.message);
 }
@@ -74,7 +106,33 @@ describe('INV-RNG-1 — no unseeded randomness', () => {
 
 describe('ADR-0005 — packages stay framework-light', () => {
   it("rejects `import 'next'` inside a package", async () => {
-    fired(await lint("import x from 'next';\nexport default x;"), 'no-restricted-imports');
+    // Linted at a REAL packages/*/src path, so this asserts the scoped rule and not a
+    // global one.
+    fired(
+      await lint("import x from 'next';\nexport default x;", probeSrc),
+      'no-restricted-imports',
+    );
+  });
+
+  it('ALLOWS `next/server` in the app, which is where it belongs', async () => {
+    // Regression: the `next` ban was originally global and fired on apps/web/src/middleware.ts,
+    // which is a legitimate framework import. An over-broad rule teaches agents to suppress
+    // rather than fix (ADR-0027), so the scoping is now itself tested.
+    const rules = await lint(
+      "import { NextResponse } from 'next/server';\nexport const x = NextResponse;",
+      appSrc,
+    );
+    expect(rules, `app must be allowed to import next, got: ${JSON.stringify(rules)}`)
+      .not.toContain('no-restricted-imports');
+  });
+
+  it('rejects `next` in scripts/ too — only the APP is exempt', async () => {
+    // Guards against a future "fix" that narrows the ban back to packages only and lets a
+    // build script start importing the framework.
+    fired(
+      await lint("import x from 'next/server';\nexport default x;", scriptsSrc),
+      'no-restricted-imports',
+    );
   });
   it('rejects importing Prisma outside packages/db', async () => {
     fired(

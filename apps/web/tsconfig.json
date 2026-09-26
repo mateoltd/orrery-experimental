@@ -2,11 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "target": "ES2022",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "ES2022"
-    ],
+    "lib": ["dom", "dom.iterable", "ES2022"],
     "module": "esnext",
     "moduleResolution": "bundler",
     "jsx": "preserve",
@@ -22,28 +18,13 @@
       }
     ],
     "paths": {
-      "@orrery/clock": [
-        "../../packages/clock/src/index.ts"
-      ],
-      "@orrery/ids": [
-        "../../packages/ids/src/index.ts"
-      ],
-      "@orrery/rng": [
-        "../../packages/rng/src/index.ts"
-      ],
-      "@/*": [
-        "./src/*"
-      ]
+      "@orrery/clock": ["../../packages/clock/src/index.ts"],
+      "@orrery/ids": ["../../packages/ids/src/index.ts"],
+      "@orrery/rng": ["../../packages/rng/src/index.ts"],
+      "@/*": ["./src/*"]
     },
     "resolveJsonModule": true
   },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
 }

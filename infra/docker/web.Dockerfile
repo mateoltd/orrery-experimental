@@ -21,6 +21,13 @@ WORKDIR /repo
 
 # ─────────────────────────────────────────────────────── deps (cached layer)
 FROM base AS deps
+# openssl: Prisma's query engine links against it, and node:24-bookworm-slim does not ship
+# it. Found by BUILDING this image rather than reading it — `prisma generate` failed with
+# "Could not resolve @prisma/client", which says nothing about the real cause. If you ever
+# see that message, check for OpenSSL before anything else.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
 COPY apps/web/package.json apps/web/
 COPY apps/worker/package.json apps/worker/
@@ -35,7 +42,9 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 # ─────────────────────────────────────────────────────── build with the gates
 FROM deps AS build
 COPY . .
-RUN pnpm run gates                      # schema · board · invariants · pinning
+# Prisma's engine also needs a compiler-compatible toolchain in the build stage on some
+# hosts; the runtime image gets the generated client, not the engine toolchain.
+RUN pnpm run gates                      # schema · board · invariants · pinning · bundle
 RUN pnpm --filter @orrery/db db:generate
 RUN pnpm run build
 
@@ -71,4 +80,12 @@ HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["node", "apps/web/node_modules/next/dist/bin/next", "start", "-p", "3000"]
+# `node-linker=hoisted` (.npmrc) puts dependencies flat at the repo root, so `next` is at
+# /app/node_modules/next, not /app/apps/web/node_modules/next. Found by RUNNING the image —
+# the build succeeded and the container died on MODULE_NOT_FOUND, which is exactly the class
+# of defect a build cannot catch.
+# `next start [dir]`: the runtime WORKDIR is /app so that node_modules/next resolves flat
+# from the repo root (hoisted linker), but the .next build lives in /app/apps/web. Running
+# the container proved both halves of that: the build was present and BUILD_ID was written,
+# and Next still reported "no production build" because it resolves .next against cwd.
+CMD ["node", "node_modules/next/dist/bin/next", "start", "apps/web", "-p", "3000"]

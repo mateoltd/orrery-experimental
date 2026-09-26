@@ -21,26 +21,11 @@ const securityHeaders = [
       'screen-wake-lock=(), usb=(), serial=(), bluetooth=()',
   },
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
-  {
-    key: 'Content-Security-Policy',
-    value: [
-      "default-src 'self'",
-      // 'strict-dynamic' with a nonce so a compromised dependency cannot inject a script.
-      "script-src 'self' 'nonce-{NONCE}' 'strict-dynamic'",
-      "style-src 'self' 'unsafe-inline'", // Tailwind + KaTeX inject inline styles
-      "img-src 'self' data: blob:",
-      "font-src 'self' data:",
-      // The sim origin, and ONLY the sim origin. connect-src is what stops a sim's frame
-      // (or an injected script) from calling our API with a student's cookies.
-      `frame-src 'self' ${SIMS_ORIGIN}`,
-      `connect-src 'self' ${SIMS_ORIGIN}`,
-      "object-src 'none'",
-      "base-uri 'none'",
-      "form-action 'self'",
-      "frame-ancestors 'none'",
-      'upgrade-insecure-requests',
-    ].join('; '),
-  },
+  // NOTE: Content-Security-Policy is NOT set here. It requires a per-request nonce and is
+  // therefore owned by src/middleware.ts. A static header here shipped the literal string
+  // 'nonce-{NONCE}', which — with `strict-dynamic` present — makes browsers ignore 'self'
+  // too, so the policy blocked every script including Next's own runtime. Two owners for
+  // one header is one owner too many.
 ];
 
 const nextConfig: NextConfig = {
