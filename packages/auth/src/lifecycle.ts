@@ -243,18 +243,21 @@ export const LOGIN_FAILURES = {
     response: 'invalid',
     audit: 'auth.login.unknown_account',
     revokeSessions: false,
+    revokeReason: 'logout',
     securityEvent: null,
   },
   wrongPassword: {
     response: 'invalid',
     audit: 'auth.login.wrong_password',
     revokeSessions: false,
+    revokeReason: 'logout',
     securityEvent: null,
   },
   suspended: {
     response: 'invalid',
     audit: 'auth.login.suspended',
     revokeSessions: true,
+    revokeReason: 'userSuspended',
     securityEvent: 'suspendedAccountAccess',
   },
   /** A revoked token presented after a rotation. Possible theft. */
@@ -262,13 +265,22 @@ export const LOGIN_FAILURES = {
     response: 'invalid',
     audit: 'auth.token.reuse',
     revokeSessions: true,
+    revokeReason: 'revokedTokenReuse',
     securityEvent: 'revokedTokenReuse',
   },
-  /** Repeated wrong TOTP. Above the threshold this is a takeover attempt, not a typo. */
+  /**
+   * Repeated wrong TOTP. Above the threshold this is a takeover attempt, not a typo.
+   *
+   * Deliberately does NOT revoke. The sessions are legitimate — the ASSAULT is on the second
+   * factor. Revoking them punishes the account holder for being targeted, and it tells the
+   * attacker they are being counted. The escalation is a step-up requirement and a security
+   * event, nothing more.
+   */
   repeatedMfaFailure: {
     response: 'invalid',
     audit: 'auth.mfa.failure',
     revokeSessions: false,
+    revokeReason: 'logout',
     securityEvent: 'repeatedMfaFailure',
   },
 } as const;

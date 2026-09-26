@@ -27,6 +27,14 @@
     "./lifecycle": {
       "types": "./dist/lifecycle.d.ts",
       "default": "./dist/lifecycle.js"
+    },
+    "./password": {
+      "types": "./dist/password.d.ts",
+      "default": "./dist/password.js"
+    },
+    "./throttle": {
+      "types": "./dist/throttle.d.ts",
+      "default": "./dist/throttle.js"
     }
   },
   "scripts": {
@@ -36,6 +44,7 @@
     "clean": "rm -rf dist *.tsbuildinfo coverage"
   },
   "dependencies": {
+    "@node-rs/argon2": "2.0.2",
     "@orrery/clock": "workspace:*"
   }
 }
