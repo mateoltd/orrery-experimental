@@ -213,11 +213,13 @@
     },
     {
       "id": "INV-MIGRATE-1",
-      "summary": "No stored block requires a human to fix it.",
-      "status": "staged",
-      "enforcedFrom": "P2",
-      "files": ["packages/contracts/src/migrations.ts"],
-      "gates": []
+      "summary": "No stored block requires a human to fix it: every version in the corpus migrates forward to current and back to the original, and every step is reversible.",
+      "status": "active",
+      "files": [
+        "packages/contracts/src/blocks/migrate.ts",
+        "packages/contracts/src/blocks/fixtures.ts"
+      ],
+      "gates": ["gate:migrate"]
     },
     {
       "id": "INV-SLOT-1",

@@ -11,6 +11,14 @@
     "./blocks/providers": {
       "types": "./dist/blocks/providers.d.ts",
       "default": "./dist/blocks/providers.js"
+    },
+    "./blocks/migrate": {
+      "types": "./dist/blocks/migrate.d.ts",
+      "default": "./dist/blocks/migrate.js"
+    },
+    "./blocks/fixtures": {
+      "types": "./dist/blocks/fixtures.d.ts",
+      "default": "./dist/blocks/fixtures.js"
     }
   },
   "scripts": {
