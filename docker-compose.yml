@@ -17,7 +17,12 @@ services:
       - postgres
       - -c
       - shared_preload_libraries=pg_stat_statements
-    ports: ['5432:5432']
+    # The host port is parameterised, not hardcoded. Two reasons, and the second is the
+    # real one: 5432 is allocated by default on many machines and on CI runners that also
+    # run a system Postgres, and a hardcoded port turns "the database did not start" into a
+    # confusing bind error rather than a clear message. The CONTAINER port is fixed at 5432
+    # because that is what the server expects; only the host side moves.
+    ports: ['${POSTGRES_HOST_PORT:-5432}:5432']
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
@@ -30,7 +35,7 @@ services:
   redis:
     image: redis:7-alpine
     command: ['redis-server', '--appendonly', 'yes']
-    ports: ['6379:6379']
+    ports: ['${REDIS_HOST_PORT:-6379}:6379']
     volumes: [redisdata:/data]
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
@@ -46,7 +51,7 @@ services:
     environment:
       MINIO_ROOT_USER: orrery
       MINIO_ROOT_PASSWORD: orrery-secret
-    ports: ['9000:9000', '9001:9001']
+    ports: ['${MINIO_HOST_PORT:-9000}:9000', '${MINIO_CONSOLE_HOST_PORT:-9001}:9001']
     volumes: [miniodata:/data]
     healthcheck:
       test: ['CMD', 'mc', 'ready', 'local']
@@ -72,7 +77,7 @@ services:
   # invitation flows are exercised against a real MTA-shaped service, not a mock.
   mailpit:
     image: axllent/mailpit:latest
-    ports: ['1025:1025', '8025:8025']
+    ports: ['${SMTP_HOST_PORT:-1025}:1025', '${MAILPIT_HOST_PORT:-8025}:8025']
     environment:
       MP_MAX_MESSAGES: 5000
       MP_SMTP_AUTH_ACCEPT_ANY: 1
@@ -82,7 +87,7 @@ services:
     image: otel/opentelemetry-collector-contrib:latest
     command: ['--config=/etc/otel/config.yaml']
     volumes: ['./infra/otel/config.yaml:/etc/otel/config.yaml:ro']
-    ports: ['4317:4317', '4318:4318']
+    ports: ['${OTLP_HOST_PORT:-4317}:4317', '${OTLP_HTTP_HOST_PORT:-4318}:4318']
     # The `attemptId` spine (18 §4.2) is only as good as this collector.
 
 volumes:

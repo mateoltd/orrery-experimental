@@ -167,6 +167,10 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      # Applying to a FRESH database is the only thing that proves 0001 is self-contained, and
+      # it was not: it created zero extensions and relied on a compose init script that a CI
+      # or staging database never runs. The failure surfaced as P3006 against Prisma's shadow
+      # database, long after the first migration had appeared to succeed locally.
       - name: apply migrations
         env:
           DATABASE_URL: postgresql://orrery:orrery@localhost:5432/orrery_test

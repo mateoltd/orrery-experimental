@@ -102,9 +102,25 @@ importers:
 
   packages/db:
     dependencies:
+      '@orrery/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@orrery/clock':
+        specifier: workspace:*
+        version: link:../clock
       '@prisma/client':
-        specifier: ^6.19.3
+        specifier: 6.19.3
         version: 6.19.3(prisma@6.19.3(magicast@0.3.5)(typescript@5.9.3))(typescript@5.9.3)
+    devDependencies:
+      '@node-rs/argon2':
+        specifier: 2.0.2
+        version: 2.0.2
+      '@vitest/coverage-v8':
+        specifier: 3.2.7
+        version: 3.2.7(vitest@3.2.7(@types/node@24.19.0)(jiti@2.7.0))
+      vitest:
+        specifier: 3.2.7
+        version: 3.2.7(@types/node@24.19.0)(jiti@2.7.0)
 
   packages/i18n:
     dependencies:

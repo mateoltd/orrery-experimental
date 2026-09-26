@@ -1,8 +1,14 @@
 -- Extensions required by plans/02-DATA-MODEL.prisma.
 --
--- Prisma cannot express extensions or partial indexes, so migration 0001 in
--- packages/db carries the same statements. They are repeated here because the
--- compose volume initialises once, before any migration has run.
+-- Prisma cannot express extensions, so migration 0001 in packages/db ALSO carries these
+-- statements. This file is kept because the compose volume initialises once, BEFORE any
+-- migration has run, and `prisma migrate dev` needs citext to exist in order to build its
+-- shadow database at all.
+--
+-- 0001 used to claim the duplication was belt-and-braces when in fact it carried NOTHING and
+-- only worked by luck of this file having run. A staging database or a CI database created by
+-- `migrate deploy` never runs this file and would have failed on the first migration. Both
+-- copies are now real, and both use IF NOT EXISTS so running them in either order is safe.
 --
 -- citext   B4: case-insensitive email uniqueness. The schema uses @db.Citext.
 -- pg_trgm P3-T4: trigram fallback for typo-tolerant search.

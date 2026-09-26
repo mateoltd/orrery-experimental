@@ -63,10 +63,27 @@ model User {
   guardianEmail   String?
   guardianConsentAt DateTime? @db.Timestamptz(3)
 
+  // INV-AUTH-1 + C25: the per-user session-cache epoch.
+  //
+  // Bumped in the SAME TRANSACTION as every session revoke, and read FRESH (never cached) on
+  // every request. A cached session row is served only while this still matches, which is how a
+  // 60-second cache stops defeating "a suspension takes effect on the next request".
+  //
+  // This column did not exist when the cache was designed, and the cache was written against
+  // it anyway — a unit test with a fake store passed happily against a schema that could not
+  // possibly support it. Only applying the migration to a real database surfaced it. The
+  // lesson is the same one as the coverage config that silently stopped measuring: a mock
+  // cannot tell you whether the thing you mocked exists.
+  sessionsEpoch   Int       @default(0)
+
   // lifecycle
   deletingAt      DateTime? @db.Timestamptz(3)
   deletedAt       DateTime? @db.Timestamptz(3)
   anonymisedAt    DateTime? @db.Timestamptz(3)
+  // When the suspension happened, as well as why. The lifecycle policy has always written
+  // both — "your account is suspended" with no date is not an answer a support agent can act
+  // on, and `suspendedReason` alone cannot answer "is this the same suspension from March".
+  suspendedAt    DateTime? @db.Timestamptz(3)
   suspendedReason String?
   lastLoginAt     DateTime? @db.Timestamptz(3)
   mfaEnabled      Boolean   @default(false)

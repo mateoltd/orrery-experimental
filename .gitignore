@@ -11,6 +11,11 @@ coverage/
 .env
 .env.*
 !.env.example
+# Committed deliberately: it contains NO secrets (the same local-development credentials as
+# .env.example and as plans/), only the host ports moved off the defaults, because 5432 and
+# 6379 are frequently already taken on a developer machine. Excluding it would make the test
+# setup unreproducible for anyone but the person who wrote it.
+!.env.test
 *.pem
 *.key
 

@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./sessions": {
+      "types": "./dist/sessions.d.ts",
+      "default": "./dist/sessions.js"
     }
   },
   "scripts": {
@@ -20,9 +24,20 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:diff": "node ../../scripts/schema-gate.mjs",
-    "clean": "rm -rf dist *.tsbuildinfo"
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
-    "@prisma/client": "^6.19.3"
+    "@orrery/clock": "workspace:*",
+    "@orrery/auth": "workspace:*",
+    "@prisma/client": "6.19.3"
+  },
+  "devDependencies": {
+    "@node-rs/argon2": "2.0.2",
+    "vitest": "3.2.7",
+    "@vitest/coverage-v8": "3.2.7"
+  },
+  "peerDependencies": {
+    "@node-rs/argon2": "^2"
   }
 }
