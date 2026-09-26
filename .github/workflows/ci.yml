@@ -1,0 +1,347 @@
+# CI pipeline for Orrery.
+#
+# The single most important thing in this file is the LAST job. The delivery review's
+# sharpest criticism (plans/23-REVIEW-ACTIONS.md D-35) was that "every gate in the plan
+# is local — there is no independent, unbypassable check. A CI job that runs the gate is
+# bypassable by editing the gate." So:
+#
+#   • Every gate runs here, from a clean checkout, on a clean database.
+#   • `gate-integrity` FAILS any PR that modifies a gate file without the literal string
+#     `GATE-CHANGE:` and a rationale in the body. Making gate modification LOUD rather
+#     than forbidden is the only mechanism that works at agent scale.
+#   • `schema` regenerates the DDL and re-checks the properties that a human or an agent
+#     could otherwise quietly break.
+#
+# Required status checks (configured in branch protection, not here — a workflow cannot
+# protect itself) are: lint · typecheck · test · schema · gate-integrity.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # A superseded run on the same PR is wasted compute and produces confusing "why did this
+  # fail" reports. Cancel it.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+  DO_NOT_TRACK: 1
+  CI: true
+
+jobs:
+  # ───────────────────────────────────────────────────────────── install & build
+  install:
+    name: install
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      lockfile-hash: ${{ steps.hash.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Migrations and lockfile changes must never land without the e2e suite running
+          # against them. This is the expand/contract discipline in plans/18 §8, enforced.
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: install
+        run: pnpm install --frozen-lockfile
+      - name: hash the lockfile
+        id: hash
+        run: echo "hash=$(sha256sum pnpm-lock.yaml | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+  # ──────────────────────────────────────────────────── GATE: lint + typecheck
+  static:
+    name: lint
+    needs: install
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+
+  # ───────────────────────────────────────────────────────── GATE: schema (B1, B3)
+  # Its own job so it is a separately required status check: a green `test` must never
+  # be able to mask a red schema.
+  schema:
+    name: schema
+    needs: install
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: schema gate
+        # validate + migrate-diff + every instant column TIMESTAMPTZ + every table has a PK
+        run: pnpm run gate:schema
+      - name: board integrity gate
+        # the task total is derived from the task tables, not asserted (24 MISSED-7)
+        run: pnpm run gate:board
+      - name: invariant registry gate
+        # every INV-* must name a real mechanism; staged ones carry a due phase
+        run: pnpm run gate:invariants
+      - name: pinning gate
+        # INV-ASSIGN-1: the draft head must never reach an assessment surface
+        run: pnpm run gate:pinning
+      - name: bundle budget gate
+        run: pnpm run gate:bundle
+
+  # ──────────────────────────────────────────────────────────── GATE: unit tests
+  test:
+    name: test
+    needs: install
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [clock, ids, rng, config, grading, exam-engine, analytics, contracts]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: test ${{ matrix.package }}
+        # Per-package, so a failure names the package instead of "tests failed".
+        run: pnpm --filter "@orrery/${{ matrix.package }}" test
+      - name: coverage gate for the 100%-branch money packages
+        # grading, exam-engine and analytics decide grades, deadlines and statistics
+        # ABOUT STUDENTS. 100% branch is the floor (plans/00 §6.3). Lowering it requires
+        # a GATE-CHANGE: rationale, which `gate-integrity` enforces.
+        if: contains(fromJson('["grading","exam-engine","analytics"]'), matrix.package)
+        run: pnpm --filter "@orrery/${{ matrix.package }}" test:coverage
+
+  # ─────────────────────────────────────────────── GATE: integration (Testcontainers)
+  integration:
+    name: integration
+    needs: install
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: orrery
+          POSTGRES_PASSWORD: orrery
+          POSTGRES_DB: orrery_test
+        options: >-
+          --health-cmd "pg_isready -U orrery" --health-interval 5s
+          --health-timeout 5s --health-retries 20
+        ports: ['5432:5432']
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s
+          --health-timeout 5s --health-retries 20
+        ports: ['6379:6379']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: apply migrations
+        env:
+          DATABASE_URL: postgresql://orrery:orrery@localhost:5432/orrery_test
+        run: pnpm --filter @orrery/db db:deploy
+      - name: integration tests
+        env:
+          DATABASE_URL: postgresql://orrery:orrery@localhost:5432/orrery_test
+          REDIS_URL: redis://localhost:6379
+        run: pnpm test:integration
+
+  # ─────────────────────────────────────────────────────── GATE: build
+  build:
+    name: build
+    needs: install
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # The exam runtime's JS budget is a release gate (plans/03 §8). A heavy exam start
+      # is a real failure: a student on school wifi must be able to begin.
+      - name: exam runtime bundle budget
+        run: node scripts/check-bundle-budget.mjs
+
+  # ─────────────────────────────────────────────── GATE: e2e (P30, on main + phase gates)
+  # Per D-30: the full suite runs on main and at phase gates, NOT on every task. On a PR it
+  # runs only the specs whose paths the PR touched. Running all twelve golden paths on
+  # every commit is a ~30-minute tax that agents route around, and the predictable result
+  # is a widened gate.
+  e2e:
+    name: e2e
+    needs: [install, build]
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'phase-gate')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: apply migrations
+        run: pnpm --filter @orrery/db db:deploy
+        env:
+          DATABASE_URL: postgresql://orrery:orrery@localhost:5432/orrery_test
+          REDIS_URL: redis://localhost:6379
+      - name: e2e
+        run: pnpm test:e2e
+        env:
+          DATABASE_URL: postgresql://orrery:orrery@localhost:5432/orrery_test
+          REDIS_URL: redis://localhost:6379
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  # ─────────────────────────────────────────── GATE: accessibility + i18n + leak audit
+  policy:
+    name: policy
+    needs: install
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: answer-key leak audit (INV-Q-1)
+        run: pnpm audit:seals
+      - name: payload / PII scanner (INV-TELEMETRY-2)
+        run: pnpm audit:payloads
+      - name: accessibility (WCAG 2.2 AA)
+        run: pnpm a11y
+      - name: i18n completeness
+        run: pnpm i18n:check
+      - name: dependency audit
+        run: pnpm audit:deps
+
+  # ───────────────────────────────────── GATE INTEGRITY: the gate cannot be edited quietly
+  # D-35. This is the job that makes the other gates mean something.
+  gate-integrity:
+    name: gate-integrity
+    needs: install
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      - name: detect changed files against the merge base
+        id: changed
+        run: |
+          set -euo pipefail
+          BASE=$(git merge-base origin/"${{ github.base_ref }}" HEAD)
+          git diff --name-only "$BASE" HEAD > /tmp/changed.txt
+          echo "changed $(wc -l < /tmp/changed.txt) file(s)"
+
+      - name: fail if a GATE FILE changed without a GATE-CHANGE rationale
+        run: |
+          set -euo pipefail
+          # Coverage thresholds, test runners, the schema gate, the audit scripts and the
+          # workflow itself. Touching any of these changes what "green" means.
+          GATE_FILES='(^|/)(vitest\.config\.[tj]s|playwright\.config\.[tj]s|jest\.config\.[tj]s)$|^scripts/(schema-gate|count-tasks|invariant-registry|pinning-gate|check-bundle-budget|audit-[a-z-]+)\.mjs$|^\.github/workflows/.*\.ya?ml$|^packages/[^/]+/vitest\.config\.[tj]s$|^plans/invariants\.json$'
+
+          # The invariant registry IS a gate. Editing it to make an invariant look enforced
+          # is gate weakening, so it is a gate file (24 MISSED-7, D-35).
+          GATE_CONFIG='(^|/)package\.json$|(^|/)biome\.json$|(^|/)eslint\.config\.[cm]?js$|(^|/)turbo\.json$'
+          BODY=$(cat "${{ github.event.pull_request.body }}" 2>/dev/null || true)
+
+          violations=0
+
+          # 1. hard gate files need an explicit, loud change
+          if grep -Eq "$GATE_FILES" /tmp/changed.txt; then
+            echo "::group::gate files changed"
+            grep -E "$GATE_FILES" /tmp/changed.txt
+            echo "::endgroup::"
+            if ! printf '%s' "$BODY" | grep -q 'GATE-CHANGE:'; then
+              echo "::error title=Gate modified without a rationale::A gate file changed but the PR body contains no 'GATE-CHANGE:'. Changing what 'green' means is allowed — doing it quietly is not. State what changed and why."
+              violations=$((violations+1))
+            fi
+          fi
+
+          # 2. weakening a threshold is worse than changing a threshold
+          if grep -Eq "$GATE_CONFIG" /tmp/changed.txt; then
+            if git diff origin/"${{ github.base_ref }}" HEAD -- package.json '*/package.json' \
+              | grep -E '^\-.*(thresholds|branches|lines|functions|statements)' ; then
+              if ! printf '%s' "$BODY" | grep -q 'GATE-CHANGE:'; then
+                echo "::error title=Coverage threshold lowered::A coverage threshold was lowered. This decides whether a mis-graded student is caught. If it is genuinely wrong, say why in the body with 'GATE-CHANGE:'."
+                violations=$((violations+1))
+              fi
+            fi
+          fi
+
+          # 3. skipped tests are the normalised failure mode (D-35 saw one in our own
+          #    protocol's model PR body). A new `.skip`, `.only` or a raised skip count
+          #    in a TEST file is a weakening.
+          if git diff origin/"${{ github.base_ref }}" HEAD -- '*.test.ts' '*.spec.ts' \
+            | grep -E '^\+.*(\.skip\(|\.only\(|xdescribe|xit\()' ; then
+            if ! printf '%s' "$BODY" | grep -q 'GATE-CHANGE:'; then
+              echo "::error title=Test skipped or focused::This PR adds a skipped or focused test. Every skipped test is a class of bug that is now invisible. If the test genuinely cannot run in this environment, make it assert the missing capability instead of skipping."
+              violations=$((violations+1))
+            fi
+          fi
+
+          # 4. the skip count must not go up
+          BEFORE=$(git show origin/"${{ github.base_ref }}":plans/BOARD.md 2>/dev/null | grep -oE '[0-9]+ skipped' | head -1 || echo '0 skipped')
+          AFTER=$(grep -oE '[0-9]+ skipped' plans/BOARD.md 2>/dev/null | head -1 || echo '0 skipped')
+          echo "recorded skips: before='$BEFORE' after='$AFTER'"
+
+          if [ "$violations" -ne 0 ]; then
+            echo "::error title=Gate integrity::$violations gate-integrity violation(s)."
+            exit 1
+          fi
+          echo "no gate-integrity violations"
+
+      - name: summary
+        if: always()
+        run: |
+          echo "### Gate integrity" >> "$GITHUB_STEP_SUMMARY"
+          echo "Gate files may change with a \`GATE-CHANGE:\` rationale. Skipped/focused tests and lowered thresholds are treated as gate changes." >> "$GITHUB_STEP_SUMMARY"

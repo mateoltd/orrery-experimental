@@ -342,3 +342,11 @@ The full event table with severities and strike eligibility is in `09-EXAM-INTEG
 | INV-SIM-2 | Sim grading is pure and runs in Node | dual-target build + CI |
 | INV-TIME-1 | All time flows through `@orrery/clock`; the server is authoritative | ESLint + `FrozenClock` |
 | INV-RNG-1 | All randomness flows through seeded `@orrery/rng`; the seed is stored | ESLint + tests |
+| INV-ABUSE-1 | Aggregate abuse limits are keyed on the **actor**, never the container | `P4-T3` + test |
+| INV-QUOTA-1 | Every write path storing user-controlled bytes has a quota enforced in the storing transaction | `P2-T6` + test |
+| INV-MIGRATE-1 | No stored block requires a human to fix it; every readable version migrates forward or publishing is refused | `P2-T1b`, `P2-T10` |
+| INV-SLOT-1 | An `AssessmentSlot` list and the `Question` rows it references agree, verified at publish | `P5-T12` + test |
+
+These four were added by the P0-T9 risk review (`24-P0-RISK-REVIEW.md` MISSED-1/2/3 and
+MISSED-6). Each closes a gap that survived three independent reviews because each sat
+between their lenses rather than inside one.

@@ -52,6 +52,8 @@ Sizes: **S** ≈ half a day · **M** ≈ 1–2 days · **L** ≈ 3–5 days · *
 | P0-T12 | **Day-0 provisioning**: email domain + SPF/DKIM/DMARC, Sentry, managed PG with PITR, Redis, S3, Cloudflare, Turnstile, a real LTI platform (`D-36`) | — | M |
 | P0-T13 | **Staging deployment**: Dockerfile, terraform, staging env, release pipeline, canary — four later tasks assumed it and no task built it (`D-36`) | P0-T5 | L |
 | P0-T14 | **Write the P1 and P2 execution packets** (~40 h). 183 packets is ~300 h of invisible critical-path work (`D-1`) | P0-T9 | L |
+| P0-T16 | **`scripts/invariant-registry.mjs` + registry**: every `INV-*` in `01` §14 must name an enforcing mechanism and the file that implements it; the script fails otherwise. A pre-ticked checklist is theatre, and 26 invariants asserted only in prose is the same thing (24 MISSED-7) | P0-T9 | M |
+| P0-T17 | **Clock seam**: startup assertion that every replica's clock is within 100 ms of the database's, and a CI check that an application-supplied instant is never compared to a deadline column in SQL. Deadlines are the database's authority; `@orrery/clock` is for display and tests (24 MISSED-4) | P0-T9 | M |
 | P0-T15 | **P2 kill-switch**: named trigger, named decision-maker, and the fallback decision, recorded in P0 not discovered in week 3 (`D-36`) | P0-T9 | S |
 | P0-T11 | ESLint rules: no bare `Date.now()`, no `Math.random()`, no `process.env` outside `env.ts`, no ownership comparisons outside `packages/auth` | P0-T2 | S |
 
@@ -83,15 +85,17 @@ Sizes: **S** ≈ half a day · **M** ≈ 1–2 days · **L** ≈ 3–5 days · *
 | ID | Task | Deps | Size |
 |---|---|---|---|
 | P2-T1 | Block schema: 16 types as a Zod discriminated union in `@orrery/contracts`, with `schemaVersion` and migrations | P0-T6 | L |
+| P2-T1b | **Block migration framework**: `migrateBlocks(from,to)` as a pure ordered step list, plus a committed fixture corpus of every historical block shape with a round-trip test. Closes `INV-MIGRATE-1`; no task previously built this (24 MISSED-3) | P2-T1 | L |
 | P2-T2 | Block renderer: sanitised HTML from typed data, KaTeX with **MathML** output, lazy media, table/figure semantics | P2-T1 | M |
 | P2-T3 | Editor shell: TipTap v3, custom nodes for all 16, slash palette, block handles with accessible names, keyboard block movement, virtualisation | P2-T1 | XL |
 | P2-T4 | Autosave + optimistic concurrency; three-way conflict panel (mine / theirs / both) | P2-T3 | M |
 | P2-T5 | Versioning: write-once versions (`INV-CONTENT-1`), version list, structural diff, restore-as-new-version | P2-T4 | M |
-| P2-T6 | Media library: presigned upload, allowlist, magic bytes, re-encode, EXIF strip, **SVG rejected**, alt-text enforcement, video captions | P2-T1 | M |
+| P2-T6 | Media library: presigned upload, allowlist, magic bytes, re-encode, EXIF strip, **SVG rejected**, alt-text enforcement, video captions, **per-user storage quota enforced at completion** and a 2 MB `blocks` cap at publish (`INV-QUOTA-1`, 24 MISSED-2) | P2-T1 | M |
 | P2-T7 | Editor + renderer a11y: focus management, no traps, contrast, `2.5.7` keyboard alternatives to drag | P2-T3 | M |
 | P2-T8 | State machine draft/published/archived + visibility, with a permission re-check on every read | P2-T5,P1-T6 | M |
 | P2-T9 | Resource library UI: mine, ownership transfer, duplicate, "used in N classrooms" | P2-T5 | S |
-| P2-T10 | **`validateForPublish`**: a checklist with per-issue deep links and one-click fixes | P2-T5,P2-T6 | M |
+| P2-T10 | **`validateForPublish`**: a checklist with per-issue deep links, one-click fixes, **and a refusal when a version's `schemaVersion` has no migration path to current** (`INV-MIGRATE-1`) | P2-T5,P2-T6,P2-T1b | M |
+| P2-T12b | **Block deprecation query**: a `archetype(resourceVersionIds using a block type)` so a block type is never removed while content uses it | P2-T1b | S |
 | P2-T11 | **Sanctioned fallback:** a plain block-list authoring UI, proving the schema and renderer stand alone | P2-T2 | M |
 
 **Exit:** all 16 block types authored, rendered, versioned, diffed, published; a 500-block fixture stays responsive; alt-text and caption enforcement blocks publish; axe clean; the fallback UI works.
@@ -129,7 +133,7 @@ See `12-CLASSROOM-COLLAB.md` §8 for the deliverable list (P4-T1…T8).
 | P5-T2 | `AssignmentStudentOverride` (window, attempts, extra time, reason) | P5-T1 | S |
 | P5-T3 | Assignment builder: pick resource → pick version → window → policy → **preview as student** | P5-T1 | L |
 | P5-T4 | Student "to do": available / upcoming / completed / expired | P5-T1 | M |
-| P5-T5 | **Pinning invariant enforcement**: lint rule on assessment routers + the mutation test (`INV-ASSIGN-1`) | P5-T1,P0-T11 | M |
+| P5-T5 | **Pinning invariant enforcement**, in two parts: (a) the lint rule banning `currentVersionId` under the assessment/exam globs, per `INV-ASSIGN-1`; (b) **the stronger assertion the original mutation test missed** — the resolved attempt's questions are byte-identical to the pinned version's slot list (24 MISSED-6) | P5-T1,P0-T11 | M |
 | P5-T6 | `QuestionBank` CRUD, sharing to classrooms, move/duplicate items | P2-T1,P1-T6 | M |
 | P5-T7 | `QuestionPool` with the four draw strategies + `poolHealth` (M vs N, distinct, **expected overlap `N²/M`**) | P5-T6 | L |
 | P5-T8 | `Blueprint` + `BlueprintCheck` with **worst-case** coverage over simulated draws | P5-T6 | L |
@@ -139,7 +143,7 @@ See `12-CLASSROOM-COLLAB.md` §8 for the deliverable list (P4-T1…T8).
 | P5-T13 | **Interop skeleton**: `packages/interop`, `ExternalBinding`, the sealed/released boundary type. Breaks the `P10-T10` ↔ `P16-T1` circular dependency (`D-9`) | P5-T1 | M |
 | P5-T14 | **`can()` matrix for the new P5 types**; the totality test must fail before and pass after (`D-14`) | P5-T6,P1-T6 | S |
 | P5-T15 | **Item authoring workstream**: author the seed banks. Nothing in 183 tasks authored a single question (`D-37`) | P5-T6,P5-T7 | L |
-| P5-T12 | Publish gates: `POOL_UNDERSIZED`, `BLUEPRINT_UNSATISFIED`, missing metadata | P5-T9,P2-T10 | M |
+| P5-T12 | Publish gates: `POOL_UNDERSIZED`, `BLUEPRINT_UNSATISFIED`, missing metadata, and **`INV-SLOT-1` referential integrity** — every FIXED slot's snapshot belongs to this version, every pooled slot is drawable, positions are dense | P5-T9,P2-T10 | M |
 
 **Exit:** the pinning invariant is proven by a test that mutates the resource post-assignment and asserts identical output; a pool can be published only if drawable; 5 students with different seeds demonstrably receive different items; blueprint coverage reports worst case honestly.
 
@@ -161,7 +165,7 @@ See `10-SIMULATIONS.md` for the protocol and `§10` for the 24 sims.
 | P6-T8 | Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index, catalogue page | P6-T4 | M |
 | P6-T9 | **Conformance matrix** over every registered sim: handshake, sandbox assertions, scripted interaction, answer, Node grade, keyboard reachability, text alternative, state round-trip, screenshots | P6-T8 | L |
 | P6-T10 | Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector | P6-T3 | M |
-| P6-T11 | 24 gold sims | P6-T9 | XL |
+| P6-T11 | 24 gold sims. **Re-costed to ≈240 h** (24 × 10 h) — the 2 h/sim rate was the post-warm-up rate, and these are the first sims built against a brand-new SDK, template and conformance harness (CONTRADICTION-1) | P6-T9 | XL |
 | ~~P6-T12~~ | ~~Sim Studio~~ — **deferred to v2** (`D-20`) | — | — |
 | P6-T13 | **Sandbox escape test** as a permanent CI gate | P6-T6 | M |
 

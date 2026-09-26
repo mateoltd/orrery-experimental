@@ -51,13 +51,13 @@ Lanes available: **6**. P0 is mostly sequential; P0-T1, T2, T3 and T6 can run in
 
 | Phase | Status | Tasks done / total | Milestone |
 |---|---|---|---|
-| P0 Foundation | pending | 0 / 11 | M0 |
+| P0 Foundation | pending | 0 / 15 | M0 |
 | P1 Identity & access | pending | 0 / 10 | M1 |
 | P2 Content & authoring | pending | 0 / 11 | M1 |
 | P3 Discovery & search | pending | 0 / 6 | M1 |
 | P4 Classroom & collab | pending | 0 / 8 | M2 |
-| P5 Assignments, banks, blueprints | pending | 0 / 12 | M2 |
-| P6 Simulation platform | pending | 0 / 13 | M3 |
+| P5 Assignments, banks, blueprints | pending | 0 / 15 | M2 |
+| P6 Simulation platform | pending | 0 / 12 | M3 |
 | P7 Quiz runtime & grading | pending | 0 / 14 | M4 |
 | P8 Exam runtime & integrity | pending | 0 / 16 | M5 |
 | P9 Review & grading | pending | 0 / 10 | M6 |
@@ -69,9 +69,22 @@ Lanes available: **6**. P0 is mostly sequential; P0-T1, T2, T3 and T6 can run in
 | P15 Reliability & performance | pending | 0 / 8 | M10 |
 | P16 Interoperability | pending | 0 / 9 | M9 |
 | P17 Pilot & GA | pending | 0 / 7 | M10 |
-| | | **0 / 173** | |
+| | | **0 / 191** | |
 
 ---
+
+## Counting rule
+
+The task count is **machine-derived, not asserted** — the previous figure (173) was wrong
+and survived two reviews because nobody counted. `scripts/count-tasks.mjs` recomputes it
+from the task tables in `20-PHASE-PACKETS.md` plus the per-document tables for P4, P13 and
+P16, and fails if `BOARD.md` disagrees. A board whose totals are fiction cannot be used to
+decide whether the plan is finished.
+
+Reconciling note: review K6 found 183 where the board said 173. Seven tasks were then added
+by the review dispositions (P0-T12..T15 provisioning/staging/packets/kill-switch, and
+P5-T13..T15 interop-skeleton/can-matrix/item-authoring). P6-T12 (Sim Studio) is deferred to
+v2 and is excluded from the active count.
 
 ## Blockers and escalations
 

@@ -1,0 +1,298 @@
+{
+  "note": "Staged invariants declare a mechanism and a phase by which it must be ACTIVE. A staged invariant is honest; an invariant with no mechanism at all is a wish.",
+  "invariants": [
+    {
+      "id": "INV-AUTH-1",
+      "summary": "Sessions live in Postgres, so revocation takes effect on the next request.",
+      "status": "staged",
+      "enforcedFrom": "P1",
+      "files": [
+        "packages/auth/src/session.ts"
+      ],
+      "gates": []
+    },
+    {
+      "id": "INV-CONTENT-1",
+      "summary": "ResourceVersion is write-once; the db layer exposes no content update path.",
+      "status": "staged",
+      "enforcedFrom": "P2",
+      "files": [
+        "packages/db/src/resource-version.ts"
+      ],
+      "gates": [
+        "test"
+      ]
+    },
+    {
+      "id": "INV-CLASSROOM-1",
+      "summary": "Effective role is the max of active enrollments.",
+      "status": "staged",
+      "enforcedFrom": "P1",
+      "files": [
+        "packages/auth/src/can.ts"
+      ],
+      "gates": []
+    },
+    {
+      "id": "INV-CLASSROOM-2",
+      "summary": "Departure revokes classroom access but keeps the student's own records.",
+      "status": "staged",
+      "enforcedFrom": "P4",
+      "files": [
+        "packages/auth/src/can.ts"
+      ],
+      "gates": [
+        "test:integration"
+      ]
+    },
+    {
+      "id": "INV-ASSIGN-1",
+      "summary": "Assessment reads the pinned version and the policy snapshot only; enforced by a path ban on currentVersionId (a taint analysis is not implementable \u2014 D-29) plus the pinning test.",
+      "status": "staged",
+      "enforcedFrom": "P5",
+      "files": [
+        "scripts/pinning-gate.mjs"
+      ],
+      "gates": [
+        "test"
+      ]
+    },
+    {
+      "id": "INV-ASSIGN-2",
+      "summary": "Withdrawal stops new starts, not in-flight attempts.",
+      "status": "staged",
+      "enforcedFrom": "P5",
+      "files": [],
+      "gates": [
+        "test:integration"
+      ]
+    },
+    {
+      "id": "INV-POLICY-1",
+      "summary": "policySnapshot is frozen at first start.",
+      "status": "staged",
+      "enforcedFrom": "P8",
+      "files": [
+        "packages/exam-engine/src/policy.ts"
+      ],
+      "gates": []
+    },
+    {
+      "id": "INV-POLICY-2",
+      "summary": "Policies are consistency-checked at authoring time.",
+      "status": "staged",
+      "enforcedFrom": "P8",
+      "files": [
+        "packages/exam-engine/src/policy.ts"
+      ],
+      "gates": []
+    },
+    {
+      "id": "INV-BANK-1",
+      "summary": "A pool must be drawable or the assessment cannot publish.",
+      "status": "staged",
+      "enforcedFrom": "P5",
+      "files": [
+        "packages/analytics/src/pool-health.ts"
+      ],
+      "gates": []
+    },
+    {
+      "id": "INV-BANK-2",
+      "summary": "variantMap is written once and read forever.",
+      "status": "staged",
+      "enforcedFrom": "P5",
+      "files": [
+        "packages/analytics/src/draw.ts"
+      ],
+      "gates": []
+    },
+    {
+      "id": "INV-BANK-3",
+      "summary": "Question content is version-snapshotted.",
+      "status": "staged",
+      "enforcedFrom": "P5",
+      "files": [
+        "packages/db/src/snapshot.ts"
+      ],
+      "gates": []
+    },
+    {
+      "id": "INV-Q-1",
+      "summary": "Answer keys never leave the server.",
+      "status": "staged",
+      "enforcedFrom": "P7",
+      "files": [],
+      "gates": [
+        "audit:seals",
+        "audit:payloads"
+      ]
+    },
+    {
+      "id": "INV-ATTEMPT-1",
+      "summary": "Scores come only from the pure grader over stored answers.",
+      "status": "staged",
+      "enforcedFrom": "P7",
+      "files": [
+        "packages/grading/src/index.ts"
+      ],
+      "gates": []
+    },
+    {
+      "id": "INV-ATTEMPT-2",
+      "summary": "No partial result visibility, structurally.",
+      "status": "staged",
+      "enforcedFrom": "P7",
+      "files": [
+        "packages/grading/src/index.ts"
+      ],
+      "gates": [
+        "audit:seals"
+      ]
+    },
+    {
+      "id": "INV-LATE-1",
+      "summary": "Late writes are rejected; the last accepted value is retained.",
+      "status": "staged",
+      "enforcedFrom": "P8",
+      "files": [
+        "packages/exam-engine/src/deadline.ts"
+      ],
+      "gates": []
+    },
+    {
+      "id": "INV-RELEASE-1",
+      "summary": "Release is a single-row gate, so atomicity is structural.",
+      "status": "staged",
+      "enforcedFrom": "P10",
+      "files": [
+        "packages/db/src/release.ts"
+      ],
+      "gates": []
+    },
+    {
+      "id": "INV-RELEASE-2",
+      "summary": "No score is inferable pre-release.",
+      "status": "staged",
+      "enforcedFrom": "P10",
+      "files": [],
+      "gates": [
+        "audit:seals"
+      ]
+    },
+    {
+      "id": "INV-ACC-1",
+      "summary": "Accommodations produce zero violation events.",
+      "status": "staged",
+      "enforcedFrom": "P8",
+      "files": [
+        "packages/exam-engine/src/accommodations.ts"
+      ],
+      "gates": []
+    },
+    {
+      "id": "INV-TELEMETRY-1",
+      "summary": "Telemetry is evidence, never truth.",
+      "status": "staged",
+      "enforcedFrom": "P8",
+      "files": [
+        "packages/exam-engine/src/evidence.ts"
+      ],
+      "gates": []
+    },
+    {
+      "id": "INV-TELEMETRY-2",
+      "summary": "Telemetry carries no content and no PII.",
+      "status": "staged",
+      "enforcedFrom": "P8",
+      "files": [],
+      "gates": [
+        "audit:payloads"
+      ]
+    },
+    {
+      "id": "INV-SIM-1",
+      "summary": "Simulations are untrusted and isolated.",
+      "status": "staged",
+      "enforcedFrom": "P6",
+      "files": [],
+      "gates": [
+        "sim:sandbox-escape"
+      ]
+    },
+    {
+      "id": "INV-SIM-2",
+      "summary": "Sim grading is pure and runs in Node.",
+      "status": "staged",
+      "enforcedFrom": "P6",
+      "files": [],
+      "gates": [
+        "sim:conformance"
+      ]
+    },
+    {
+      "id": "INV-TIME-1",
+      "summary": "All time flows through @orrery/clock; the database is the deadline authority.",
+      "status": "active",
+      "enforcedFrom": null,
+      "files": [
+        "packages/clock/src/index.ts"
+      ],
+      "gates": [
+        "lint"
+      ]
+    },
+    {
+      "id": "INV-RNG-1",
+      "summary": "All randomness flows through seeded @orrery/rng.",
+      "status": "active",
+      "enforcedFrom": null,
+      "files": [
+        "packages/rng/src/index.ts"
+      ],
+      "gates": [
+        "lint"
+      ]
+    },
+    {
+      "id": "INV-ABUSE-1",
+      "summary": "Aggregate abuse limits are keyed on the actor, never the container.",
+      "status": "staged",
+      "enforcedFrom": "P4",
+      "files": [
+        "packages/auth/src/rate-limits.ts"
+      ],
+      "gates": []
+    },
+    {
+      "id": "INV-QUOTA-1",
+      "summary": "Every user-controlled byte write has a quota in the storing transaction.",
+      "status": "staged",
+      "enforcedFrom": "P2",
+      "files": [
+        "packages/db/src/quota.ts"
+      ],
+      "gates": []
+    },
+    {
+      "id": "INV-MIGRATE-1",
+      "summary": "No stored block requires a human to fix it.",
+      "status": "staged",
+      "enforcedFrom": "P2",
+      "files": [
+        "packages/contracts/src/migrations.ts"
+      ],
+      "gates": []
+    },
+    {
+      "id": "INV-SLOT-1",
+      "summary": "AssessmentSlot and the Question rows it references agree.",
+      "status": "staged",
+      "enforcedFrom": "P5",
+      "files": [
+        "packages/db/src/slots.ts"
+      ],
+      "gates": []
+    }
+  ]
+}
