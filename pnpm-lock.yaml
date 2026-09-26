@@ -58,6 +58,15 @@ importers:
         specifier: 19.3.0
         version: 19.3.0
 
+  apps/worker:
+    dependencies:
+      '@orrery/clock':
+        specifier: workspace:*
+        version: link:../../packages/clock
+      '@orrery/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+
   packages/clock: {}
 
   packages/config:

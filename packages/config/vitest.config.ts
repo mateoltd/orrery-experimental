@@ -1,5 +1,5 @@
-import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
+import { defineConfig } from 'vitest/config';
 
 // Workspace packages point their `exports` at `dist`, which does not exist until a build
 // runs. Tests run against SOURCE, so `@orrery/clock` resolves here without a build step in
