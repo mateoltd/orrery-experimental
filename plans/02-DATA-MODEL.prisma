@@ -1,19 +1,32 @@
-// Orrery — data model. The machine-readable contract behind plans/01-DOMAIN-MODEL.md.
+// Orrery — data model v2. Corrected per plans/23-REVIEW-ACTIONS.md (B1–B5, B11, B12, B15, B16, C7, C12, C14, C15, C27, U-6, V-4, V-7, V-12).
 //
-// Conventions
-//   • IDs: uuid(7) (time-ordered). Never reuse an ID in a reference field; soft-delete user content.
-//   • tenantId is reserved on every tenant-scoped table (D2: single-tenant-ready from day one).
-//     Nullable and unused in the single-tenant launch; backfilling later is far cheaper than adding later.
+// This file is the machine-readable contract. It MUST pass `prisma validate` (blocking CI gate).
+//
+// ── Conventions ────────────────────────────────────────────────────────────────────
+//   • IDs: uuid(7) for foreign keys (index locality).
+//     uuid(4) for anything that functions as a BEARER CAPABILITY reachable by URL:
+//     AttemptSession.id, ReviewTaskClaim.id, Invitation code plaintext. Time-ordered ids
+//     are enumerable and B7 showed that is a real exposure.
+//   • tenantId on every tenant-scoped table (D2/D-23). Nullable; unused at launch.
 //   • Points/weights: Decimal(9,2). Never Float.
-//   • Instants: DateTime @db.Timestamptz(3), UTC. Rendering is the client's problem.
-//   • JSONB holds: block content, question specs (THE ANSWER KEY), policy, manifest, evidence payload.
+//   • Instants: DateTime @db.Timestamptz(3), UTC — on EVERY instant column, no exceptions.
+//     B3 found 17 audit-critical columns that were plain TIMESTAMP(3). A CI gate now
+//     greps the generated DDL for TIMESTAMP(3) without TZ and fails.
+//   • JSONB: block content, question specs (THE ANSWER KEY), policy, manifest, evidence.
 //   • Every consequential mutation writes an AuditEvent in the same transaction.
 //
-// P0-T4 turns this into a real migration. P0-T9 is expected to change it; that is the point.
+// ── What Prisma CANNOT express, and therefore must be hand-written in migration 0001 ──
+//   1. CREATE EXTENSION citext, pg_trgm, btree_gin
+//   2. Partial unique indexes — Prisma has no syntax for these:
+//        one IN_PROGRESS attempt per (assignment, student)          -> 23505 = ATTEMPT_ALREADY_ACTIVE
+//        one live (unrevoked) session per attempt
+//   3. CHECK constraints (0 <= autoScore <= maxPoints, select-all gameability guard)
+//   4. Triggers for updatedAt on tables Prisma does not manage
+//   If a constraint you need is not expressible here, it goes in the migration and the
+//   schema header says so. This file is not the whole truth.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../node_modules/.prisma/client"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -21,65 +34,74 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ───────────────────────────────────────────────────────────── identity
+// ───────────────────────────────────────────────────────────────────── identity
 
 model User {
   id            String     @id @default(uuid(7))
   tenantId      String?
-  email         String     @unique
-  emailVerified Boolean    @default(false)
-  name          String
-  avatarUrl     String?
-  status        UserStatus @default(ACTIVE)
-  locale        String     @default("en-GB")
-  timezone      String     @default("UTC")
+  // B4: unique case-SENSITIVELY by default, which broke roster re-import, placeholder
+  // matching, magic links and invitations. citext + an explicit normalised column so
+  // normalisation is a code invariant and not a collation accident.
+  email           String     @unique @db.Citext
+  emailNormalized String     @unique
+  emailVerified   Boolean    @default(false)
+  name            String
+  avatarUrl       String?
+  status          UserStatus @default(ACTIVE)
+  locale          String     @default("en-GB")
+  timezone        String     @default("UTC")
 
-  // minors posture (15-A11Y-I18N.md, 14-SECURITY-PRIVACY.md §7.4)
-  isMinor         Boolean @default(false)
+  // minors posture
+  isMinor         Boolean   @default(false)
   guardianEmail   String?
-  guardianConsentAt DateTime?
+  guardianConsentAt DateTime? @db.Timestamptz(3)
 
   // lifecycle
-  deletingAt   DateTime?
-  deletedAt    DateTime?
-  anonymisedAt DateTime?
+  deletingAt      DateTime? @db.Timestamptz(3)
+  deletedAt       DateTime? @db.Timestamptz(3)
+  anonymisedAt    DateTime? @db.Timestamptz(3)
   suspendedReason String?
-  lastLoginAt  DateTime?
-
-  mfaEnabled   Boolean   @default(false)
-  mfaSecretEnc String?
+  lastLoginAt     DateTime? @db.Timestamptz(3)
+  mfaEnabled      Boolean   @default(false)
+  mfaSecretEnc    String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  accounts           Account[]
-  sessions           Session[]
-  verificationTokens VerificationToken[]
-  resources          Resource[]
-  resourceVersions   ResourceVersion[]
-  banks              QuestionBank[]
-  classroomsOwned    Classroom[]            @relation("ClassroomOwner")
-  enrollments        Enrollment[]
-  invitesSent        ClassroomInvitation[]  @relation("InviteSent")
-  invitesAccepted    ClassroomInvitation[]  @relation("InviteAccepted")
-  assignmentsCreated Assignment[]           @relation("AssignmentAuthor")
-  attempts           ExamAttempt[]
-  responsesGraded    QuestionResponse[]     @relation("ResponseGrader")
-  reviewTasks        ReviewTask[]
-  releaseBatches     ReleaseBatch[]
-  verdicts           IntegrityVerdict[]
-  feedback           Feedback[]
-  auditEvents        AuditEvent[]
-  notifications      Notification[]
-  simDrafts          SimulationDraft[]
-  assets             Asset[]
-  ratings            Rating[]
-  comments           Comment[]
-  accommodationsGranted Accommodation[]      @relation("AccommodationGrantor")
-  accommodationsHeld    Accommodation[]      @relation("AccommodationStudent")
+  accounts              Account[]
+  sessions              Session[]
+  resources             Resource[]
+  resourceVersions      ResourceVersion[]
+  banks                 QuestionBank[]
+  blueprints            Blueprint[]
+  classroomsOwned       Classroom[]             @relation("ClassroomOwner")
+  enrollments           Enrollment[]
+  invitesSent           ClassroomInvitation[]   @relation("InviteSent")
+  invitesAccepted       ClassroomInvitation[]   @relation("InviteAccepted")
+  assignmentsCreated    Assignment[]            @relation("AssignmentAuthor")
+  studentOverridesGiven AssignmentStudentOverride[] @relation("OverrideGrantor")
+  attempts              ExamAttempt[]
+  responsesGraded       QuestionResponse[]      @relation("ResponseGrader")
+  reviewTasksClaimed    ReviewTask[]            @relation("ReviewClaimer")
+  reviewAssignments     ReviewAssignment[]      @relation("ReviewAssignee")
+  reviewGrants          ReviewerGrant[]
+  releaseBatches        ReleaseBatch[]
+  verdicts              IntegrityVerdict[]
+  feedback              Feedback[]
+  auditEvents           AuditEvent[]
+  notifications         Notification[]
+  simDrafts             SimulationDraft[]
+  assets                Asset[]
+  ratings               Rating[]
+  comments              Comment[]
+  accommodationsGranted Accommodation[]         @relation("AccommodationGrantor")
+  accommodationsHeld    Accommodation[]         @relation("AccommodationStudent")
+  accommodationRequests AccommodationRequest[]  @relation("RequestStudent")
+  accommodationDecided  AccommodationRequest[]  @relation("RequestDecider")
 
   @@index([status, createdAt])
   @@index([tenantId])
+  @@index([emailNormalized])
 }
 
 enum UserStatus {
@@ -98,8 +120,8 @@ model Account {
   accessToken           String?
   refreshToken          String?
   idToken               String?
-  accessTokenExpiresAt  DateTime?
-  refreshTokenExpiresAt DateTime?
+  accessTokenExpiresAt  DateTime? @db.Timestamptz(3)
+  refreshTokenExpiresAt DateTime? @db.Timestamptz(3)
   scope                 String?
   password              String? // argon2id
   createdAt             DateTime  @default(now()) @db.Timestamptz(3)
@@ -109,18 +131,20 @@ model Account {
   @@index([userId])
 }
 
-// INV-AUTH-1: sessions live in Postgres so they can be revoked. No JWT-only sessions.
+// INV-AUTH-1: sessions live in Postgres so revocation is immediate (next request).
+// A Redis cache is allowed but MUST be invalidated in the same transaction as any
+// revoke — C25 found a 60s cache silently defeating the invariant.
 model Session {
-  id           String    @id @default(uuid(7))
-  userId       String
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash    String    @unique
-  familyId     String // rotates on password change / MFA change; reuse detection
-  expiresAt    DateTime  @db.Timestamptz(3)
-  ipHash       String?
-  userAgent    String?
-  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
-  revokedAt    DateTime?
+  id            String    @id @default(uuid(4))
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash     String    @unique
+  familyId      String
+  expiresAt     DateTime  @db.Timestamptz(3)
+  ipHash        String?
+  userAgent     String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  revokedAt     DateTime? @db.Timestamptz(3)
   revokedReason String?
 
   @@index([userId, revokedAt])
@@ -128,28 +152,21 @@ model Session {
   @@index([familyId])
 }
 
-model VerificationToken {
-  id         String   @id @default(uuid(7))
-  identifier String
-  tokenHash  String   @unique
-  expiresAt  DateTime @db.Timestamptz(3)
-  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+// VerificationToken is keyed by identifier (an email), not userId — it deliberately has
+// no relation to User. B1 flagged a dangling back-array here.
 
-  @@index([identifier])
-}
-
-// ───────────────────────────────────────────────────────── taxonomy
+// ─────────────────────────────────────────────────────────────────── taxonomy
 
 model Subject {
-  id        String  @id @default(uuid(7))
-  slug      String  @unique
-  name      String
+  id          String  @id @default(uuid(7))
+  slug        String  @unique
+  name        String
   description String?
-  colour    String?
-  position  Int     @default(0)
-  parentId  String?
-  parent    Subject?  @relation("SubjectTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children  Subject[] @relation("SubjectTree")
+  colour      String?
+  position    Int     @default(0)
+  parentId    String?
+  parent      Subject?  @relation("SubjectTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Subject[] @relation("SubjectTree")
 
   resources Resource[]
   sims      Simulation[]
@@ -167,7 +184,7 @@ model Tag {
   questions QuestionTag[]
 }
 
-// ─────────────────────────────────────────────────────────── content
+// ───────────────────────────────────────────────────────────────────── content
 
 enum ResourceKind {
   LESSON
@@ -204,17 +221,17 @@ model Resource {
   currentVersionId String?          @unique
   currentVersion   ResourceVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
 
-  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
-  archivedAt DateTime?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(3)
+  archivedAt  DateTime? @db.Timestamptz(3)
   publishedAt DateTime? @db.Timestamptz(3)
 
-  versions   ResourceVersion[] @relation("VersionChain")
-  tags       ResourceTag[]
+  versions    ResourceVersion[] @relation("VersionChain")
+  tags        ResourceTag[]
   assignments Assignment[]
-  simRefs    ResourceSimRef[]
-  ratings    Rating[]
-  comments   Comment[]
+  simRefs     ResourceSimRef[]
+  ratings     Rating[]
+  comments    Comment[]
 
   @@unique([ownerId, slug])
   @@index([kind, status, visibility, updatedAt])
@@ -222,7 +239,8 @@ model Resource {
   @@index([tenantId, status])
 }
 
-// INV-CONTENT-1: write-once. packages/db exposes createResourceVersion and NO content update.
+// INV-CONTENT-1: write-once. packages/db exposes createResourceVersion and NO content
+// update path. A test asserts the update path does not exist.
 model ResourceVersion {
   id         String   @id @default(uuid(7))
   resourceId String
@@ -231,10 +249,10 @@ model ResourceVersion {
   blocks        Json
   blocksChecksum String
   meta          Json
-  // resolved assessment slots: FIXED(questionId) | POOLED(poolId, drawCount)
-  assessmentSpec  Json?
+  // resolved, frozen assessment policy for this version
   assessmentPolicy Json?
   blueprintId     String?
+  blueprint       Blueprint? @relation(fields: [blueprintId], references: [id], onDelete: SetNull)
   createdById String
   createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
   createdAt   DateTime @default(now()) @db.Timestamptz(3)
@@ -242,10 +260,13 @@ model ResourceVersion {
   currentOf   Resource?  @relation("CurrentVersion")
   assignments Assignment[]
   questions   Question[]
-  pools       AssessmentSlot[]
+  slots       AssessmentSlot[]
+  simRefs     ResourceSimRef[]
+  blueprintChecks BlueprintCheck[]
 
   @@unique([resourceId, version])
   @@index([resourceId, version])
+  @@index([blueprintId])
 }
 
 model ResourceTag {
@@ -258,34 +279,35 @@ model ResourceTag {
   @@index([tagId])
 }
 
-// denormalised index of simulations a version references: publish validation + "who uses this sim?"
 model ResourceSimRef {
   id         String   @id @default(uuid(7))
   resourceId String
   resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
   version    Int
+  resourceVersionId String?
+  resourceVersion   ResourceVersion? @relation(fields: [resourceVersionId], references: [id], onDelete: Cascade)
   blockId    String
   simId      String
   simVersion String
 
   @@unique([resourceId, version, blockId])
   @@index([simId, simVersion])
+  @@index([resourceId, version])
 }
 
-// ─────────────────────────────────────────────────── question banks
+// ─────────────────────────────────────────────────────────── question banks
 
 model QuestionBank {
-  id          String   @id @default(uuid(7))
+  id          String     @id @default(uuid(7))
   tenantId    String?
   ownerId     String
-  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  owner       User       @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   name        String
   description String?
   visibility  Visibility @default(PRIVATE)
-  // can other teachers in the owner's classrooms read this bank?
   sharedWithClassroomIds String[]
-  createdAt   DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+  createdAt   DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @db.Timestamptz(3)
 
   questions Question[]
   pools     QuestionPool[]
@@ -294,53 +316,86 @@ model QuestionBank {
   @@index([tenantId])
 }
 
-// INV-BANK-3: a bank item is edited freely; the VERSION SNAPSHOT below is what students see.
+enum GradingMode {
+  AUTO
+  MANUAL
+  HYBRID
+}
+
+// P-17: `cognitiveDemand` is a self-applied label with no inter-rater reliability, so it
+// is OPTIONAL and display-only. The second blueprint axis is `responseProcess`, derived
+// from the question type rather than authored. topic (KC) is the required tag.
+enum ResponseProcess {
+  RECOGNITION
+  RECALL
+  PRODUCTION
+}
+
 model Question {
   id         String       @id @default(uuid(7))
   tenantId   String?
   bankId     String
   bank       QuestionBank @relation(fields: [bankId], references: [id], onDelete: Cascade)
   type       String
-  // ── INV-Q-1: this column is the answer key. Never projected to a student client.
+  // INV-Q-1: this column is the answer key. Never projected to a student client.
   spec       Json
   points     Decimal      @default(1) @db.Decimal(9, 2)
   gradingMode GradingMode @default(AUTO)
+  // P-19: partial-credit method, resolved and validated at publish. See QuestionPool.
+  partialCreditMethod String?
   timeLimitSec Int?
   shuffleOptions Boolean  @default(false)
   estimatedSeconds Int?
   modelAnswer String?
   rubric     Json?
-  tags       QuestionTag[]
   language   String       @default("en-GB")
+  revision   Int          @default(0)
+
+  topic             String?
+  cognitiveDemand   String? // optional, display-only, unvalidated
+  responseProcess   ResponseProcess?
+
+  // V-9: a practiceCheck in a public resource is a published answer key for any item
+  // also used summatively. This flag blocks that at publish time.
+  retiredFromSummativeUse Boolean @default(false)
 
   // simulation binding (INV-SIM-2)
   simId      String?
   simVersion String?
   simConfig  Json?
+  // V-11: mandatory for any sim usable as a question. ENDPOINT_ONLY reads only the final
+  // answer; PATH_SENSITIVE reads a bounded interaction trace. Without this the item
+  // measures parameter-space search and its facility looks excellent.
+  scoringSurface String?
 
-  // cognitive demand, for blueprint coverage reporting (08-ITEM-ANALYSIS.md)
-  cognitiveDemand String?
-
-  // snapshot rows: created when a resource version is published, keyed to that version
-  snapshotOfId String?
-  snapshots   Question[]  @relation("QuestionSnapshot")
+  // ── version snapshots ────────────────────────────────────────────────────────────
+  // B2: resourceVersionId was @unique, which permitted ONE snapshot per version and
+  // made a pooled slot of 12 items impossible. Now indexed, not unique.
+  // isSnapshot exists because snapshot rows also carry a non-null bankId; without it
+  // every "how many items in this bank" query silently double-counts snapshots.
+  isSnapshot        Boolean  @default(false)
+  resourceVersionId String?
+  resourceVersion   ResourceVersion? @relation(fields: [resourceVersionId], references: [id], onDelete: Cascade)
+  snapshotOfId      String?
+  snapshotOf        Question?  @relation("QuestionSnapshot", fields: [snapshotOfId], references: [id], onDelete: SetNull)
+  snapshots         Question[] @relation("QuestionSnapshot")
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  snapshotsOf Question? @relation("QuestionSnapshot", fields: [snapshotOfId], references: [id], onDelete: SetNull)
-  snapshotFor ResourceVersion? @relation(fields: [resourceVersionId], references: [id], onDelete: Cascade)
-  resourceVersionId String? @unique
+  responses  QuestionResponse[]
+  slots      AssessmentSlot[]
+  poolItems  QuestionPoolItem[]
+  tags       QuestionTag[]
 
-  responses    QuestionResponse[]
-  versionSnapshots ResourceVersion[] @relation("SnapshotVersion")
-  poolItems    QuestionPoolItem[]
-  revision     Int @default(0)
-
+  @@unique([resourceVersionId, snapshotOfId])
+  @@index([resourceVersionId])
   @@index([bankId, type])
+  @@index([bankId, isSnapshot])
   @@index([simId])
   @@index([snapshotOfId])
-  @@index([cognitiveDemand])
+  @@index([topic])
+  @@index([retiredFromSummativeUse])
 }
 
 model QuestionTag {
@@ -355,28 +410,37 @@ model QuestionTag {
 
 enum QuestionPoolStrategy {
   RANDOM_WITHOUT_REPLACEMENT
-  RANDOM_BALANCED_TOPICS
-  RANDOM_BALANCED_DEMAND
+  QUOTA_TOPICS
+  QUOTA_RESPONSE_PROCESS
   FIXED
 }
 
 model QuestionPool {
-  id          String   @id @default(uuid(7))
-  bankId      String
-  bank        QuestionBank @relation(fields: [bankId], references: [id], onDelete: Cascade)
-  name        String
-  strategy    QuestionPoolStrategy @default(RANDOM_WITHOUT_REPLACEMENT)
-  drawCount   Int      // N
-  filter      Json?    // optional JSON-Schema filter over bank items
-  // minimum distinct items the pool must hold to be publishable (INV-BANK-1)
-  minDistinct Int      @default(1)
-  createdAt   DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+  id        String   @id @default(uuid(7))
+  tenantId  String?
+  bankId    String
+  bank      QuestionBank @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  name      String
+  strategy  QuestionPoolStrategy @default(RANDOM_WITHOUT_REPLACEMENT)
+  drawCount Int      // N
+  filter    Json?
+  // P-14: the old warning referenced expectedCohortSize and targetOverlapTolerance,
+  // neither of which existed anywhere. expectedCohortSize now exists; the undefined
+  // tolerance is gone. The UI shows N/M, P(>=1 shared), P(identical pair) and expected
+  // distinct items used by a cohort of this size.
+  expectedCohortSize Int      @default(30)
+  minDistinct        Int      @default(1)
+  // V-3: a pool-level compatibility constraint so a detected dependent item pair cannot
+  // co-occur in one form, which would otherwise be a source of random measurement error.
+  incompatibleItemPairs Json?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   items    QuestionPoolItem[]
   slots    AssessmentSlot[]
 
   @@index([bankId])
+  @@index([tenantId])
 }
 
 model QuestionPoolItem {
@@ -390,55 +454,61 @@ model QuestionPoolItem {
   @@index([questionId])
 }
 
-// Blueprint: coverage map used to check an assessment before publishing.
 model Blueprint {
   id          String   @id @default(uuid(7))
   tenantId    String?
   name        String
   description String?
-  // matrix: { topics: [{ topic, demand, points }] } — the coverage contract
+  // matrix: [{ topic, responseProcess, points, tolerance }]
   matrix      Json
   createdById String
   createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
   createdAt   DateTime @default(now()) @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @db.Timestamptz(3)
 
-  versions    ResourceVersion[]
-  checks      BlueprintCheck[]
+  versions ResourceVersion[]
+  checks   BlueprintCheck[]
 
   @@index([tenantId])
 }
 
-// a machine-checkable coverage report, produced at publish and on demand
 model BlueprintCheck {
-  id          String   @id @default(uuid(7))
-  blueprintId String
-  blueprint   Blueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  id                String   @id @default(uuid(7))
+  blueprintId       String
+  blueprint         Blueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
   resourceVersionId String?
-  pass        Boolean
-  report      Json     // { cell, required, actual, status }[]
-  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  resourceVersion   ResourceVersion? @relation(fields: [resourceVersionId], references: [id], onDelete: Cascade)
+  // P-18: worst case is computed EXACTLY (bipartite b-matching / Hall's condition), not by
+  // sampling, because a minimum over sampled draws is one-sided in the wrong direction and
+  // would systematically understate how often a blueprint can fail.
+  pass      Boolean
+  blocksAllDraws Boolean @default(false)
+  report    Json
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([blueprintId, createdAt])
 }
 
-// one slot of a version's assessmentSpec
+// C7: assessmentSpec existed twice (a JSON column and these rows). The rows are truth.
 model AssessmentSlot {
   id                String   @id @default(uuid(7))
   resourceVersionId String
   resourceVersion   ResourceVersion @relation(fields: [resourceVersionId], references: [id], onDelete: Cascade)
   position          Int
-  kind              String   // 'FIXED' | 'POOLED'
-  questionId        String?  // FIXED — the version snapshot
-  poolId            String?  // POOLED
+  kind              String   // FIXED | POOLED
+  questionId        String?
+  question          Question? @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  poolId            String?
+  pool              QuestionPool? @relation(fields: [poolId], references: [id], onDelete: Restrict)
   drawCount         Int?
   strategy          QuestionPoolStrategy?
 
   @@unique([resourceVersionId, position])
   @@index([poolId])
+  @@index([questionId])
 }
 
-// ────────────────────────────────────────────── simulation registry
+// ────────────────────────────────────────────────────── simulation registry
 
 enum SimulationStatus {
   REGISTERED
@@ -447,10 +517,12 @@ enum SimulationStatus {
 }
 
 model Simulation {
+  // B1: @@unique([id, version]) is NOT an identifier. There was no primary key, so no
+  // row identity, no FOR UPDATE, and every upsert needed the compound key.
   id      String
   version String
-  status  SimulationStatus @default(REGISTERED)
 
+  status  SimulationStatus @default(REGISTERED)
   title       String
   description String
   subjects    String[]
@@ -462,29 +534,37 @@ model Simulation {
   bundlePath  String
   bundleSha256 String
   byteSize    Int
+  // B14: graders run in a worker_thread with a memory cap and a timeout. This is the
+  // entry the worker uses to resolve that thread, NOT an import path in the main loop.
   graderEntry String?
   capturesPath String?
 
   licence    String
-  provenance String
+  // D-24: `provenance` as a bare enum is licence laundering — an agent reproducing an
+  // existing sim writes ORIGINAL because that is what passes. D-24 makes ORIGINAL
+  // REQUIRE a `provenanceRef` into the provenance register, so laundering fails a build.
+  provenance    String
+  provenanceRef String?
   authors    String[]
 
   replacedById String?
   createdAt DateTime @default(now()) @db.Timestamptz(3)
-  retiredAt DateTime?
+  retiredAt DateTime? @db.Timestamptz(3)
 
-  @@unique([id, version])
-  @@index([id, status])
+  attempts ExamAttempt[]
+
+  @@id([id, version])
+  @@index([status])
   @@index([subjects])
 }
 
-// INV-TELEMETRY-2 / ADR-0018: declarative only. No user code is ever executed.
+// ADR-0018: declarative only. No user code is ever executed.
 model SimulationDraft {
   id        String   @id @default(uuid(7))
   authorId  String
   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   title     String
-  kind      String   // one of the closed primitive kinds
+  kind      String
   spec      Json
   compiled  Json?
   status    String   @default("DRAFT")
@@ -494,11 +574,13 @@ model SimulationDraft {
   @@index([authorId, status])
 }
 
-// ───────────────────────────────────────────────────────── classroom
+// ─────────────────────────────────────────────────────────────────── classroom
 
 enum ClassroomRole {
   OWNER
   TEACHER
+  REVIEWER // T-4: grading-only role, not roster, not integrity evidence. Lets a TA or a
+            // departmental moderator be given the queue without full classroom access.
   STUDENT
 }
 
@@ -516,7 +598,11 @@ model Classroom {
   name    String
   slug    String
   description String?
-  archivedAt DateTime?
+  archivedAt DateTime? @db.Timestamptz(3)
+  // B5: deleting a classroom CASCADED away every grade, attempt and receipt, which
+  // contradicted INV-CLASSROOM-2 and made the verifiable receipt unverifiable. Deletion is
+  // now a DELETING window plus a PII-only purge; grade-bearing relations Restrict.
+  deletingAt DateTime? @db.Timestamptz(3)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
@@ -527,7 +613,7 @@ model Classroom {
   releaseBatches ReleaseBatch[]
   rosterImports  RosterImport[]
   accommodations Accommodation[]
-  blueprints     Blueprint[]
+  reviewerGrants ReviewerGrant[]
 
   @@unique([ownerId, slug])
   @@index([tenantId, archivedAt])
@@ -543,7 +629,7 @@ model Enrollment {
   status      EnrollmentStatus @default(ACTIVE)
   displayNameOverride String?
   joinedAt    DateTime         @default(now()) @db.Timestamptz(3)
-  endedAt     DateTime?
+  endedAt     DateTime?        @db.Timestamptz(3)
   invitedById String?
 
   @@unique([classroomId, userId])
@@ -560,21 +646,28 @@ enum InvitationStatus {
 
 model ClassroomInvitation {
   id          String           @id @default(uuid(7))
+  tenantId    String?
   classroomId String
   classroom   Classroom        @relation(fields: [classroomId], references: [id], onDelete: Cascade)
   role        ClassroomRole    @default(STUDENT)
-  email       String?
+  email       String?          @db.Citext
+  // B17: 6 characters from a 31-symbol alphabet is 8.8e8 and was grindable in about a day.
+  // Codes are now 8 characters and DERIVED as HMAC(secret, classroomId || counter), so
+  // verification is O(1) and revocation is a counter bump. Stored hashed regardless.
   codeHash    String?          @unique
   codeHint    String?
+  // B17: a per-code failure counter, so a single code cannot be ground down.
+  failedAttempts Int           @default(0)
+  lockedAt    DateTime?        @db.Timestamptz(3)
   status      InvitationStatus @default(PENDING)
   expiresAt   DateTime         @db.Timestamptz(3)
   sentById    String
   sentBy      User             @relation("InviteSent", fields: [sentById], references: [id], onDelete: Restrict)
   acceptedById String?
   acceptedBy  User?            @relation("InviteAccepted", fields: [acceptedById], references: [id], onDelete: SetNull)
-  acceptedAt  DateTime?
+  acceptedAt  DateTime?        @db.Timestamptz(3)
   resendCount Int              @default(0)
-  lastSentAt  DateTime?
+  lastSentAt  DateTime?        @db.Timestamptz(3)
   createdAt   DateTime         @default(now()) @db.Timestamptz(3)
 
   @@index([classroomId, status])
@@ -590,13 +683,29 @@ model RosterImport {
   dryRun      Boolean  @default(true)
   summary     Json
   errors      Json
-  appliedAt   DateTime?
-  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  appliedAt   DateTime? @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
 
   @@index([classroomId, createdAt])
 }
 
-// ──────────────────────────────────────────────────────── assignment
+// T-4: a reviewer role scoped to grading, assignable to someone outside the classroom.
+model ReviewerGrant {
+  id          String   @id @default(uuid(7))
+  classroomId String
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scope       String   @default("GRADING") // GRADING | GRADING_AND_EVIDENCE
+  grantedById String
+  grantedAt   DateTime @default(now()) @db.Timestamptz(3)
+  revokedAt   DateTime? @db.Timestamptz(3)
+
+  @@unique([classroomId, userId])
+  @@index([userId, revokedAt])
+}
+
+// ──────────────────────────────────────────────────────────────────── assignment
 
 enum AssignmentMode {
   ASSIGNMENT
@@ -630,10 +739,14 @@ model Assignment {
   weight         Decimal          @default(100) @db.Decimal(9, 2)
   latePenaltyPercent Decimal       @default(0) @db.Decimal(5, 2)
   policyOverride Json?
+  // T-1: the product promise is ATOMIC RELEASE, not 100% individual marking. A batch may
+  // be moderated-and-sampled; sample size and moderation rule live here.
+  moderationSampleSize Int         @default(0)
+  moderationPercent   Int         @default(0)
   createdById    String
   createdBy      User             @relation("AssignmentAuthor", fields: [createdById], references: [id], onDelete: Restrict)
   publishedAt    DateTime?        @db.Timestamptz(3)
-  withdrawnAt    DateTime?
+  withdrawnAt    DateTime?        @db.Timestamptz(3)
   createdAt      DateTime         @default(now()) @db.Timestamptz(3)
   updatedAt      DateTime         @updatedAt @db.Timestamptz(3)
 
@@ -647,7 +760,6 @@ model Assignment {
   @@index([tenantId, status])
 }
 
-// per-student exceptions: window, extra attempts, extra time, accommodation reference
 model AssignmentStudentOverride {
   id           String   @id @default(uuid(7))
   assignmentId String
@@ -656,15 +768,20 @@ model AssignmentStudentOverride {
   availableFrom  DateTime? @db.Timestamptz(3)
   availableUntil DateTime? @db.Timestamptz(3)
   maxAttempts   Int?
+  // C13: extraTimePercent existed on BOTH this and Accommodation with no precedence. The
+  // merge is now a documented fold; a mid-exam grant is computed from REMAINING time.
   extraTimePercent Decimal? @db.Decimal(5, 2)
   policyOverride Json?
   reason       String
   grantedById  String
+  grantedBy    User     @relation("OverrideGrantor", fields: [grantedById], references: [id], onDelete: Restrict)
   createdAt    DateTime @default(now()) @db.Timestamptz(3)
 
   @@unique([assignmentId, studentId])
   @@index([studentId])
 }
+
+// ────────────────────────────────────────────────────── accommodations
 
 // INV-ACC-1: a first-class auditable object, not a flag.
 model Accommodation {
@@ -676,6 +793,9 @@ model Accommodation {
   student      User     @relation("AccommodationStudent", fields: [studentId], references: [id], onDelete: Cascade)
   assignmentId String?
   assignment   Assignment? @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  // U-3: DISABLE_FULLSCREEN was missing entirely, so a screen-reader user could be forced
+  // into fullscreen while the plan exempted Escape for pointer lock and then forgot the
+  // equivalent. U-5: input, output and presentation accommodations, not just integrity.
   relaxations  String[]
   extraTimePercent Decimal? @db.Decimal(5, 2)
   reason       String
@@ -691,11 +811,39 @@ model Accommodation {
   @@index([classroomId, status])
 }
 
-// ─────────────────────────────────────────────────────────── attempts
+// U-4: the plan PROMISED students they would be told how to request an accommodation, and
+// no such mechanism existed. The burden was entirely on the student.
+model AccommodationRequest {
+  id          String   @id @default(uuid(7))
+  studentId   String
+  student     User     @relation("RequestStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  classroomId String
+  assignmentId String?
+  requestedRelaxations String[]
+  // U-4: "no accommodation requested" is itself an entitlement, so it is a first-class state.
+  status      String   @default("REQUESTED") // REQUESTED | GRANTED | DENIED_WITH_REASON | WITHDRAWN
+  statement   String?
+  decidedById String?
+  decidedBy   User?    @relation("RequestDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt   DateTime? @db.Timestamptz(3)
+  decisionReason String?
+  // SLA, so a request cannot sit indefinitely
+  respondBy   DateTime? @db.Timestamptz(3)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([status, respondBy])
+  @@index([studentId, status])
+  @@index([classroomId, status])
+}
+
+// ───────────────────────────────────────────────────────────────────── attempts
 
 enum AttemptStatus {
   NOT_STARTED
   IN_PROGRESS
+  // V-12/C16: a student removed mid-exam needs a state to land in. Without it the held
+  // answers sat forever ungraded and unreleasable.
+  FROZEN
   SUBMITTED
   EXPIRED
   TERMINATED
@@ -712,39 +860,64 @@ enum AttemptSource {
   TEACHER
 }
 
+// V-7: a PRACTICE attempt consumed a graded attempt, because maxAttempts defaults to 1 and
+// there was no purpose field. RN-04's practice run — called "the single cheapest reduction
+// in exam-day technical failure" — was therefore unimplementable, and practice data would
+// have silently contaminated every analytic query.
+enum AttemptPurpose {
+  PRACTICE
+  GRADED
+}
+
 model ExamAttempt {
   id           String   @id @default(uuid(7))
   tenantId     String?
   assignmentId String
-  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
   classroomId  String
-  classroom    Classroom  @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  classroom    Classroom  @relation(fields: [classroomId], references: [id], onDelete: Restrict)
   studentId    String
   student      User       @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  simId        String?
+  simVersion   String?
+  simulation   Simulation? @relation(fields: [simId, simVersion], references: [id, version], onDelete: Restrict)
 
   attemptNumber Int
-  status        AttemptStatus @default(NOT_STARTED)
+  purpose       AttemptPurpose @default(GRADED)
+  status        AttemptStatus  @default(NOT_STARTED)
 
-  // INV-POLICY-1: frozen at first start, never rewritten
-  policySnapshot Json
-  // INV-RNG-1 + INV-BANK-2: seed and the resolved per-student draw, written once
-  rngSeed    String
-  variantMap Json
-  variantSource String @default("VERSION") // VERSION | BANK (explicitly opted out, INV-BANK-3)
+  // C27: these were non-null, but an attempt is created NOT_STARTED and the snapshot is
+  // taken at first start. Nullable, written by `UPDATE ... WHERE "policySnapshot" IS NULL`
+  // so two concurrent starts cannot both write it.
+  policySnapshot Json?
+  rngSeed        String?
+  variantMap     Json?
+  variantSource  String  @default("VERSION")
 
   startedAt  DateTime? @db.Timestamptz(3)
-  deadlineAt DateTime? @db.Timestamptz(3)
-  gracePeriodSec Int   @default(60) // RN-04: Moodle's default; 60s absorbs network jitter honestly
+  deadlineAt DateTime? @db.Timestamptz(3) // base deadline; NEVER updated (see extensions)
+  gracePeriodSec Int     @default(60) // RN-04: Moodle's default
+  // C15: BREAKS_ALLOWED was unimplementable — no field, and the deadline formula had no
+  // pause term, so granting a break silently did nothing.
+  pausedAccumSec  Int      @default(0)
+  frozenAt        DateTime? @db.Timestamptz(3)
+  frozenReason    String?
   submittedAt DateTime? @db.Timestamptz(3)
   submittedBy AttemptSource?
   submissionReceipt String?
+  // C5: the receipt did not commit to the answer keys, so a mis-key was undetectable.
+  // keysHash is folded into H0 and the final hash is HMAC'd with a KMS-held key.
+  keysHash   String?
   isLate     Boolean @default(false)
   releasedAt DateTime? @db.Timestamptz(3)
   regradeNoticePendingAt DateTime? @db.Timestamptz(3)
   terminatedReason String?
   voidedReason     String?
+  // U-9: sealed results with no SLA meant a student could be marked by a teacher's
+  // silence indefinitely — a 90-minute exam waited a term.
+  sealedEscalatedAt DateTime? @db.Timestamptz(3)
 
-  // ── SEALED until releaseBatchId is set. INV-ATTEMPT-2 / INV-RELEASE-1
+  // ── SEALED until a RELEASED ReleaseBatchMember row exists. INV-ATTEMPT-2 / INV-RELEASE-1
   autoScore   Decimal? @db.Decimal(9, 2)
   manualScore Decimal? @db.Decimal(9, 2)
   finalScore  Decimal? @db.Decimal(9, 2)
@@ -752,43 +925,57 @@ model ExamAttempt {
   percentage  Decimal? @db.Decimal(6, 3)
   latePenaltyApplied Decimal? @db.Decimal(5, 2)
 
-  accommodations Json?
   accommodationId String?
 
-  strikeCount  Int @default(0)
+  // B11: a single Int cannot represent five independent thresholds, and it silently
+  // let a fullscreen-exit count trip the tab-hide threshold. See AttemptStrikeCounter.
   preflight    Json?
-  clientInfo   Json? // userAgent, viewport, screen — from preflight only
+  // U-6: an inferred screen-reader status was persisted and retained for years, visible
+  // in a teacher-facing report and invisible/uncorrectable to the student. Only
+  // relaxationsApplied is kept now; the inference itself is transient.
+  relaxationsApplied String[]
+  // U-2: the count of DROPPED evidence events, so a teacher can see an escalation was
+  // under-counted rather than trusting a counter the server was shedding from.
+  droppedEventCount   Int      @default(0)
+  clientInfo   Json?
   ipHash       String?
   userAgent    String?
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  responses       QuestionResponse[]
-  sessions        AttemptSession[]
-  events          AttemptEvent[]
-  integrityEvents IntegrityEvent[]
-  answerRevisions AnswerRevision[]
-  reviewTasks     ReviewTask[]
-  feedback        Feedback[]
-  gradeChanges    GradeChange[]
-  verdict         IntegrityVerdict?
-  releaseBatch    ReleaseBatch? @relation(fields: [releaseBatchId], references: [id], onDelete: SetNull)
-  releaseBatchId  String?
+  responses        QuestionResponse[]
+  sessions         AttemptSession[]
+  events           AttemptEventRecord[]
+  integrityEvents  IntegrityEvent[]
+  answerRevisions  AnswerRevision[]
+  reviewTasks      ReviewTask[]
+  reviewAssignments ReviewAssignment[]
+  feedback         Feedback[]
+  gradeChanges     GradeChange[]
+  verdict          IntegrityVerdict?
+  extensions       AttemptDeadlineExtension[]
+  strikes          AttemptStrikeCounter[]
+  seqCounter       AttemptSeq?
+  releaseMembers   ReleaseBatchMember[]
+  simStateBlobs    SimStateBlob[]
 
-  @@unique([assignmentId, studentId, attemptNumber])
+  @@unique([assignmentId, studentId, attemptNumber, purpose])
   @@index([assignmentId, status])
   @@index([classroomId, studentId])
   @@index([status, deadlineAt])
-  @@index([releaseBatchId, status])
+  @@index([releasedAt])
   @@index([tenantId, status])
+  @@index([simId, simVersion])
+  @@index([status, sealedEscalatedAt])
 }
 
-enum AttemptEvent {
+enum AttemptEventType {
   STARTED
   RESUMED
   SAVED
   LATE_SAVE_REJECTED
+  QUESTION_OPENED
   QUESTION_WINDOW_CLOSED
   SUBMITTED
   AUTO_SUBMITTED
@@ -800,36 +987,69 @@ enum AttemptEvent {
   REGRADED
   TERMINATED
   REINSTATED
+  FROZEN
   VOIDED
   EXCUSED
   DEADLINE_EXTENDED
+  PAUSED
+  RESUMED_FROM_PAUSE
   POLICY_OVERRIDDEN
   ACCOMMODATION_APPLIED
   VIOLATION_THRESHOLD_REACHED
+  SEAL_ESCALATED
 }
 
-model AttemptEvent {
+// B1: this was `model AttemptEvent`, colliding with `enum AttemptEvent`. Renamed.
+model AttemptEventRecord {
   id        BigInt   @id @default(autoincrement())
   attemptId String
   attempt   ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  type      AttemptEvent
+  type      AttemptEventType
   actorId   String?
   serverTs  DateTime @default(now()) @db.Timestamptz(3)
   payload   Json
 
   @@index([attemptId, id])
+  @@index([type, serverTs])
+}
+
+// C9: seq = max(existing)+1 is a hot-row serialisation point with no stated primitive.
+model AttemptSeq {
+  attemptId String @id
+  attempt   ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  next      Int         @default(0)
+}
+
+// C14: EXTRA_TIME_PERCENT used to REWRITE deadlineAt, breaking INV-POLICY-1 and making
+// verify-receipt report divergence on a legitimate action. Extensions are additive rows;
+// deadlineAt is never updated. effectiveDeadline = deadlineAt + SUM(addedSec) + pausedAccumSec.
+model AttemptDeadlineExtension {
+  id        BigInt   @id @default(autoincrement())
+  attemptId String
+  attempt   ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  addedSec  Int
+  reason    String
+  actorId   String
+  // T-6: a BULK, evidence-triggered extension operates on the event record, so one
+  // student's connectivity collapse is one action rather than 300.
+  triggerEventTypes String[]
+  at        DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([attemptId, id])
 }
 
 model AttemptSession {
-  id         String   @id @default(uuid(7))
+  // B7: uuid(4), not uuid(7). This id was the sole credential for the sync endpoint and
+  // time-ordered ids are enumerable.
+  id         String   @id @default(uuid(4))
   attemptId  String
   attempt    ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   tokenHash  String   @unique
-  tabId      String?  // client-generated; concurrency signal only, never authoritative
+  tabId      String?
   issuedAt   DateTime @default(now()) @db.Timestamptz(3)
   lastSeenAt DateTime @db.Timestamptz(3)
   expiresAt  DateTime @db.Timestamptz(3)
-  revokedAt  DateTime?
+  revokedAt  DateTime? @db.Timestamptz(3)
   revokedReason String?
   userAgent  String?
   ipHash     String?
@@ -838,13 +1058,18 @@ model AttemptSession {
   @@index([expiresAt])
 }
 
-// ────────────────────────────────────────────────────────── responses
+// B11: one counter per threshold KIND, incremented atomically. A single Int could not
+// represent the five independent thresholds the policy defines.
+model AttemptStrikeCounter {
+  attemptId String
+  attempt   ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  kind      String
+  count     Int         @default(0)
 
-enum GradingMode {
-  AUTO
-  MANUAL
-  HYBRID
+  @@id([attemptId, kind])
 }
+
+// ───────────────────────────────────────────────────────────────────── responses
 
 model QuestionResponse {
   id         String   @id @default(uuid(7))
@@ -852,26 +1077,46 @@ model QuestionResponse {
   attempt    ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   questionId String
   question   Question @relation(fields: [questionId], references: [id], onDelete: Restrict)
-  // position in the RESOLVED variant, not the authored order
-  position   Int
+  position   Int      // position in the RESOLVED variant, not the authored order
 
-  answer   Json
-  simState Json?
-  revision Int @default(0)
-  isExcused Boolean @default(false)
-  flagged  Boolean @default(false)
-  timeSpentMs Int?
-  editCount Int @default(0)
+  answer    Json
+  // B15: simState is a POINTER. Oversize states live in S3 via SimStateBlob; a 64 KB cap
+  // applies. An unbounded JSONB column on the primary was a disk-exhaustion amplifier.
+  simStateRef String?
+  simState    Json?
+  simStateBytes Int?
+  revision    Int @default(0)
 
-  // per-question timing, set server-side on first accepted interaction, then immutable
+  // V-4: omitted and non-reached responses were treated as WRONG, which on a timed exam
+  // means the trailing items are blank because of the clock, not ignorance — and that
+  // depresses facility and drives r_pb toward correlation with speed. The item analysis
+  // then misdiagnoses a timing artefact as an item defect.
+  isOmitted    Boolean @default(false)
+  notReached   Boolean @default(false)
+  isExcused    Boolean @default(false)
+  // C12: attempt-level "submitted late" and response-level "written late" are different
+  // facts with different uses. They were conflated on one column.
+  isLate       Boolean @default(false)
+  flagged      Boolean @default(false)
+  timeSpentMs  Int?
+  editCount    Int      @default(0)
+
+  // B9: set by an explicit server-side OPEN transition, never by a write. Set-once via
+  // COALESCE under a guard that it can never move forward. Without this an untouched
+  // question never expired and LOCK/AUTO_SUBMIT never fired.
   questionOpenedAt   DateTime? @db.Timestamptz(3)
   questionDeadlineAt DateTime? @db.Timestamptz(3)
   questionClosedReason String?
-  lastSavedAt DateTime? @db.Timestamptz(3)
-  saveState   String @default("UNSAVED")
+  lastSavedAt        DateTime? @db.Timestamptz(3)
+  saveState          String    @default("UNSAVED")
 
   // ── SEALED
   autoScore    Decimal? @db.Decimal(9, 2)
+  // P-2/P-3: NG and PM produce negative RAW scores by design. The raw scale is preserved
+  // here; the zero floor is applied in the attempt TOTAL only, and item statistics are
+  // computed on the raw scale. Clamping at item level would silently convert NG into
+  // "no penalty" and destroy the guessing suppression it exists to provide.
+  autoRawScore Decimal? @db.Decimal(9, 2)
   autoCorrect  Boolean?
   autoGradedAt DateTime? @db.Timestamptz(3)
   autoRationale Json?
@@ -880,10 +1125,15 @@ model QuestionResponse {
   manualScore    Decimal? @db.Decimal(9, 2)
   manualFeedback String?
   rubricScores   Json?
+  // T-2: quick-scored responses are recorded as such and sampled for moderation, so a
+  // teacher marking at 10s/script and one at 90s/script produce visibly different confidence.
+  wasQuickScored  Boolean  @default(false)
   graderId       String?
   grader         User?     @relation("ResponseGrader", fields: [graderId], references: [id], onDelete: SetNull)
   gradedAt       DateTime? @db.Timestamptz(3)
-  needsHuman     Boolean  @default(false) // e.g. a sim state failed its schema
+  // V-6: needsHuman is EXCLUDED from statistics, never zeroed. Zeroing would penalise the
+  // class for a platform bug, which INV-SIM-2 explicitly promises will not happen.
+  needsHuman     Boolean  @default(false)
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
@@ -895,6 +1145,19 @@ model QuestionResponse {
   @@index([attemptId, position])
   @@index([questionId, autoCorrect])
   @@index([needsHuman])
+  @@index([isOmitted, notReached])
+}
+
+model SimStateBlob {
+  id        String   @id @default(uuid(7))
+  attemptId String
+  attempt   ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  key       String
+  byteSize  Int
+  checksum  String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([attemptId])
 }
 
 enum AnswerSource {
@@ -904,6 +1167,12 @@ enum AnswerSource {
   SYSTEM
 }
 
+// B8: this table was the idempotency ledger AND recorded REJECTED writes, so a retry
+// after a 409 returned a false 2xx SAVED and the student saw a green tick over an answer
+// that was never stored. Rejections now go to AttemptEventRecord(LATE_SAVE_REJECTED).
+// This table is a SUCCESS ledger only, and the original response bytes are stored so a
+// replay returns the same body (C18: returning a recomputed revision desynchronised the
+// client, causing every subsequent write to 409).
 model AnswerRevision {
   id         BigInt   @id @default(autoincrement())
   responseId String
@@ -915,18 +1184,22 @@ model AnswerRevision {
   actorId    String?
   previousHash String?
   answerHash String
+  // C5: hash the exact bytes accepted, not a re-read of jsonb (which does not preserve key
+  // order or distinguish 1 from 1.0, so a re-read hash is not the hash of what was sent).
+  answerBytes String?
   serverTs   DateTime @default(now()) @db.Timestamptz(3)
   clientTs   DateTime? @db.Timestamptz(3)
   idemKey    String?
-  accepted   Boolean  @default(true)
-  rejectReason String?
+  // the ORIGINAL response, replayed verbatim on a duplicate idemKey
+  responseStatus Int?
+  responseBody   Json?
 
   @@unique([responseId, revision])
   @@unique([attemptId, idemKey])
   @@index([attemptId, revision])
 }
 
-// ─────────────────────────────────────────────────────────── grading
+// ───────────────────────────────────────────────────────────────────── grading
 
 enum ReviewTaskStatus {
   PENDING
@@ -939,7 +1212,7 @@ model ReviewTask {
   attemptId String
   attempt   ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   graderId  String?
-  grader    User?    @relation(fields: [graderId], references: [id], onDelete: SetNull)
+  grader    User?    @relation("ReviewClaimer", fields: [graderId], references: [id], onDelete: SetNull)
   status    ReviewTaskStatus @default(PENDING)
   claimedAt DateTime? @db.Timestamptz(3)
   priority  Int      @default(0)
@@ -949,6 +1222,27 @@ model ReviewTask {
   @@unique([attemptId])
   @@index([status, priority, createdAt])
   @@index([graderId, status])
+}
+
+// T-3: no inter-rater reliability existed for the component that is 100% of the product's
+// work. 10-20% of every release batch is double-marked; agreement is reported per rubric;
+// a rubric whose bands disagree between two teachers is a RUBRIC defect.
+model ReviewAssignment {
+  id          String   @id @default(uuid(7))
+  attemptId   String
+  attempt     ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  responseId  String?
+  assigneeId  String
+  assignee    User     @relation("ReviewAssignee", fields: [assigneeId], references: [id], onDelete: Cascade)
+  isSecondMarker Boolean @default(false)
+  status      String   @default("ASSIGNED") // ASSIGNED | DONE | RELEASED
+  assignedById String
+  assignedAt  DateTime @default(now()) @db.Timestamptz(3)
+  completedAt DateTime? @db.Timestamptz(3)
+
+  @@unique([attemptId, responseId, assigneeId])
+  @@index([assigneeId, status])
+  @@index([attemptId])
 }
 
 enum ReleaseBatchStatus {
@@ -963,12 +1257,14 @@ model ReleaseBatch {
   id           String   @id @default(uuid(7))
   tenantId     String?
   assignmentId String
-  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
   classroomId  String
-  classroom    Classroom  @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  classroom    Classroom  @relation(fields: [classroomId], references: [id], onDelete: Restrict)
   label        String?
   status       ReleaseBatchStatus @default(DRAFT)
-  membership   Json      // frozen attemptIds once status enters RELEASING
+  // K-4/RN-03: a minimum pre-release review window. Previously claimed in the research
+  // notes and implemented nowhere.
+  minHoldUntil DateTime? @db.Timestamptz(3)
   overrideReason String?
   releasedById String?
   releasedBy   User?     @relation(fields: [releasedById], references: [id], onDelete: SetNull)
@@ -976,11 +1272,26 @@ model ReleaseBatch {
   createdAt    DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
 
-  attempts ExamAttempt[]
+  // B16: `membership Json` was a 190 KB TOASTed array of up to 5,000 UUIDs, rewritten on
+  // every change and unqueryable in Prisma without raw SQL. It is now real rows, and it
+  // is the whole mechanism: student visibility is EXISTS(... batch status = 'RELEASED').
+  members      ReleaseBatchMember[]
 
   @@index([assignmentId, status])
   @@index([classroomId, status])
   @@index([tenantId, status])
+  @@index([status, minHoldUntil])
+}
+
+model ReleaseBatchMember {
+  batchId   String
+  batch     ReleaseBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  attemptId String
+  attempt   ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  addedAt   DateTime    @default(now()) @db.Timestamptz(3)
+
+  @@id([batchId, attemptId])
+  @@index([attemptId])
 }
 
 enum FeedbackVisibility {
@@ -999,10 +1310,14 @@ model Feedback {
   body       String
   visibility FeedbackVisibility @default(STUDENT_AFTER_RELEASE)
   isDraft    Boolean  @default(false)
+  // U-12: a mis-key after release, disputed by students. Surfaced on the item report with
+  // an SLA, and blocks final reporting for that item.
+  disputedByCount Int @default(0)
   createdAt  DateTime @default(now()) @db.Timestamptz(3)
   updatedAt  DateTime @updatedAt @db.Timestamptz(3)
 
   @@index([attemptId, visibility])
+  @@index([responseId, disputedByCount])
 }
 
 model GradeChange {
@@ -1020,7 +1335,7 @@ model GradeChange {
   @@index([responseId])
 }
 
-// ───────────────────────────────────────────── integrity evidence
+// ────────────────────────────────────────────────────────── integrity evidence
 
 enum EventSeverity {
   INFO
@@ -1033,31 +1348,43 @@ model IntegrityEvent {
   attemptId  String
   attempt    ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   sessionId  String?
-  seq        Int
+  // C8: the CLIENT sends clientSeq; the SERVER assigns seq. Idempotency is on
+  // (attemptId, sessionId, clientSeq). Conflating the two made replay undetectable.
+  clientSeq  Int?
+  seq        Int?
   type       String
   severity   EventSeverity @default(INFO)
-  // INV-TELEMETRY-1: the client cannot set this
   serverTs   DateTime @default(now()) @db.Timestamptz(3)
+  // C8: serverTs is transaction_timestamp(), so every event in one batch shares a stamp.
+  // A batch queued in IndexedDB for 10 minutes had every clientTs clamped and the
+  // teacher's timeline was wrong. receivedAt is explicit.
+  receivedAt DateTime? @db.Timestamptz(3)
   clientTs   DateTime? @db.Timestamptz(3)
   // INV-TELEMETRY-2: closed schema, allowlisted keys, no content, no PII
   payload    Json
   receivedBy String?
   dropped    Boolean  @default(false)
-  // accommodations route here instead of counting as a violation (INV-ACC-1)
   accommodationRelaxed Boolean @default(false)
+  // U-2: threshold-crossing and above-threshold events are NEVER dropped
+  protected   Boolean  @default(false)
 
-  @@unique([attemptId, seq])
+  @@unique([attemptId, sessionId, clientSeq])
+  @@index([attemptId, seq])
   @@index([attemptId, severity, serverTs])
   @@index([type, serverTs])
+  @@index([protected, dropped])
 }
 
-// The human disposition of an attempt's evidence. The machine may recommend; only a human disposes.
+// The human disposition of an attempt's evidence. The machine may recommend; only a human
+// disposes. V-14: cluster membership alone can never be a factor without a noted context.
 model IntegrityVerdict {
   id         String   @id @default(uuid(7))
   attemptId  String   @unique
   attempt    ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   outcome    String   // NO_CONCERN | NOTED | REVIEW | VOIDED
   reason     String
+  // U-6: an inferred disability status must never be a hidden, durable teacher-visible field
+  consideredAccessibilityContext Boolean @default(false)
   decidedById String
   decidedBy  User     @relation(fields: [decidedById], references: [id], onDelete: Restrict)
   decidedAt  DateTime @default(now()) @db.Timestamptz(3)
@@ -1066,7 +1393,7 @@ model IntegrityVerdict {
   @@index([outcome, decidedAt])
 }
 
-// ─────────────────────────────────────────────── platform concerns
+// ───────────────────────────────────────────────────────── platform concerns
 
 model AuditEvent {
   id         BigInt   @id @default(autoincrement())
@@ -1114,10 +1441,14 @@ model Asset {
   height      Int?
   altText     String?
   checksum    String
-  status      String   @default("READY") // PENDING | READY | REJECTED
+  // D-12: the scan adapter lands with the media library (P2-T6), not 7 phases later.
+  scanStatus  String   @default("PENDING") // PENDING | CLEAN | INFECTED | ERROR
+  scannedAt   DateTime? @db.Timestamptz(3)
+  status      String   @default("READY")
   createdAt   DateTime @default(now()) @db.Timestamptz(3)
 
   @@index([ownerId, kind])
+  @@index([scanStatus])
 }
 
 model Rating {
@@ -1125,6 +1456,7 @@ model Rating {
   resourceId String
   resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
   userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   value      Int
   createdAt  DateTime @default(now()) @db.Timestamptz(3)
 
@@ -1136,6 +1468,7 @@ model Comment {
   resourceId String
   resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
   authorId   String
+  author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   body       String
   status     String   @default("VISIBLE")
   createdAt  DateTime @default(now()) @db.Timestamptz(3)
@@ -1143,7 +1476,6 @@ model Comment {
   @@index([resourceId, status, createdAt])
 }
 
-// idempotency for every state-changing external call
 model IdempotencyKey {
   key         String   @id
   scope       String
@@ -1159,11 +1491,11 @@ model IdempotencyKey {
 
 model EmailOutbox {
   id          String   @id @default(uuid(7))
-  toEmail     String
+  toEmail     String   @db.Citext
   template    String
   payload     Json
   dedupeKey   String   @unique
-  status      String   @default("QUEUED") // QUEUED | SENT | FAILED | SUPPRESSED
+  status      String   @default("QUEUED")
   attempts    Int      @default(0)
   lastError   String?
   scheduledAt DateTime @default(now()) @db.Timestamptz(3)
@@ -1173,7 +1505,7 @@ model EmailOutbox {
   @@index([status, scheduledAt])
 }
 
-// denormalised list counters. NEVER the source of truth.
+// Never the source of truth — a denormalised list view only.
 model AssignmentCounter {
   assignmentId  String @id
   total         Int    @default(0)
@@ -1184,14 +1516,16 @@ model AssignmentCounter {
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 }
 
-// ───────────────────────────────────────── interop (plans/16)
+// ───────────────────────────────────────────────────────────── interop
 
-// QTI / OneRoster / LTI external resource bindings
+// B13: QTI export is a key-exfiltration surface. Every write to this table for kind
+// QTI_ASSESSMENT is an audited event naming the item ids.
 model ExternalBinding {
   id          String   @id @default(uuid(7))
+  tenantId    String?
   kind        String   // QTI_ASSESSMENT | ONEROSTER_CLASS | ONEROSTER_USER | LTI_PLATFORM
   externalId  String
-  localType   String   // Resource | QuestionBank | Classroom | User
+  localType   String
   localId     String
   direction   String   // IMPORT | EXPORT | BIDIRECTIONAL
   lastSyncedAt DateTime? @db.Timestamptz(3)
@@ -1202,4 +1536,5 @@ model ExternalBinding {
 
   @@unique([kind, externalId, localType, localId])
   @@index([localType, localId])
+  @@index([tenantId])
 }
