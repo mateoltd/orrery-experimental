@@ -14,7 +14,7 @@
 
 import { type AccountState, LOGIN_FAILURES } from '@orrery/auth/lifecycle';
 import { describe, expect, it } from 'vitest';
-import { type AuthAdapterDeps, assertMaySignIn, describeSignInAttempt } from './config.js';
+import { type AuthAdapterDeps, assertMaySignIn, describeSignInAttempt } from './config';
 
 const T0 = 1_700_000_000_000;
 

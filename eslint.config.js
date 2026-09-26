@@ -91,6 +91,15 @@ export default [
             'conversion and is fine.',
         },
       ],
+      // A leading underscore means "deliberately unused", and it is the only way to say so
+      // without a disable comment. `signInFailure(_kind)` takes a kind and does not read it —
+      // that is the entire point, since reading it is what would leak. Reporting an unused
+      // ARG there would push people towards `void _kind`, which is noisier and says less.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' },
+      ],
+
       'no-restricted-globals': [
         'error',
         // `Date.now` is caught precisely by `no-restricted-properties` below. The bare
@@ -119,6 +128,27 @@ export default [
             },
           ],
         },
+      ],
+    },
+  },
+  {
+    // A STOPWATCH is not a CLOCK.
+    //
+    // `apps/web/src/features/**` may read `performance.now()`. INV-TIME-1 exists to stop a
+    // second source of TIME — business logic that behaves differently depending on when it
+    // runs, and that a FrozenClock therefore cannot pin down. A user-perceived latency floor
+    // is the opposite: it depends on real elapsed time, and injecting a clock would make it
+    // untestable.
+    //
+    // `Date.now()` stays BANNED here. The wall clock is a clock; a high-resolution monotonic
+    // stopwatch is not, and keeping the distinction is what stops this exemption becoming a
+    // general one. Only the `performance` global is allowed.
+    files: ['apps/web/src/features/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        { object: 'Date', property: 'now', message: 'INV-TIME-1: use @orrery/clock.' },
+        { property: 'Math.random', message: 'INV-RNG-1: use @orrery/rng.' },
       ],
     },
   },
