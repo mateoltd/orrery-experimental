@@ -13,9 +13,8 @@ Runtime topology, deployable units, request lifecycles, caching, scaling, config
                      └───────────────────┬──────────────────┘
                                          │
               ┌──────────────────────────▼───────────────────────────┐
-              │  sims.<domain>   static only, strict CSP, no cookies  │
-              │  no API. CSP: default-src 'none'; script-src 'self'; │
-              │  connect-src 'none'; frame-ancestors <app origin>     │
+              │  sims.<domain>  static only, no cookies, no API.        │
+              │  CSP (see note — 'self' does NOT work here)           │
               └──────────────────────────▲───────────────────────────┘
                                          │ sandboxed iframe + postMessage
                      ┌───────────────────┴──────────────────┐
@@ -38,6 +37,28 @@ Runtime topology, deployable units, request lifecycles, caching, scaling, config
         └──────────────────────┘      └──────────────────────────┘
 ```
 
+**The sim-origin CSP, exactly** (`23-REVIEW-ACTIONS.md` B6). The original draft of this line was wrong in three independent ways and **would have prevented every simulation from loading**:
+
+```
+Content-Security-Policy:
+  default-src   'none';
+  script-src    https://sims.<domain>;
+  style-src     https://sims.<domain>;
+  img-src       https://sims.<domain> data:;
+  font-src      https://sims.<domain>;
+  connect-src   'none';
+  form-action   'none';
+  base-uri      'none';
+  frame-ancestors https://app.<domain>;
+Permissions-Policy: camera=(), microphone=(), geolocation=(), display-capture=()
+```
+1. `default-src 'none'` **blocked the sim's own stylesheet** — every manifest declares `styles: "./style.css"`, so every sim rendered unstyled.
+2. `script-src 'self'` **does not match an opaque origin.** The frame has no `allow-same-origin`, so per CSP3 `'self'` resolves against an opaque origin and matches nothing: the bundle was blocked too. An explicit host is required.
+3. No `img-src`/`font-src`, so any data-URI image or webfont was blocked.
+4. `Cross-Origin-Resource-Policy: same-origin` also fails for an opaque-origin frame. CORP belongs on the **app** origin; the sim origin sends `cross-origin`.
+
+`INV-SIM-1`'s claim of "no network" is also weakened honestly: CSP does not cover WebRTC ICE/STUN, `<a ping>`, or DNS prefetch. The guarantee we can actually make is **"no same-origin reach and no CSP-permitted egress."**
+
 **Why a separate sim origin.** It makes the sandbox real rather than advisory. Even if a future browser relaxed iframe sandboxing, cross-origin plus CSP means a sim can never reach the app: no DOM, no cookies, no storage, no network. This is a load-bearing part of `INV-SIM-1` and of `ADR-0014` (container deploy, not Vercel-only).
 
 **Why exam-critical paths are hand-written REST, not tRPC.** `RN-10` — the exam path must survive page unload (`sendBeacon`), be idempotent, version-conflicted, load-testable in isolation, and stable enough that a student on a week-old cached bundle is never broken. tRPC is for everything else.
@@ -51,6 +72,7 @@ Runtime topology, deployable units, request lifecycles, caching, scaling, config
 | `web` | Next.js standalone; tRPC, REST, RSC | request rate, p95 |
 | `worker` | Inngest consumer, cron, background jobs | queue depth |
 | `sim-build` | registry build, screenshots, conformance | registry diff size |
+| `grader-host` | **Isolated execution of simulation graders.** `B14`: graders are untrusted code too, and the original plan `import()`ed them into the long-lived worker that holds the Prisma client and runs the release transaction — so one bad bundle could `process.exit()` the worker mid-release, OOM it, or poison the module cache for every later grade. Each grader now runs in a `node:worker_thread` with a memory cap, a wall-clock timeout, a frozen global scope and a serialised state argument. The esbuild metafile asserts `grader.js` imports only `@orrery/sim-sdk` and **zero Node builtins**. | in-flight grader threads |
 | `migrate` | one-shot pre-deploy job | — |
 
 **Deploy order:** `migrate` → `worker` → `web`. Rolling, never big-bang: an exam may be in progress and a deploy must not interrupt it. Every schema and event change is **expand/contract**, and the previous release stays deployable for at least one cycle, so a rollback never meets a schema it cannot read.

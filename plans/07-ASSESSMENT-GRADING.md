@@ -49,25 +49,70 @@ Each question also carries `points`, `gradingMode`, `timeLimitSec?`, `shuffleOpt
 
 ## 3. Partial credit: a named taxonomy, not a boolean
 
-`RN-05` is unambiguous that multi-select partial credit is a genuine measurement problem with several established methods and different validity properties. "All or nothing vs proportional" is not enough, and the choice is consequential enough that it should be a deliberate, named decision by the author. Implemented methods:
+> **Corrected after review (`23-REVIEW-ACTIONS.md` P-1…P-5).** The original version of this section defaulted to **NG** and justified it with a citation that had been **edited to support the opposite of what its source says**: `RN-05` records the METRON finding as *"all partial-credit functions improve reliability over no-credit (NC) and no-guessing (NG)"*, and NG **is** negative crediting. "NG-free scoring" was not a defined term. `RN-05` has been restored and the default replaced. Do not re-derive the old default from the old text.
 
-| Method | Rule | Properties | Use when |
-|---|---|---|---|
-| **NC** (no credit) | all correct → full, else 0 | Highest face validity, lowest reliability, rewards guessing at 1/c | High-stakes gates; small stakes |
-| **NG** (no guessing / negative) | correct − incorrect | Suppresses guessing; measurably improves reliability over NC (`RN-05`) | The default for multi-select in exams |
-| **SU** (subset) | score only if the response is a subset of the key; then proportional | Lenient — irrelevant selections are forgiven | When distractors are genuinely attractive rather than wrong |
-| **RI** (Ripkey) | +1 per correct selected, −1 per incorrect selected, but only if the response is no larger than the key | More lenient than SU; rewards partial knowledge | Low-stakes practice |
-| **PM** (plus/minus) | +1 correct, −1 incorrect, regardless of set size | Strongest IRT fit in comparative studies (`RN-05`) | When you will later run IRT |
+`RN-05` supports exactly one conclusion here: **some** form of partial credit improves reliability over dichotomous scoring, and functions that penalise incorrect selections improve it further. It does **not** support a specific default. The default below is chosen on different grounds, stated openly.
 
-**Default: NG**, because `RN-05` finds negative crediting materially improves reliability over both NC and NG-free scoring, and because it is the least gameable: a student cannot gain by selecting everything.
+| Method | Rule | Gameable by select-all? | Properties | Use when |
+|---|---|---|---|---|
+| **NC** (no credit) | all correct → full, else 0 | No | Highest face validity, lowest reliability, rewards guessing at `1/c` | High-stakes gates; tiny stakes |
+| **1PM** (partial all-or-nothing) | +1 per correct option selected, 0 for incorrect, **0 overall if more options are selected than there are correct ones** | **No** | Bounded below, never negative, no guessing incentive, and the most widely used method in the literature | **Default** |
+| **NG** (negative) | `correct − incorrect` | **Yes, when `C > M/2`** | Suppresses guessing *a priori*; produces **negative raw scores** | Only when the publish-time guard below passes |
+| **SU** (subset) | score only if the response is a **subset of the key**; then proportional | No | Lenient about **omissions**, **absolute about commission**. Selecting any incorrect option scores **zero** | Distractors are genuinely attractive rather than wrong |
+| **RI** (Ripkey) | +1 correct, −1 incorrect, only if the response is no larger than the key | No (the size clause saves it) | Forgives irrelevant selections when the set is small | Low-stakes practice |
+| **PM** (plus/minus) | +1 correct, −1 incorrect, regardless of set size | **Yes** | Best IRT fit in comparative studies (`RN-05`) | Only with a size guard, or when IRT follows |
+| **PROP** (proportional) | `correct / total` | No | Simple, transparent, no penalty | Low-stakes; youngest students |
 
-Exposed to authors as a labelled choice with a one-paragraph explanation of the trade-off, plus a live `testGrader` demonstration showing the score for four sample student responses. We are not asking a teacher to pick a scoring function blind.
+### 3.1 Why 1PM is the default
+Not because the cited literature says so — it does not — but on three grounds we can defend:
+1. **It is naturally bounded.** `0 ≤ points ≤ maxPoints` holds without a floor, so it coexists with the invariant in §4 that is property-tested. `NG` and `PM` do not (§3.2).
+2. **It cannot be gamed by select-all**, because the size clause zeroes the response (§3.3).
+3. It is the field's most-used method, so a teacher's prior intuitions transfer.
 
-### 3.1 Other graders worth specifying
+### 3.2 NG and the bounded-points invariant
+`NG` produces negative raw scores **by design**. Clamping at zero in the item is a **nonlinear** transform: it silently converts NG into "no penalty" for every student who guessed — destroying the guessing suppression NG exists to provide — while keeping the penalty for students who did not guess. It also changes the item's relationship to the total score, which invalidates the discrimination statistics in `08-ITEM-ANALYSIS.md`.
+
+**Rule if `NG` or `PM` is used:**
+- `QuestionResponse.autoRawScore` stores the **raw, possibly negative** value; item statistics are computed on that raw scale.
+- The zero floor is applied **in the attempt total only** (`01-DOMAIN-MODEL.md` §10.1).
+- The `08` report states that the item's statistics are on the raw scale.
+
+### 3.3 Publish-time gameability guard
+The `testGrader` harness displays the **select-all score** for every method on the item, and a publish check refuses a configuration that is gameable:
+
+```
+selectAllScore = f(M options, C correct keys)
+publish refuses NG or PM when selectAllScore > 0
+i.e. refuse when 2C − M > 0
+```
+Concretely: 5 options with a 3-option key pays a third of the marks for selecting everything under NG, and 6 options with a 4-option key pays two thirds. Where a teacher genuinely wants a negative-credit item, the authoring UI offers to **cap the number of selectable options** or switch to 1PM, and says why in one line.
+
+### 3.4 Other graders worth specifying
 - **Numeric significant figures**: correct only if within tolerance *and* stated to at least the required significant figures. This teaches precision, which is usually the point.
 - **Short text fuzzy**: stopwords removed, stems stripped, token-overlap ≥ author threshold. The rationale shows a **token diff** so a teacher can sanity-check the machine's judgement. A teacher must never be asked to trust an opaque score.
 - **Ordering**: credit = fraction of correctly-ordered adjacent pairs. A student with 3 of 4 in correct relative order earns most of the credit — which is pedagogically right.
-- **Simulation**: `grader(simState, params, answer)` from the sim's Node bundle. If the state fails `stateSchema`, the response is flagged `needsHuman` and routed to review. **A student is never auto-zeroed because our code failed** (`INV-SIM-2`).
+- **Simulation**: `grader(simState, params, answer)` from the sim's Node bundle, run in an isolated worker thread (`14-SECURITY-PRIVACY.md` §5). If the state fails `stateSchema`, the response is flagged `needsHuman` and routed to review. **A student is never auto-zeroed because our code failed** (`INV-SIM-2`).
+  - A simulation usable as a question must declare `scoringSurface` (`10-SIMULATIONS.md` §3). `ENDPOINT_ONLY` reads only the final answer. `PATH_SENSITIVE` reads a bounded interaction trace. Without this field the item measures parameter-space search, and its facility will look **excellent** while measuring nothing (`V-11`).
+
+### 3.5 Moderated sampling — the promise is atomicity, not 100% individual marking
+> Corrected after review (`T-1`). The plan conflated two different things.
+
+The product's promise is that a student never sees a **partial** result. That requires that whatever the teacher has **decided** be released together. It does **not** require every free response to be individually marked by a human. Real examination systems mark a moderated *sample*.
+
+| Mode | Behaviour |
+|---|---|
+| `FULL_MANUAL` (default for small cohorts) | Every free response individually graded. The original behaviour. |
+| `MODERATED_SAMPLE` | A random sample is double-marked, the cohort's marks are estimated, and every attempt is still released **atomically**. Sample size and moderation rule are assignment configuration (`Assignment.moderationSampleSize`, `moderationPercent`). |
+
+At 300 students this is the difference between an assessment costing a teacher 8 hours and one costing 40 minutes. The atomicity guarantee is untouched.
+
+### 3.6 Marking rate and inter-rater reliability
+> Added after review (`T-2`, `T-3`). The psychometrics in `08` applied to the *auto-grader*; the product's actual work is human marking, and it had no reliability apparatus at all.
+
+- **Quick-scored responses are recorded as such** (`QuestionResponse.wasQuickScored`) and sampled for moderation. A teacher marking at 10 s/script and one at 90 s/script produce visibly different confidence, not the same number.
+- **10–20% of every release batch is double-marked** (`ReviewAssignment.isSecondMarker`).
+- **Raw agreement and linearly-weighted κ are reported per rubric.** A rubric whose bands disagree between two teachers is a **defect in the rubric**, and is surfaced in authoring rather than averaged away.
+- Marking rate is instrumented and shown to the teacher, not used to rank them.
 
 ---
 
@@ -130,25 +175,51 @@ Filters: assignment, classroom, reviewer (mine / unclaimed / all), age, question
 
 ---
 
-## 6. Release
+## 6. Release — redesigned after review
+> **This section was substantially wrong and has been replaced** (`23-REVIEW-ACTIONS.md` B16). The original released a batch by recomputing 5,000 attempts × 30 responses = **150,000 pure-grader invocations inside one database transaction**, then writing ~155,000 rows that all had to be WAL-fsynced before commit. Against its own SLO of `p95 < 60 s` that is 75–300 s while holding 155,000 row locks. Worse, "verify everything, then open the transaction" is a **TOCTOU window**: a teacher can grade an attempt between the verify and the commit, and the batch then releases a stale `finalScore`. The plan's most important correctness claim did not hold at the scale it claimed.
 
-```ts
-await releaseBatch(batchId, actorId, { overrideReason? })
-// 0. require status ∈ { READY }
-// 1. freeze membership: snapshot the attempt ids
-// 2. verify EVERY attempt is GRADED  (collect blockers otherwise)
-// 3. TRANSACTION:
-//      for each attempt:
-//        recompute totals with the pure grader (never trust stored partial state)
-//        set finalScore, percentage, latePenaltyApplied, releaseBatchId, releasedAt
-//      set batch RELEASED, releasedById, releasedAt
-// 4. outside the transaction: notifications, rollup invalidation, xAPI, audit
+### 6.1 The mechanism: a single-row gate
+
+There is exactly one visibility rule, and it reads one indexed table:
+
+```sql
+released = EXISTS (
+  SELECT 1 FROM "ReleaseBatchMember" m
+  JOIN "ReleaseBatch" b ON b.id = m."batchId"
+  WHERE m."attemptId" = $1 AND b.status = 'RELEASED'
+)
 ```
 
-- **Atomic** — all of a batch or none. No window in which half a classroom can see grades (`INV-RELEASE-1`).
-- **Idempotent and resumable** — a crash releases nothing; the retry completes it; re-running a released batch is a no-op.
-- **Pre-release gate** — any attempt not `GRADED` blocks release and the blockers are listed. A teacher may override with a reason, stored on the batch and in the audit log.
-- **Scale** — a 5,000-attempt release verifies all, then writes in a single transaction. Postgres handles 5,000 row updates comfortably; the atomicity guarantee is preserved by verifying *everything* before opening the write transaction.
+"Release" is therefore **one statement**:
+
+```sql
+UPDATE "ReleaseBatch" SET status='RELEASED', "releasedAt"=now(), "releasedById"=$2
+WHERE id = $1 AND status IN ('READY','RELEASING');
+```
+
+| Property | How it is obtained |
+|---|---|
+| **Atomic** (`INV-RELEASE-1`) | One row, one statement. Trivially true rather than expensively true. |
+| **All-or-nothing across a batch** | Structural: the batch status is the only gate, so a partial state is not representable. |
+| **Idempotent** | `status IN ('READY','RELEASING')` makes a repeat a no-op. |
+| **Resumable** | There is nothing to resume. A crash either flipped the row or did not. |
+| **O(1) in batch size** | 5,000 attempts and 5 cost the same. |
+| **Instant** | No recomputation inside the transaction. |
+
+`ReleaseBatch.membership Json` — a 190 KB TOASTed array that had to be read to enumerate candidates — **is gone**, replaced by real `ReleaseBatchMember` rows. The pre-release gate becomes a normal indexed query.
+
+### 6.2 Where the arithmetic moved
+Grade totals are computed **before** the batch reaches `READY`, by `grade.recompute`, not during release. `autoScore`/`manualScore` are already persisted per response at grade time, so the release path does no arithmetic at all.
+
+This is also more correct: grades are settled at grading time, and release only decides *visibility*. The two concerns were conflated because the original transaction did both.
+
+### 6.3 Pre-release gate
+Release is blocked while any member attempt is not `GRADED`, and the blockers are listed. A teacher may override with a reason, stored on the batch and in the audit log. `C1` fixed a related trap: `EXPIRED` attempts previously had **no path to `GRADED`**, so any class containing one student who never pressed Submit required a permanent override. The sweep now runs `IN_PROGRESS → EXPIRED → grade.auto → GRADED`, and `EXPIRED` is non-terminal in the gate.
+
+`minHoldUntil` implements the minimum pre-release review window that the research notes had claimed and nothing had implemented (`K-4`).
+
+### 6.4 Durability
+`synchronous_commit` on, with a synchronous standby, for the tables carrying submissions and receipts. **RPO restated honestly:** 0 for submissions, answers and receipts; 15 minutes for evidence telemetry and analytics rollups. The original 15-minute RPO could lose an *acknowledged release*, which is not compatible with a "zero data loss" completion criterion.
 
 ### 6.1 INV-RELEASE-2 — no score is inferable
 No score field, no count of correct answers, no toast, no difference in status code, no difference in payload size, no cache-header variance, no analytics event. The pre-release payload is a fixed, score-free DTO. A machine-checked audit enumerates every student-facing route and asserts it. **This is a release gate, not a test.**

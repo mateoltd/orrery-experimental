@@ -284,7 +284,16 @@ graph TD
 | P17 | Pilot, seed content, docs & GA | L | 64 | P12,P15 | Pilot cohort completes a proctored exam with zero data loss |
 | | **Total** | | **~1,136** | | |
 
-With 4–6 parallel agent lanes: **7–10 weeks wall clock** to GA, including integration overhead.
+> ### Re-baselined after review (`23-REVIEW-ACTIONS.md` D-18)
+>
+> **The figures above are wrong and are retained only so the correction is visible.** The phase totals did not agree with the plan's own S/M/L/XL letters, which sum to **~3,030 h**; three phases carried no size letters at all. Adding packet authoring (~300 h — 183 packets, 100% on the critical path) and review at ~50% gives a realistic **4,500–5,500 h**:
+>
+> - **v0.9 "Exam core" (P0–P10): 8–12 weeks** at 6 staffed lanes.
+> - **v1.0 GA (P11–P17): a further 10–16 weeks**, and large parts of it are not agent-compressible (a school pilot is calendar-bound by term dates, not sprint velocity).
+>
+> **The claim of 7–10 weeks was off by 2–3× and is not used anywhere.**
+>
+> Scope was cut at the same time: **60 simulations** not 220; **QTI 2.2 export + one LTI launch** not five interop deliverables; **2 locales** not 3; **Sim Studio and four item-analysis features deferred** to v1.1/v2. The full cut table is in `20-PHASE-PACKETS.md`.
 
 ---
 
@@ -344,7 +353,15 @@ With 4–6 parallel agent lanes: **7–10 weeks wall clock** to GA, including in
 | R12 | Email deliverability blocks classroom onboarding | M | M | Mailpit locally, code-based join as an equal path, resend cooldowns, digest batching | P4 |
 | R13 | Retention/DSAR never implemented because it is boring | H | H | Retention jobs and DSAR written in the phase that creates the data | P14 |
 | R14 | QTI/LTI scope consumes the last quarter | M | M | Export-only first; launch before full parity; a documented subset beats a stalled standard. `16` | P16 |
-| R15 | This plan is wrong somewhere | H | M | P0-T9 exists specifically to find the top risks in this plan and resolve them before P1 | P0 |
+| R15 | This plan is wrong somewhere | H | M | **This already happened.** Three independent reviews found 18 blocking defects, 21 methodological errors and a 2.7× sizing error. `plans/23-REVIEW-ACTIONS.md` records every finding with a disposition. The lesson is now standing policy: **a gate that cannot fail is not a gate, and a citation not checked against its source is not evidence** | done |
+| R16 | **No reviewer or director capacity is staffed.** 183 PR reviews, 18 re-plans, unbounded escalations, all requiring judgement about measurement and security | H | H | The model is named: agent review by a non-authoring lane against a written rubric, 2 h SLA. The genuinely judgement-based items are batched into one 4-hour advisory review at the end of P13 | P0 |
+| R17 | **The pilot is calendar-bound, not effort-bound.** 3 classrooms, 30 students, 2 exam cycles, plus minors/guardian consent — all depending on humans outside the team and on school term dates | H | M | Recruit the pilot cohort in P0, not P17. A term does not compress | P0 |
+| R18 | **No task creates a deployment or a single third-party account.** Email domain with SPF/DKIM/DMARC, S3, managed PG with PITR, Cloudflare, and a real LMS for LTI. Four later tasks assumed a staging environment that nothing built | H | H | `P0-T12` (provisioning) and `P0-T13` (staging deployment) added | P0 |
+| R19 | **Prisma migration conflicts are not text-mergeable.** Six lanes editing one schema file in worktrees produces conflicts that cannot be merged | H | M | One named lane owns `schema.prisma` per phase; others submit migration requests | all |
+| R20 | **CI and local resource contention at 6 lanes.** 6 × (Next + worker + Testcontainers ×2 + Playwright). Degrades *every* gate at once, and the correct response to a flaky environment is to stop trusting gates | H | M | Shard E2E, cap concurrent Playwright workers, keep `reset:e2e` under 30 s, and treat a flaky gate as an environment bug to fix, never as a gate to widen | all |
+| R21 | **Test flakiness at scale.** ~250 blocking browser assertions. The plan's most-emphasised gate (registry health blocks the build) is also the most likely to flake | M | H | **Affected-only conformance on a sim PR**; full matrix nightly. A written **flake budget with quarantine** (≥3 flakes in 14 days → quarantined, visible, blocks the catalogue count) — never retried | P6, P12 |
+| R22 | **Item banks may not exist.** The anti-collusion claim rests on pools, and nothing authored a single question | H | H | `P5-T15` is now an explicit sized workstream, and `poolHealth` makes the shortfall visible rather than silent | P5 |
+| R23 | **Gate weakening at scale.** Every gate is local; a gate can be edited by the agent it constrains | M | H | **Branch protection with required status checks owned by a bot principal** + a CI check that fails any PR modifying a gate file unless the body contains `GATE-CHANGE:` and a rationale. Loud, not forbidden | P0 |
 
 ---
 

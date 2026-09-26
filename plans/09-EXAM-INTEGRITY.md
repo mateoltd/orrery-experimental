@@ -13,7 +13,7 @@ We designed this section from the research rather than from intuition, and the r
 | Finding | Source | Consequence here |
 |---|---|---|
 | Automated proctoring has **high specificity and catastrophically low sensitivity**. In a controlled trial with 6 staged cheaters, automated detection caught **none**; human review caught 1. False positives: 0% automated, 4% human. | `RN-01` | Any system that flags a student as a cheater is mostly right when it says "fine" and mostly wrong when it says "flag". So it must not be allowed to decide. **Evidence only.** |
-| Scores fell **10–20%** after proctoring was adopted at one institution, interpreted as evidence that cheating had previously been common — i.e. the score drop is the *intended* effect. | `RN-01` | The score drop is real and expected. We therefore **measure our own score delta** after adoption and tell the teacher, because a cohort that suddenly drops 15% will otherwise look like a broken release. |
+| Scores fell **10–20%** after proctoring was adopted at one institution, which the authors read as evidence that cheating had previously been common. | `RN-01` | **Corrected after review (`P-19`).** The original plan adopted that reading and called the drop "the intended effect". **That inference is not available, and it is load-bearing.** The same drop is equally consistent with measurement variation, a different item sample, regression to the mean after a selection decision, or the added cognitive load of the controls. See §1.1. |
 | Proctored (lockdown-only) students **completed in half the time and scored significantly lower** than unproctored peers on the same exam. | `RN-03` | The controls themselves change performance. Any control that adds cognitive load is a measurement intervention, not free. |
 | Meta-analysis, 49 studies, 100k+ test takers: unproctored internet testing favours online ~0.20 SD, and the effect **collapses to near zero** when strict time limits, non-searchable content and lockdown are combined. Deep item pools and adaptive selection stop answer-sharing. | `RN-03` | Item-level design is the real lever. This is why `06-QUESTION-BANK-BLUEPRINT.md` is core scope and not a nice-to-have. |
 | Facial detection is documented as **disproportionately false-flagging students of colour, students with accommodation needs, and students on unstable connections**. Universities publish advice to instructors not to enable it. | `RN-02` | **No biometric proctoring in v1 — absent, not "off by default"** (`D11`). If it is ever built it requires its own bias audit, per-institution consent and a human review queue. |
@@ -21,7 +21,33 @@ We designed this section from the research rather than from intuition, and the r
 | Students widely report proctoring increasing anxiety and reducing performance. | `RN-01` | Accommodations mode, an opt-out path, and a published policy students can read in advance. |
 | Editors widely note the raising of flags "needs to be overcautious, necessitating a large proportion of false positives", with a danger of **profiling students** based on flagged behaviour. | `RN-01` | No automated punitive action. A named teacher records a verdict with a reason. |
 
-**The honest summary, which we also publish to users:** in a browser, we can reliably enforce *time* and *which items you got*. We cannot reliably detect *whether you cheated*. We do not claim otherwise, and our product copy is written to match.
+### 1.1 The score drop is a confound, not a success metric
+> Corrected after review (`P-19`). The original plan wrote *"the score drop is the intended effect"*. That is wrong, and it gave the product a **target score reduction** — which is not something a measurement instrument should have.
+
+The plan cites Alessio et al. in the same table: lockdown-only proctored students "completed in half the time and **scored significantly lower** on the same exam". That is the direct evidence that **the controls themselves change the score**. So a pre/post comparison cannot separate:
+
+- "less cheating happened", from
+- "students performed worse under the cognitive load of the controls"
+
+Both produce a drop. They are indistinguishable after the fact, and they have opposite implications.
+
+**Our position:** a pre/post score delta is an **unexplained change requiring investigation**, measured and disclosed to the teacher, and **never** a target. An organisation watching a "proctoring reduced scores by 15%" metric has an incentive to add controls and observe a fall. We refuse to supply that metric.
+
+### 1.2 The number that actually settles it: base rate
+> Added after review (`P-20`). The original led with "high specificity, low sensitivity" — true, and not the quantity that matters. The quantity that matters is the **positive predictive value**: of the students a system flags, how many were actually cheating?
+
+Even a *hypothetical* excellent detector — 99% specificity, 30% sensitivity — applied to a cohort with 10% cheating:
+
+```
+PPV = (sens × prevalence) / (sens × prevalence + (1 − spec) × (1 − prevalence))
+    = (0.30 × 0.10) / (0.30 × 0.10 + 0.01 × 0.90)
+    = 0.03 / 0.039  ≈  0.77   → ~77% of flags would be genuine
+```
+At 2% prevalence the same detector gives **PPV ≈ 6%**: **roughly 17 of every 18 flags would be an innocent student.** Real systems are far worse than this hypothetical.
+
+This is why the plan reaches "must not be allowed to decide" — and it is arithmetic, not citation, so it survives a teacher who does not trust the literature.
+
+**The honest summary, which we also publish to users:** in a browser, we can reliably enforce *time* and *which items you got*. We cannot reliably detect *whether you cheated*, and any system that tells you otherwise is reporting its false-positive rate as a success rate. Our product copy is written to match.
 
 ---
 
@@ -115,7 +141,19 @@ type ExamPolicy = {
 ```
 
 ### 4.1 Policy rules
-1. **Permissive defaults, strict `EXAM` profile.** A strict global default would break ordinary quizzes. But a resource marked `EXAM` gets a stricter profile (`requireFullscreen: 'WARN'`, `focusWatchdog: 'WARN'`) so "exam" always means something.
+1. **Permissive defaults, strict `EXAM` profile.** A strict global default would break ordinary quizzes. But a resource marked `EXAM` gets a stricter profile so "exam" always means something.
+
+> **Corrected after review (`V-13`).** The original named `WARN` for fullscreen and focus but **never specified the thresholds**, so whether `WARN` was inert or brutal was undefined and the entire "default to WARN" position was unimplementable. Given `RN-03`'s finding that controls which add cognitive load change the score, the defaults are deliberately high:
+
+```ts
+EXAM_PROFILE_DEFAULTS = {
+  requireFullscreen: 'WARN',   requirePointerLock: 'WARN',   focusWatchdog: 'WARN',
+  thresholds: { fullscreenExits: 8, focusLosses: 25, tabHides: 12, pointerLockLosses: Infinity, copyAttempts: 20 },
+  escalation: ['WARN', 'BLOCK_UNTIL_RELOCK'],   // never TERMINATE automatically — see V-12
+}
+QUIZ_PROFILE_DEFAULTS = { requireFullscreen: 'OFF', focusWatchdog: 'OFF', thresholds: { /* all Infinity */ } }
+```
+`pointerLockLosses: Infinity` is deliberate and principled: `Escape` releases pointer lock and browsers deliberately prevent interception, so counting it would penalise a documented browser behaviour (§6.1).
 2. **Consistency validated at authoring time** (`INV-POLICY-2`): window start before end; window length not shorter than the total limit; `perQuestionExpiry ≠ SOFT` with no per-question limit is an error. Field-level errors in the authoring UI, never at exam start.
 3. **Frozen on first start.** Later changes go through audited `DEADLINE_EXTENDED` / `POLICY_OVERRIDDEN` attempt events.
 4. **Full disclosure before start.** The student sees the entire effective policy in plain language, including exactly what is recorded, what it is used for, and what is **never** collected. No mid-exam surprises.
@@ -250,9 +288,18 @@ a thresholded event increments a strike
           WARN               : toast the student, log, continue
           BLOCK_UNTIL_RELOCK: overlay; re-satisfy fullscreen/pointer lock to continue
           REQUIRE_RELOCK    : re-lock required before the next question
-          TERMINATE         : attempt → TERMINATED, held answers submitted, teacher notified
+          TERMINATE         : attempt → FROZEN, **everything already written submitted**,
+                              teacher notified. It does NOT discard unwritten answers.
 ```
 Every step appends an `AttemptEvent`. The student always sees what happened and why. A `TERMINATE` is **never final**: the teacher can reinstate or void with a recorded reason.
+
+> **Corrected after review (`V-12`).** The original `TERMINATE` set the attempt to `TERMINATED`, submitted "held answers", and so **irreversibly discarded every unwritten item** — reducing the grade with no human present. That is an automated punitive action, which directly contradicts `ADR-0017` and `INV-TELEMETRY-1`, both of which state that client events "can never change a score". The plan contradicted itself inside one document.
+>
+> The automatic escalation ladder now stops at **freeze and notify**. `TERMINATE` is renamed `FREEZE_AND_SUBMIT`: it submits all written answers, leaves the attempt `FROZEN`, and requires a human `IntegrityVerdict` before any score is affected. A forged or looped telemetry event can inconvenience a student and alert a teacher; it cannot cost them a grade.
+>
+> **B11:** strikes are per-kind (`AttemptStrikeCounter { attemptId, kind }`, incremented atomically), not a single `Int`. A single counter could not represent five independent thresholds, so a student who left fullscreen 12 times would trip the `tabHides: 3` threshold and be terminated for something they did not do.
+>
+> **U-2:** threshold-crossing and above-threshold events are **never dropped**, even under telemetry shedding, and `ExamAttempt.droppedEventCount` records what was lost so a teacher can see the escalation was under-counted.
 
 ### 7.3 What the teacher sees
 A per-attempt evidence timeline: chronological events, severity, threshold crossings, the preflight record, force-exit reports, similarity cluster membership, and the teacher's recorded verdict.
@@ -271,6 +318,12 @@ First-class, auditable, teacher-granted. Not a workaround — `RN-02` makes it a
 
 ```ts
 type Relaxation =
+  | 'DISABLE_FULLSCREEN'      // ADDED after review (U-3). Was missing entirely, so a
+                              // screen-reader user in a virtual-buffer configuration
+                              // could be forced into fullscreen — while the plan exempted
+                              // Escape for pointer lock and then forgot the equivalent.
+  | 'HIDE_COUNTDOWN'          // ADDED after review (U-3): a visible countdown is a
+                              // significant cognitive-load cost under time pressure
   | 'DISABLE_POINTER_LOCK'
   | 'ALLOW_TAB_SWITCH'        // screen readers, magnifiers, translation tools
   | 'ALLOW_COPY_PASTE'
@@ -281,7 +334,8 @@ type Relaxation =
 
 Rules:
 - Relaxed events produce **zero** violation events. The watchdog still runs but routes to `accommodation-relaxed` and never touches strike counters (`INV-ACC-1`).
-- `EXTRA_TIME_PERCENT` extends `deadlineAt` and every `questionDeadlineAt`, recorded as `DEADLINE_EXTENDED` referencing the accommodation.
+- `EXTRA_TIME_PERCENT` is an **additive** `AttemptDeadlineExtension` row, not a rewrite. > Corrected after review (`C14`): the original *rewrote* `deadlineAt`, which broke `INV-POLICY-1` and made `verify-receipt` report divergence on a legitimate action. `effectiveDeadlineAt = deadlineAt + Σ addedSec + pausedAccumSec`, and `deadlineAt` is never updated.
+- `BREAKS_ALLOWED` requires `ExamAttempt.pausedAccumSec` and an audited `PAUSED` / `RESUMED_FROM_PAUSE` transition. > Corrected after review (`C15`): the original offered breaks with no policy field, no column, and no pause term in the deadline, so granting one silently did nothing.
 - The marker is shown on the released result at the student's choice, and never to other students.
 - Accommodations are auditable and reportable, because an institution needs the record.
 - Granting one is a two-click action, available **during** a live exam, precisely because `RN-01`/`RN-03` show the controls themselves cost students performance.
