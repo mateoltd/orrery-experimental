@@ -1,0 +1,1993 @@
+{
+  "note": "The subject tree, as DATA. Both the seed loader (packages/db/src/seed/subjects.ts) and the eighth gate (scripts/subject-tree-gate.mjs) read THIS FILE, so the gate validates the exact bytes that get inserted. A gate that validated a copy would be a gate about a fiction. The first version of this file had nine nodes that were their own parent, because each area's root slug collided with one of its own children.",
+  "areas": [
+    "astronomy",
+    "biology",
+    "chemistry",
+    "computing",
+    "earth-science",
+    "engineering",
+    "general-skills",
+    "maths",
+    "physics"
+  ],
+  "subjects": [
+    {
+      "slug": "maths",
+      "name": "Mathematics",
+      "area": "maths",
+      "depth": 0,
+      "parent": null,
+      "position": 0,
+      "colour": "#1a4fd6"
+    },
+    {
+      "slug": "maths/algebra",
+      "name": "Algebra",
+      "area": "maths",
+      "depth": 1,
+      "parent": "maths",
+      "position": 0
+    },
+    {
+      "slug": "maths/algebra/equations-linear",
+      "name": "Equations: linear",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/algebra",
+      "position": 0
+    },
+    {
+      "slug": "maths/algebra/equations-quadratic",
+      "name": "Equations: quadratic",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/algebra",
+      "position": 1
+    },
+    {
+      "slug": "maths/algebra/simultaneous-equations",
+      "name": "Simultaneous equations",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/algebra",
+      "position": 2
+    },
+    {
+      "slug": "maths/algebra/inequalities",
+      "name": "Inequalities",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/algebra",
+      "position": 3
+    },
+    {
+      "slug": "maths/algebra/proof",
+      "name": "Proof",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/algebra",
+      "position": 4
+    },
+    {
+      "slug": "maths/geometry",
+      "name": "Geometry",
+      "area": "maths",
+      "depth": 1,
+      "parent": "maths",
+      "position": 1
+    },
+    {
+      "slug": "maths/geometry/angles",
+      "name": "Angles",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/geometry",
+      "position": 0
+    },
+    {
+      "slug": "maths/geometry/triangles",
+      "name": "Triangles",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/geometry",
+      "position": 1
+    },
+    {
+      "slug": "maths/geometry/circles",
+      "name": "Circles",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/geometry",
+      "position": 2
+    },
+    {
+      "slug": "maths/geometry/circle-theorems",
+      "name": "Circle theorems",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/geometry",
+      "position": 3
+    },
+    {
+      "slug": "maths/geometry/trigonometry",
+      "name": "Trigonometry",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/geometry",
+      "position": 4
+    },
+    {
+      "slug": "maths/geometry/vectors-in-2d",
+      "name": "Vectors in 2D",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/geometry",
+      "position": 5
+    },
+    {
+      "slug": "maths/geometry/vectors-in-3d",
+      "name": "Vectors in 3D",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/geometry",
+      "position": 6
+    },
+    {
+      "slug": "maths/calculus",
+      "name": "Calculus",
+      "area": "maths",
+      "depth": 1,
+      "parent": "maths",
+      "position": 2
+    },
+    {
+      "slug": "maths/calculus/differentiation",
+      "name": "Differentiation",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/calculus",
+      "position": 0
+    },
+    {
+      "slug": "maths/calculus/integration",
+      "name": "Integration",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/calculus",
+      "position": 1
+    },
+    {
+      "slug": "maths/calculus/the-chain-rule",
+      "name": "The chain rule",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/calculus",
+      "position": 2
+    },
+    {
+      "slug": "maths/calculus/optimisation",
+      "name": "Optimisation",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/calculus",
+      "position": 3
+    },
+    {
+      "slug": "maths/statistics",
+      "name": "Statistics",
+      "area": "maths",
+      "depth": 1,
+      "parent": "maths",
+      "position": 3
+    },
+    {
+      "slug": "maths/statistics/descriptive-statistics",
+      "name": "Descriptive statistics",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/statistics",
+      "position": 0
+    },
+    {
+      "slug": "maths/statistics/probability",
+      "name": "Probability",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/statistics",
+      "position": 1
+    },
+    {
+      "slug": "maths/statistics/distributions",
+      "name": "Distributions",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/statistics",
+      "position": 2
+    },
+    {
+      "slug": "maths/statistics/the-normal-distribution",
+      "name": "The normal distribution",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/statistics",
+      "position": 3
+    },
+    {
+      "slug": "maths/statistics/sampling",
+      "name": "Sampling",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/statistics",
+      "position": 4
+    },
+    {
+      "slug": "maths/statistics/hypothesis-testing",
+      "name": "Hypothesis testing",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/statistics",
+      "position": 5
+    },
+    {
+      "slug": "maths/statistics/correlation-and-regression",
+      "name": "Correlation and regression",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/statistics",
+      "position": 6
+    },
+    {
+      "slug": "maths/advanced-number",
+      "name": "Advanced number",
+      "area": "maths",
+      "depth": 1,
+      "parent": "maths",
+      "position": 4
+    },
+    {
+      "slug": "maths/advanced-number/complex-numbers",
+      "name": "Complex numbers",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/advanced-number",
+      "position": 0
+    },
+    {
+      "slug": "maths/advanced-number/proof-by-induction",
+      "name": "Proof by induction",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/advanced-number",
+      "position": 1
+    },
+    {
+      "slug": "maths/advanced-number/sequences-and-series",
+      "name": "Sequences and series",
+      "area": "maths",
+      "depth": 2,
+      "parent": "maths/advanced-number",
+      "position": 2
+    },
+    {
+      "slug": "physics",
+      "name": "Physics",
+      "area": "physics",
+      "depth": 0,
+      "parent": null,
+      "position": 1,
+      "colour": "#7a4a00"
+    },
+    {
+      "slug": "physics/forces-and-motion",
+      "name": "Forces and motion",
+      "area": "physics",
+      "depth": 1,
+      "parent": "physics",
+      "position": 0
+    },
+    {
+      "slug": "physics/forces-and-motion/newton-s-laws",
+      "name": "Newton's laws",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/forces-and-motion",
+      "position": 0
+    },
+    {
+      "slug": "physics/forces-and-motion/friction",
+      "name": "Friction",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/forces-and-motion",
+      "position": 1
+    },
+    {
+      "slug": "physics/forces-and-motion/momentum",
+      "name": "Momentum",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/forces-and-motion",
+      "position": 2
+    },
+    {
+      "slug": "physics/forces-and-motion/projectiles",
+      "name": "Projectiles",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/forces-and-motion",
+      "position": 3
+    },
+    {
+      "slug": "physics/energy",
+      "name": "Energy",
+      "area": "physics",
+      "depth": 1,
+      "parent": "physics",
+      "position": 1
+    },
+    {
+      "slug": "physics/energy/work-and-energy",
+      "name": "Work and energy",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/energy",
+      "position": 0
+    },
+    {
+      "slug": "physics/energy/power",
+      "name": "Power",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/energy",
+      "position": 1
+    },
+    {
+      "slug": "physics/energy/conservation-of-energy",
+      "name": "Conservation of energy",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/energy",
+      "position": 2
+    },
+    {
+      "slug": "physics/waves",
+      "name": "Waves",
+      "area": "physics",
+      "depth": 1,
+      "parent": "physics",
+      "position": 2
+    },
+    {
+      "slug": "physics/waves/wave-properties",
+      "name": "Wave properties",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/waves",
+      "position": 0
+    },
+    {
+      "slug": "physics/waves/superposition",
+      "name": "Superposition",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/waves",
+      "position": 1
+    },
+    {
+      "slug": "physics/waves/standing-waves",
+      "name": "Standing waves",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/waves",
+      "position": 2
+    },
+    {
+      "slug": "physics/waves/the-doppler-effect",
+      "name": "The Doppler effect",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/waves",
+      "position": 3
+    },
+    {
+      "slug": "physics/waves/resonance",
+      "name": "Resonance",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/waves",
+      "position": 4
+    },
+    {
+      "slug": "physics/electricity",
+      "name": "Electricity",
+      "area": "physics",
+      "depth": 1,
+      "parent": "physics",
+      "position": 3
+    },
+    {
+      "slug": "physics/electricity/charge",
+      "name": "Charge",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/electricity",
+      "position": 0
+    },
+    {
+      "slug": "physics/electricity/electric-fields",
+      "name": "Electric fields",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/electricity",
+      "position": 1
+    },
+    {
+      "slug": "physics/electricity/circuits",
+      "name": "Circuits",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/electricity",
+      "position": 2
+    },
+    {
+      "slug": "physics/electricity/resistance",
+      "name": "Resistance",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/electricity",
+      "position": 3
+    },
+    {
+      "slug": "physics/electricity/capacitors",
+      "name": "Capacitors",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/electricity",
+      "position": 4
+    },
+    {
+      "slug": "physics/magnetism",
+      "name": "Magnetism",
+      "area": "physics",
+      "depth": 1,
+      "parent": "physics",
+      "position": 4
+    },
+    {
+      "slug": "physics/magnetism/magnetic-fields",
+      "name": "Magnetic fields",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/magnetism",
+      "position": 0
+    },
+    {
+      "slug": "physics/magnetism/electromagnetic-induction",
+      "name": "Electromagnetic induction",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/magnetism",
+      "position": 1
+    },
+    {
+      "slug": "physics/thermal-physics",
+      "name": "Thermal physics",
+      "area": "physics",
+      "depth": 1,
+      "parent": "physics",
+      "position": 5
+    },
+    {
+      "slug": "physics/thermal-physics/temperature-and-heat",
+      "name": "Temperature and heat",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/thermal-physics",
+      "position": 0
+    },
+    {
+      "slug": "physics/thermal-physics/specific-heat-capacity",
+      "name": "Specific heat capacity",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/thermal-physics",
+      "position": 1
+    },
+    {
+      "slug": "physics/thermal-physics/the-gas-laws",
+      "name": "The gas laws",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/thermal-physics",
+      "position": 2
+    },
+    {
+      "slug": "physics/thermal-physics/kinetic-theory",
+      "name": "Kinetic theory",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/thermal-physics",
+      "position": 3
+    },
+    {
+      "slug": "physics/modern-physics",
+      "name": "Modern physics",
+      "area": "physics",
+      "depth": 1,
+      "parent": "physics",
+      "position": 6
+    },
+    {
+      "slug": "physics/modern-physics/the-photoelectric-effect",
+      "name": "The photoelectric effect",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/modern-physics",
+      "position": 0
+    },
+    {
+      "slug": "physics/modern-physics/atomic-structure",
+      "name": "Atomic structure",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/modern-physics",
+      "position": 1
+    },
+    {
+      "slug": "physics/modern-physics/nuclear-decay",
+      "name": "Nuclear decay",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/modern-physics",
+      "position": 2
+    },
+    {
+      "slug": "physics/modern-physics/particle-physics",
+      "name": "Particle physics",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/modern-physics",
+      "position": 3
+    },
+    {
+      "slug": "physics/astrophysics",
+      "name": "Astrophysics",
+      "area": "physics",
+      "depth": 1,
+      "parent": "physics",
+      "position": 7
+    },
+    {
+      "slug": "physics/astrophysics/gravity",
+      "name": "Gravity",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/astrophysics",
+      "position": 0
+    },
+    {
+      "slug": "physics/astrophysics/orbits",
+      "name": "Orbits",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/astrophysics",
+      "position": 1
+    },
+    {
+      "slug": "physics/astrophysics/stellar-lifecycle",
+      "name": "Stellar lifecycle",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/astrophysics",
+      "position": 2
+    },
+    {
+      "slug": "physics/astrophysics/cosmology",
+      "name": "Cosmology",
+      "area": "physics",
+      "depth": 2,
+      "parent": "physics/astrophysics",
+      "position": 3
+    },
+    {
+      "slug": "chemistry",
+      "name": "Chemistry",
+      "area": "chemistry",
+      "depth": 0,
+      "parent": null,
+      "position": 2,
+      "colour": "#14663a"
+    },
+    {
+      "slug": "chemistry/atomic-structure",
+      "name": "Atomic structure",
+      "area": "chemistry",
+      "depth": 1,
+      "parent": "chemistry",
+      "position": 0
+    },
+    {
+      "slug": "chemistry/atomic-structure/electron-configuration",
+      "name": "Electron configuration",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/atomic-structure",
+      "position": 0
+    },
+    {
+      "slug": "chemistry/atomic-structure/periodic-trends",
+      "name": "Periodic trends",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/atomic-structure",
+      "position": 1
+    },
+    {
+      "slug": "chemistry/bonding",
+      "name": "Bonding",
+      "area": "chemistry",
+      "depth": 1,
+      "parent": "chemistry",
+      "position": 1
+    },
+    {
+      "slug": "chemistry/bonding/ionic-bonding",
+      "name": "Ionic bonding",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/bonding",
+      "position": 0
+    },
+    {
+      "slug": "chemistry/bonding/covalent-bonding",
+      "name": "Covalent bonding",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/bonding",
+      "position": 1
+    },
+    {
+      "slug": "chemistry/bonding/metallic-bonding",
+      "name": "Metallic bonding",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/bonding",
+      "position": 2
+    },
+    {
+      "slug": "chemistry/bonding/intermolecular-forces",
+      "name": "Intermolecular forces",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/bonding",
+      "position": 3
+    },
+    {
+      "slug": "chemistry/stoichiometry",
+      "name": "Stoichiometry",
+      "area": "chemistry",
+      "depth": 1,
+      "parent": "chemistry",
+      "position": 2
+    },
+    {
+      "slug": "chemistry/stoichiometry/the-mole",
+      "name": "The mole",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/stoichiometry",
+      "position": 0
+    },
+    {
+      "slug": "chemistry/stoichiometry/limiting-reagents",
+      "name": "Limiting reagents",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/stoichiometry",
+      "position": 1
+    },
+    {
+      "slug": "chemistry/stoichiometry/gas-volumes",
+      "name": "Gas volumes",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/stoichiometry",
+      "position": 2
+    },
+    {
+      "slug": "chemistry/acids-and-bases",
+      "name": "Acids and bases",
+      "area": "chemistry",
+      "depth": 1,
+      "parent": "chemistry",
+      "position": 3
+    },
+    {
+      "slug": "chemistry/acids-and-bases/ph",
+      "name": "pH",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/acids-and-bases",
+      "position": 0
+    },
+    {
+      "slug": "chemistry/acids-and-bases/buffers",
+      "name": "Buffers",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/acids-and-bases",
+      "position": 1
+    },
+    {
+      "slug": "chemistry/acids-and-bases/titration",
+      "name": "Titration",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/acids-and-bases",
+      "position": 2
+    },
+    {
+      "slug": "chemistry/acids-and-bases/neutralisation",
+      "name": "Neutralisation",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/acids-and-bases",
+      "position": 3
+    },
+    {
+      "slug": "chemistry/redox",
+      "name": "Redox",
+      "area": "chemistry",
+      "depth": 1,
+      "parent": "chemistry",
+      "position": 4
+    },
+    {
+      "slug": "chemistry/redox/oxidation-state",
+      "name": "Oxidation state",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/redox",
+      "position": 0
+    },
+    {
+      "slug": "chemistry/redox/electrochemistry",
+      "name": "Electrochemistry",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/redox",
+      "position": 1
+    },
+    {
+      "slug": "chemistry/energy-changes",
+      "name": "Energy changes",
+      "area": "chemistry",
+      "depth": 1,
+      "parent": "chemistry",
+      "position": 5
+    },
+    {
+      "slug": "chemistry/energy-changes/enthalpy",
+      "name": "Enthalpy",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/energy-changes",
+      "position": 0
+    },
+    {
+      "slug": "chemistry/energy-changes/calorimetry",
+      "name": "Calorimetry",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/energy-changes",
+      "position": 1
+    },
+    {
+      "slug": "chemistry/energy-changes/bond-energies",
+      "name": "Bond energies",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/energy-changes",
+      "position": 2
+    },
+    {
+      "slug": "chemistry/reaction-rates",
+      "name": "Reaction rates",
+      "area": "chemistry",
+      "depth": 1,
+      "parent": "chemistry",
+      "position": 6
+    },
+    {
+      "slug": "chemistry/reaction-rates/reaction-rate",
+      "name": "Reaction rate",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/reaction-rates",
+      "position": 0
+    },
+    {
+      "slug": "chemistry/reaction-rates/catalysts",
+      "name": "Catalysts",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/reaction-rates",
+      "position": 1
+    },
+    {
+      "slug": "chemistry/reaction-rates/chemical-equilibrium",
+      "name": "Chemical equilibrium",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/reaction-rates",
+      "position": 2
+    },
+    {
+      "slug": "chemistry/organic-chemistry",
+      "name": "Organic chemistry",
+      "area": "chemistry",
+      "depth": 1,
+      "parent": "chemistry",
+      "position": 7
+    },
+    {
+      "slug": "chemistry/organic-chemistry/functional-groups",
+      "name": "Functional groups",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/organic-chemistry",
+      "position": 0
+    },
+    {
+      "slug": "chemistry/organic-chemistry/alkanes",
+      "name": "Alkanes",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/organic-chemistry",
+      "position": 1
+    },
+    {
+      "slug": "chemistry/organic-chemistry/alkenes",
+      "name": "Alkenes",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/organic-chemistry",
+      "position": 2
+    },
+    {
+      "slug": "chemistry/organic-chemistry/alkynes",
+      "name": "Alkynes",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/organic-chemistry",
+      "position": 3
+    },
+    {
+      "slug": "chemistry/organic-chemistry/alcohols",
+      "name": "Alcohols",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/organic-chemistry",
+      "position": 4
+    },
+    {
+      "slug": "chemistry/organic-chemistry/carboxylic-acids",
+      "name": "Carboxylic acids",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/organic-chemistry",
+      "position": 5
+    },
+    {
+      "slug": "chemistry/organic-chemistry/polymers",
+      "name": "Polymers",
+      "area": "chemistry",
+      "depth": 2,
+      "parent": "chemistry/organic-chemistry",
+      "position": 6
+    },
+    {
+      "slug": "biology",
+      "name": "Biology",
+      "area": "biology",
+      "depth": 0,
+      "parent": null,
+      "position": 3,
+      "colour": "#0f6b5c"
+    },
+    {
+      "slug": "biology/cells",
+      "name": "Cells",
+      "area": "biology",
+      "depth": 1,
+      "parent": "biology",
+      "position": 0
+    },
+    {
+      "slug": "biology/cells/cell-structure",
+      "name": "Cell structure",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/cells",
+      "position": 0
+    },
+    {
+      "slug": "biology/cells/cell-division",
+      "name": "Cell division",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/cells",
+      "position": 1
+    },
+    {
+      "slug": "biology/cells/transport-in-cells",
+      "name": "Transport in cells",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/cells",
+      "position": 2
+    },
+    {
+      "slug": "biology/genetics",
+      "name": "Genetics",
+      "area": "biology",
+      "depth": 1,
+      "parent": "biology",
+      "position": 1
+    },
+    {
+      "slug": "biology/genetics/dna-structure",
+      "name": "DNA structure",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/genetics",
+      "position": 0
+    },
+    {
+      "slug": "biology/genetics/replication",
+      "name": "Replication",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/genetics",
+      "position": 1
+    },
+    {
+      "slug": "biology/genetics/transcription-and-translation",
+      "name": "Transcription and translation",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/genetics",
+      "position": 2
+    },
+    {
+      "slug": "biology/genetics/meiosis",
+      "name": "Meiosis",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/genetics",
+      "position": 3
+    },
+    {
+      "slug": "biology/genetics/inheritance-patterns",
+      "name": "Inheritance patterns",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/genetics",
+      "position": 4
+    },
+    {
+      "slug": "biology/genetics/mutations",
+      "name": "Mutations",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/genetics",
+      "position": 5
+    },
+    {
+      "slug": "biology/evolution",
+      "name": "Evolution",
+      "area": "biology",
+      "depth": 1,
+      "parent": "biology",
+      "position": 2
+    },
+    {
+      "slug": "biology/evolution/natural-selection",
+      "name": "Natural selection",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/evolution",
+      "position": 0
+    },
+    {
+      "slug": "biology/evolution/speciation",
+      "name": "Speciation",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/evolution",
+      "position": 1
+    },
+    {
+      "slug": "biology/evolution/fossils-and-evidence",
+      "name": "Fossils and evidence",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/evolution",
+      "position": 2
+    },
+    {
+      "slug": "biology/ecology",
+      "name": "Ecology",
+      "area": "biology",
+      "depth": 1,
+      "parent": "biology",
+      "position": 3
+    },
+    {
+      "slug": "biology/ecology/ecosystems",
+      "name": "Ecosystems",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/ecology",
+      "position": 0
+    },
+    {
+      "slug": "biology/ecology/food-webs",
+      "name": "Food webs",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/ecology",
+      "position": 1
+    },
+    {
+      "slug": "biology/ecology/cycles-of-matter",
+      "name": "Cycles of matter",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/ecology",
+      "position": 2
+    },
+    {
+      "slug": "biology/ecology/human-population",
+      "name": "Human population",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/ecology",
+      "position": 3
+    },
+    {
+      "slug": "biology/human-biology",
+      "name": "Human biology",
+      "area": "biology",
+      "depth": 1,
+      "parent": "biology",
+      "position": 4
+    },
+    {
+      "slug": "biology/human-biology/the-circulatory-system",
+      "name": "The circulatory system",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/human-biology",
+      "position": 0
+    },
+    {
+      "slug": "biology/human-biology/the-respiratory-system",
+      "name": "The respiratory system",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/human-biology",
+      "position": 1
+    },
+    {
+      "slug": "biology/human-biology/the-digestive-system",
+      "name": "The digestive system",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/human-biology",
+      "position": 2
+    },
+    {
+      "slug": "biology/human-biology/the-nervous-system",
+      "name": "The nervous system",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/human-biology",
+      "position": 3
+    },
+    {
+      "slug": "biology/human-biology/hormones",
+      "name": "Hormones",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/human-biology",
+      "position": 4
+    },
+    {
+      "slug": "biology/human-biology/immunity",
+      "name": "Immunity",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/human-biology",
+      "position": 5
+    },
+    {
+      "slug": "biology/plants",
+      "name": "Plants",
+      "area": "biology",
+      "depth": 1,
+      "parent": "biology",
+      "position": 5
+    },
+    {
+      "slug": "biology/plants/photosynthesis",
+      "name": "Photosynthesis",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/plants",
+      "position": 0
+    },
+    {
+      "slug": "biology/plants/transport-in-plants",
+      "name": "Transport in plants",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/plants",
+      "position": 1
+    },
+    {
+      "slug": "biology/plants/reproduction-in-plants",
+      "name": "Reproduction in plants",
+      "area": "biology",
+      "depth": 2,
+      "parent": "biology/plants",
+      "position": 2
+    },
+    {
+      "slug": "earth-science",
+      "name": "Earth science",
+      "area": "earth-science",
+      "depth": 0,
+      "parent": null,
+      "position": 4,
+      "colour": "#7a3fa8"
+    },
+    {
+      "slug": "earth-science/geology",
+      "name": "Geology",
+      "area": "earth-science",
+      "depth": 1,
+      "parent": "earth-science",
+      "position": 0
+    },
+    {
+      "slug": "earth-science/geology/rocks-and-minerals",
+      "name": "Rocks and minerals",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/geology",
+      "position": 0
+    },
+    {
+      "slug": "earth-science/geology/plate-tectonics",
+      "name": "Plate tectonics",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/geology",
+      "position": 1
+    },
+    {
+      "slug": "earth-science/geology/earthquakes",
+      "name": "Earthquakes",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/geology",
+      "position": 2
+    },
+    {
+      "slug": "earth-science/geology/geological-time",
+      "name": "Geological time",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/geology",
+      "position": 3
+    },
+    {
+      "slug": "earth-science/weather",
+      "name": "Weather",
+      "area": "earth-science",
+      "depth": 1,
+      "parent": "earth-science",
+      "position": 1
+    },
+    {
+      "slug": "earth-science/weather/the-atmosphere",
+      "name": "The atmosphere",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/weather",
+      "position": 0
+    },
+    {
+      "slug": "earth-science/weather/air-pressure",
+      "name": "Air pressure",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/weather",
+      "position": 1
+    },
+    {
+      "slug": "earth-science/weather/cloud-types",
+      "name": "Cloud types",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/weather",
+      "position": 2
+    },
+    {
+      "slug": "earth-science/weather/weather-systems",
+      "name": "Weather systems",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/weather",
+      "position": 3
+    },
+    {
+      "slug": "earth-science/climate",
+      "name": "Climate",
+      "area": "earth-science",
+      "depth": 1,
+      "parent": "earth-science",
+      "position": 2
+    },
+    {
+      "slug": "earth-science/climate/climate-and-circulation",
+      "name": "Climate and circulation",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/climate",
+      "position": 0
+    },
+    {
+      "slug": "earth-science/climate/the-greenhouse-effect",
+      "name": "The greenhouse effect",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/climate",
+      "position": 1
+    },
+    {
+      "slug": "earth-science/climate/climate-change",
+      "name": "Climate change",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/climate",
+      "position": 2
+    },
+    {
+      "slug": "earth-science/oceans",
+      "name": "Oceans",
+      "area": "earth-science",
+      "depth": 1,
+      "parent": "earth-science",
+      "position": 3
+    },
+    {
+      "slug": "earth-science/oceans/ocean-circulation",
+      "name": "Ocean circulation",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/oceans",
+      "position": 0
+    },
+    {
+      "slug": "earth-science/oceans/salinity",
+      "name": "Salinity",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/oceans",
+      "position": 1
+    },
+    {
+      "slug": "earth-science/oceans/tides",
+      "name": "Tides",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/oceans",
+      "position": 2
+    },
+    {
+      "slug": "earth-science/oceans/ocean-waves",
+      "name": "Ocean waves",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/oceans",
+      "position": 3
+    },
+    {
+      "slug": "earth-science/environment",
+      "name": "Environment",
+      "area": "earth-science",
+      "depth": 1,
+      "parent": "earth-science",
+      "position": 4
+    },
+    {
+      "slug": "earth-science/environment/the-carbon-cycle",
+      "name": "The carbon cycle",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/environment",
+      "position": 0
+    },
+    {
+      "slug": "earth-science/environment/biodiversity",
+      "name": "Biodiversity",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/environment",
+      "position": 1
+    },
+    {
+      "slug": "earth-science/environment/pollution",
+      "name": "Pollution",
+      "area": "earth-science",
+      "depth": 2,
+      "parent": "earth-science/environment",
+      "position": 2
+    },
+    {
+      "slug": "astronomy",
+      "name": "Astronomy",
+      "area": "astronomy",
+      "depth": 0,
+      "parent": null,
+      "position": 5,
+      "colour": "#1f3f8a"
+    },
+    {
+      "slug": "astronomy/observing",
+      "name": "Observing",
+      "area": "astronomy",
+      "depth": 1,
+      "parent": "astronomy",
+      "position": 0
+    },
+    {
+      "slug": "astronomy/observing/telescopes",
+      "name": "Telescopes",
+      "area": "astronomy",
+      "depth": 2,
+      "parent": "astronomy/observing",
+      "position": 0
+    },
+    {
+      "slug": "astronomy/observing/spectroscopy",
+      "name": "Spectroscopy",
+      "area": "astronomy",
+      "depth": 2,
+      "parent": "astronomy/observing",
+      "position": 1
+    },
+    {
+      "slug": "astronomy/the-solar-system",
+      "name": "The solar system",
+      "area": "astronomy",
+      "depth": 1,
+      "parent": "astronomy",
+      "position": 1
+    },
+    {
+      "slug": "astronomy/the-solar-system/the-sun",
+      "name": "The Sun",
+      "area": "astronomy",
+      "depth": 2,
+      "parent": "astronomy/the-solar-system",
+      "position": 0
+    },
+    {
+      "slug": "astronomy/the-solar-system/planets",
+      "name": "Planets",
+      "area": "astronomy",
+      "depth": 2,
+      "parent": "astronomy/the-solar-system",
+      "position": 1
+    },
+    {
+      "slug": "astronomy/the-solar-system/moons",
+      "name": "Moons",
+      "area": "astronomy",
+      "depth": 2,
+      "parent": "astronomy/the-solar-system",
+      "position": 2
+    },
+    {
+      "slug": "astronomy/the-solar-system/asteroids-and-comets",
+      "name": "Asteroids and comets",
+      "area": "astronomy",
+      "depth": 2,
+      "parent": "astronomy/the-solar-system",
+      "position": 3
+    },
+    {
+      "slug": "astronomy/stars",
+      "name": "Stars",
+      "area": "astronomy",
+      "depth": 1,
+      "parent": "astronomy",
+      "position": 2
+    },
+    {
+      "slug": "astronomy/stars/stellar-distances",
+      "name": "Stellar distances",
+      "area": "astronomy",
+      "depth": 2,
+      "parent": "astronomy/stars",
+      "position": 0
+    },
+    {
+      "slug": "astronomy/stars/stellar-lifecycle",
+      "name": "Stellar lifecycle",
+      "area": "astronomy",
+      "depth": 2,
+      "parent": "astronomy/stars",
+      "position": 1
+    },
+    {
+      "slug": "astronomy/stars/star-classes",
+      "name": "Star classes",
+      "area": "astronomy",
+      "depth": 2,
+      "parent": "astronomy/stars",
+      "position": 2
+    },
+    {
+      "slug": "astronomy/galaxies",
+      "name": "Galaxies",
+      "area": "astronomy",
+      "depth": 1,
+      "parent": "astronomy",
+      "position": 3
+    },
+    {
+      "slug": "astronomy/galaxies/the-milky-way",
+      "name": "The Milky Way",
+      "area": "astronomy",
+      "depth": 2,
+      "parent": "astronomy/galaxies",
+      "position": 0
+    },
+    {
+      "slug": "astronomy/galaxies/galactic-structure",
+      "name": "Galactic structure",
+      "area": "astronomy",
+      "depth": 2,
+      "parent": "astronomy/galaxies",
+      "position": 1
+    },
+    {
+      "slug": "astronomy/galaxies/the-expansion-of-the-universe",
+      "name": "The expansion of the universe",
+      "area": "astronomy",
+      "depth": 2,
+      "parent": "astronomy/galaxies",
+      "position": 2
+    },
+    {
+      "slug": "computing",
+      "name": "Computing",
+      "area": "computing",
+      "depth": 0,
+      "parent": null,
+      "position": 6,
+      "colour": "#14666b"
+    },
+    {
+      "slug": "computing/programming",
+      "name": "Programming",
+      "area": "computing",
+      "depth": 1,
+      "parent": "computing",
+      "position": 0
+    },
+    {
+      "slug": "computing/programming/variables-and-types",
+      "name": "Variables and types",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/programming",
+      "position": 0
+    },
+    {
+      "slug": "computing/programming/control-flow",
+      "name": "Control flow",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/programming",
+      "position": 1
+    },
+    {
+      "slug": "computing/programming/functions",
+      "name": "Functions",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/programming",
+      "position": 2
+    },
+    {
+      "slug": "computing/programming/data-structures",
+      "name": "Data structures",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/programming",
+      "position": 3
+    },
+    {
+      "slug": "computing/algorithms",
+      "name": "Algorithms",
+      "area": "computing",
+      "depth": 1,
+      "parent": "computing",
+      "position": 1
+    },
+    {
+      "slug": "computing/algorithms/searching",
+      "name": "Searching",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/algorithms",
+      "position": 0
+    },
+    {
+      "slug": "computing/algorithms/sorting",
+      "name": "Sorting",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/algorithms",
+      "position": 1
+    },
+    {
+      "slug": "computing/algorithms/complexity",
+      "name": "Complexity",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/algorithms",
+      "position": 2
+    },
+    {
+      "slug": "computing/algorithms/recursion",
+      "name": "Recursion",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/algorithms",
+      "position": 3
+    },
+    {
+      "slug": "computing/algorithms/graphs",
+      "name": "Graphs",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/algorithms",
+      "position": 4
+    },
+    {
+      "slug": "computing/data",
+      "name": "Data",
+      "area": "computing",
+      "depth": 1,
+      "parent": "computing",
+      "position": 2
+    },
+    {
+      "slug": "computing/data/databases",
+      "name": "Databases",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/data",
+      "position": 0
+    },
+    {
+      "slug": "computing/data/sql",
+      "name": "SQL",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/data",
+      "position": 1
+    },
+    {
+      "slug": "computing/data/data-modelling",
+      "name": "Data modelling",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/data",
+      "position": 2
+    },
+    {
+      "slug": "computing/data/spreadsheets",
+      "name": "Spreadsheets",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/data",
+      "position": 3
+    },
+    {
+      "slug": "computing/networks",
+      "name": "Networks",
+      "area": "computing",
+      "depth": 1,
+      "parent": "computing",
+      "position": 3
+    },
+    {
+      "slug": "computing/networks/networking-basics",
+      "name": "Networking basics",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/networks",
+      "position": 0
+    },
+    {
+      "slug": "computing/networks/the-internet",
+      "name": "The internet",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/networks",
+      "position": 1
+    },
+    {
+      "slug": "computing/networks/cybersecurity",
+      "name": "Cybersecurity",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/networks",
+      "position": 2
+    },
+    {
+      "slug": "computing/machine-learning",
+      "name": "Machine learning",
+      "area": "computing",
+      "depth": 1,
+      "parent": "computing",
+      "position": 4
+    },
+    {
+      "slug": "computing/machine-learning/modelling-data",
+      "name": "Modelling data",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/machine-learning",
+      "position": 0
+    },
+    {
+      "slug": "computing/machine-learning/classification",
+      "name": "Classification",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/machine-learning",
+      "position": 1
+    },
+    {
+      "slug": "computing/machine-learning/clustering",
+      "name": "Clustering",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/machine-learning",
+      "position": 2
+    },
+    {
+      "slug": "computing/machine-learning/neural-networks",
+      "name": "Neural networks",
+      "area": "computing",
+      "depth": 2,
+      "parent": "computing/machine-learning",
+      "position": 3
+    },
+    {
+      "slug": "engineering",
+      "name": "Engineering",
+      "area": "engineering",
+      "depth": 0,
+      "parent": null,
+      "position": 7,
+      "colour": "#8a3a1a"
+    },
+    {
+      "slug": "engineering/design",
+      "name": "Design",
+      "area": "engineering",
+      "depth": 1,
+      "parent": "engineering",
+      "position": 0
+    },
+    {
+      "slug": "engineering/design/the-design-process",
+      "name": "The design process",
+      "area": "engineering",
+      "depth": 2,
+      "parent": "engineering/design",
+      "position": 0
+    },
+    {
+      "slug": "engineering/design/cad",
+      "name": "CAD",
+      "area": "engineering",
+      "depth": 2,
+      "parent": "engineering/design",
+      "position": 1
+    },
+    {
+      "slug": "engineering/design/technical-drawing",
+      "name": "Technical drawing",
+      "area": "engineering",
+      "depth": 2,
+      "parent": "engineering/design",
+      "position": 2
+    },
+    {
+      "slug": "engineering/materials",
+      "name": "Materials",
+      "area": "engineering",
+      "depth": 1,
+      "parent": "engineering",
+      "position": 1
+    },
+    {
+      "slug": "engineering/materials/material-properties",
+      "name": "Material properties",
+      "area": "engineering",
+      "depth": 2,
+      "parent": "engineering/materials",
+      "position": 0
+    },
+    {
+      "slug": "engineering/materials/material-selection",
+      "name": "Material selection",
+      "area": "engineering",
+      "depth": 2,
+      "parent": "engineering/materials",
+      "position": 1
+    },
+    {
+      "slug": "engineering/mechanisms",
+      "name": "Mechanisms",
+      "area": "engineering",
+      "depth": 1,
+      "parent": "engineering",
+      "position": 2
+    },
+    {
+      "slug": "engineering/mechanisms/levers",
+      "name": "Levers",
+      "area": "engineering",
+      "depth": 2,
+      "parent": "engineering/mechanisms",
+      "position": 0
+    },
+    {
+      "slug": "engineering/mechanisms/gears",
+      "name": "Gears",
+      "area": "engineering",
+      "depth": 2,
+      "parent": "engineering/mechanisms",
+      "position": 1
+    },
+    {
+      "slug": "engineering/mechanisms/bearings",
+      "name": "Bearings",
+      "area": "engineering",
+      "depth": 2,
+      "parent": "engineering/mechanisms",
+      "position": 2
+    },
+    {
+      "slug": "engineering/electronics",
+      "name": "Electronics",
+      "area": "engineering",
+      "depth": 1,
+      "parent": "engineering",
+      "position": 3
+    },
+    {
+      "slug": "engineering/electronics/analogue-circuits",
+      "name": "Analogue circuits",
+      "area": "engineering",
+      "depth": 2,
+      "parent": "engineering/electronics",
+      "position": 0
+    },
+    {
+      "slug": "engineering/electronics/sensors",
+      "name": "Sensors",
+      "area": "engineering",
+      "depth": 2,
+      "parent": "engineering/electronics",
+      "position": 1
+    },
+    {
+      "slug": "engineering/electronics/microcontrollers",
+      "name": "Microcontrollers",
+      "area": "engineering",
+      "depth": 2,
+      "parent": "engineering/electronics",
+      "position": 2
+    },
+    {
+      "slug": "engineering/structures",
+      "name": "Structures",
+      "area": "engineering",
+      "depth": 1,
+      "parent": "engineering",
+      "position": 4
+    },
+    {
+      "slug": "engineering/structures/forces-and-structures",
+      "name": "Forces and structures",
+      "area": "engineering",
+      "depth": 2,
+      "parent": "engineering/structures",
+      "position": 0
+    },
+    {
+      "slug": "engineering/structures/load-bearing",
+      "name": "Load bearing",
+      "area": "engineering",
+      "depth": 2,
+      "parent": "engineering/structures",
+      "position": 1
+    },
+    {
+      "slug": "engineering/structures/truss-design",
+      "name": "Truss design",
+      "area": "engineering",
+      "depth": 2,
+      "parent": "engineering/structures",
+      "position": 2
+    },
+    {
+      "slug": "general-skills",
+      "name": "General skills",
+      "area": "general-skills",
+      "depth": 0,
+      "parent": null,
+      "position": 8,
+      "colour": "#4a5260"
+    },
+    {
+      "slug": "general-skills/academic",
+      "name": "Academic",
+      "area": "general-skills",
+      "depth": 1,
+      "parent": "general-skills",
+      "position": 0
+    },
+    {
+      "slug": "general-skills/academic/referencing",
+      "name": "Referencing",
+      "area": "general-skills",
+      "depth": 2,
+      "parent": "general-skills/academic",
+      "position": 0
+    },
+    {
+      "slug": "general-skills/academic/academic-writing",
+      "name": "Academic writing",
+      "area": "general-skills",
+      "depth": 2,
+      "parent": "general-skills/academic",
+      "position": 1
+    },
+    {
+      "slug": "general-skills/academic/reading-strategies",
+      "name": "Reading strategies",
+      "area": "general-skills",
+      "depth": 2,
+      "parent": "general-skills/academic",
+      "position": 2
+    },
+    {
+      "slug": "general-skills/mathematical-literacy",
+      "name": "Mathematical literacy",
+      "area": "general-skills",
+      "depth": 1,
+      "parent": "general-skills",
+      "position": 1
+    },
+    {
+      "slug": "general-skills/mathematical-literacy/estimation",
+      "name": "Estimation",
+      "area": "general-skills",
+      "depth": 2,
+      "parent": "general-skills/mathematical-literacy",
+      "position": 0
+    },
+    {
+      "slug": "general-skills/mathematical-literacy/percentages",
+      "name": "Percentages",
+      "area": "general-skills",
+      "depth": 2,
+      "parent": "general-skills/mathematical-literacy",
+      "position": 1
+    },
+    {
+      "slug": "general-skills/mathematical-literacy/ratio-and-proportion",
+      "name": "Ratio and proportion",
+      "area": "general-skills",
+      "depth": 2,
+      "parent": "general-skills/mathematical-literacy",
+      "position": 2
+    },
+    {
+      "slug": "general-skills/mathematical-literacy/units-and-measurement",
+      "name": "Units and measurement",
+      "area": "general-skills",
+      "depth": 2,
+      "parent": "general-skills/mathematical-literacy",
+      "position": 3
+    },
+    {
+      "slug": "general-skills/study-skills",
+      "name": "Study skills",
+      "area": "general-skills",
+      "depth": 1,
+      "parent": "general-skills",
+      "position": 2
+    },
+    {
+      "slug": "general-skills/study-skills/note-taking",
+      "name": "Note taking",
+      "area": "general-skills",
+      "depth": 2,
+      "parent": "general-skills/study-skills",
+      "position": 0
+    },
+    {
+      "slug": "general-skills/study-skills/revision-planning",
+      "name": "Revision planning",
+      "area": "general-skills",
+      "depth": 2,
+      "parent": "general-skills/study-skills",
+      "position": 1
+    },
+    {
+      "slug": "general-skills/study-skills/time-management",
+      "name": "Time management",
+      "area": "general-skills",
+      "depth": 2,
+      "parent": "general-skills/study-skills",
+      "position": 2
+    },
+    {
+      "slug": "general-skills/digital-skills",
+      "name": "Digital skills",
+      "area": "general-skills",
+      "depth": 1,
+      "parent": "general-skills",
+      "position": 3
+    },
+    {
+      "slug": "general-skills/digital-skills/digital-safety",
+      "name": "Digital safety",
+      "area": "general-skills",
+      "depth": 2,
+      "parent": "general-skills/digital-skills",
+      "position": 0
+    },
+    {
+      "slug": "general-skills/digital-skills/data-with-spreadsheets",
+      "name": "Data with spreadsheets",
+      "area": "general-skills",
+      "depth": 2,
+      "parent": "general-skills/digital-skills",
+      "position": 1
+    },
+    {
+      "slug": "general-skills/digital-skills/presentations",
+      "name": "Presentations",
+      "area": "general-skills",
+      "depth": 2,
+      "parent": "general-skills/digital-skills",
+      "position": 2
+    }
+  ]
+}
