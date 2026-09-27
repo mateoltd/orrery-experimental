@@ -428,6 +428,44 @@ export type Block =
 
 export type BlockType = Block['type'];
 
+/**
+ * The schema for each block type, keyed by that type.
+ *
+ * ## Why this exists
+ *
+ * The discriminated union gives you "is this document valid". It does not give you "what are
+ * the FIELDS of block type X", which is what anything that has to reason about a block
+ * individually needs: the editor's per-type attribute specs (`editor/attrSpecs.ts`), a
+ * per-field publish rule, a migration step that rewrites one field, and a form that renders
+ * itself from the shape.
+ *
+ * Without it, each of those re-derives the field list by hand, and a hand-derived field list
+ * next to a Zod schema is a second source of truth that fails silently — the field is added to
+ * the schema, the hand list is not, and the new field is simply absent from the editor.
+ *
+ * Keyed by the type name rather than discovered from the union, because Zod v4 does not expose
+ * a union's members as a lookup. The map is therefore a CLAIM, and `BLOCK_SCHEMAS_MATCH_TYPES`
+ * below is the test that makes the claim checkable.
+ */
+export const BLOCK_SCHEMAS = {
+  paragraph: paragraphBlock,
+  heading: headingBlock,
+  list: listBlock,
+  blockquote: blockquoteBlock,
+  callout: calloutBlock,
+  code: codeBlock,
+  equation: equationBlock,
+  image: imageBlock,
+  video: videoBlock,
+  table: tableBlock,
+  embedSimulation: embedSimulationBlock,
+  practiceCheck: practiceCheckBlock,
+  keyValue: keyValueBlock,
+  divider: dividerBlock,
+  columns: columnsBlock,
+  embedExternal: embedExternalBlock,
+} as const satisfies Record<BlockType, z.ZodType>;
+
 /** Every type name, in the packet's order. The count is asserted by the registry test. */
 export const BLOCK_TYPES = [
   'paragraph',

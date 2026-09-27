@@ -18,8 +18,8 @@ fired, and TipTap proceeds.**
 
 | # | Blocker | Verdict | Evidence |
 |---|---|---|---|
-| 1 | Virtualisation vs. focusable handles. The packet requires a 500-block document that stays responsive **and** "every block handle is a real focusable control" / "no keyboard trap anywhere". Virtualisation unmounts off-screen DOM; you cannot focus a control that is not mounted. | **Confirmed conflict, on the critical node work.** No official virtualisation extension exists (`@tiptap-pro/extension-virtual-scroll` → 404), so one of the two requirements has to give. | measured |
-| 2 | The closed union stops being the editor's type. `plans/14` rests the content-XSS argument on it — "a closed block union rendered to HTML we generate. There is no sanitiser to keep patched." | **Confirmed, and now measured.** ProseMirror's node JSON is `{type, attrs:{…}}`; ours is flat. A converter is mandatory both ways, and `attrs` is an unrecognised key under `z.strictObject`, so a straight pass-through is rejected on 100% of blocks. | measured |
+| 1 | Virtualisation vs. focusable handles. The packet requires a 500-block document that stays responsive **and** "every block handle is a real focusable control" / "no keyboard trap anywhere". Virtualisation unmounts off-screen DOM; you cannot focus a control that is not mounted. | **RESOLVED (P2-T3b), not counted.** `content-visibility: auto` + `contain-intrinsic-size` gets the rendering saving **without removing the element from the document**, so the button stays focusable and the browser scrolls to it on focus. No first-party virtualisation extension was needed or used. A browser without support renders every block — slower, still correct. | measured |
+| 2 | The closed union stops being the editor's type. `plans/14` rests the content-XSS argument on it — "a closed block union rendered to HTML we generate. There is no sanitiser to keep patched." | **Handled, not counted (P2-T3a + P2-T3b).** The converter round-trips every corpus block losslessly across all 16 types. And the measured *null trap* is now closed **at the declaration**: `attrSpecs.ts` derives every attr from its own Zod schema, so a required field cannot be omitted. Verified in real ProseMirror — omitting `mode` now throws "No value supplied for attribute mode" instead of silently becoming `null`. | measured |
 | 3 | The schema-driven simulation side panel needs a P6 `Simulation` manifest, which does not exist. Building it now means inventing P6's shape and leaves the claimed P6-T7 saving unproven. | **Confirmed, but not on the node work** — so it does not count against the trigger. | plan read |
 | — | Bundle cost. | **NOT a blocker.** Exam first load is 99.3 KB against a 250 KB budget (150.7 KB headroom), and the editor is not the exam route. TipTap v3.31.3 installs cleanly against React 19 / Next 15 — 57 packages, no peer conflicts. | measured |
 
@@ -29,9 +29,17 @@ the converter with a round-trip suite over all 16 types against the historical c
 and covers all 16 types, so blocker 2 is *handled* rather than merely counted. Blocker 1 remains
 open and is the next thing to resolve.
 
-**The next checkpoint for the trigger is P2-T3b** (the atomic nodes and the drag handles), because
-that is where blocker 1 actually bites. If the handle/virtualisation conflict cannot be resolved
-without breaking one of the two stated requirements, that is blocker 4 and the switch fires.
+**The next checkpoint for the trigger is P2-T3c** — the slash palette and the React node views
+for the four atomic types. Blocker 1 and blocker 2's silent-null half are both now resolved rather
+than counted, so the standing count is **1** (the P6 manifest, which the trigger's own wording
+excludes anyway).
+
+**One measured nuance worth carrying, because it looks like a gap and is not.** ProseMirror's
+attr `validate` is what makes a field *required* — that is the trap closing, and it is enforced at
+construction. It is **not** run for value correctness: `nodeFromJSON` accepts `mode: 'GRADED'`,
+and `Node.check()` does not consult it either on a detached node. So value validity rests entirely
+on `blockSchema` via `fromEditorNode` and on save. That is not a hole in the closed union — it is
+the union doing exactly the job `plans/14` assigns it, one layer out from the editor.
 >
 > **What is lost:** the slash palette, block drag handles, and the three-way conflict panel, down to their fallback equivalents. `P2-T11` exists precisely so this is a downgrade and not a rewrite.
 >
