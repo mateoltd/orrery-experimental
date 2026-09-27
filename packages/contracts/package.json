@@ -67,6 +67,10 @@
     "./taxonomy": {
       "types": "./dist/taxonomy/index.d.ts",
       "default": "./dist/taxonomy/index.js"
+    },
+    "./search/text": {
+      "types": "./dist/search/text.d.ts",
+      "default": "./dist/search/text.js"
     }
   },
   "scripts": {

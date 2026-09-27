@@ -507,13 +507,30 @@ export async function browsePublic(db: Db, query: LibraryQuery = {}): Promise<Li
   };
 }
 
-async function idsFor(db: Db, slugs: readonly string[]): Promise<readonly string[]> {
+/**
+ * Slugs to ids, for a raw SQL caller.
+ *
+ * Exported because `subjectSubtree` returns SLUGS — they are the public identifier, and a URL
+ * that says `maths/algebra` should not change when the row is re-created. But `Resource.subjectId`
+ * holds an id, so a raw query that filters `subjectId IN (<slugs>)` matches NOTHING and returns
+ * an empty result rather than an error.
+ *
+ * That is what the first version of `search` did, and it is the single most expensive bug in
+ * this task: every subject-scoped search silently returned zero, and the symptom — "search finds
+ * nothing when you pick a subject" — reads like a ranking problem, so the investigation starts
+ * in the weights and the generated column rather than in a three-character list comprehension.
+ * Exported so the next raw-SQL caller cannot repeat it.
+ */
+export async function subjectIdsFor(db: Db, slugs: readonly string[]): Promise<readonly string[]> {
   const rows = await db.subject.findMany({
     where: { slug: { in: [...slugs] } },
     select: { id: true },
   });
   return rows.map((r) => r.id);
 }
+
+/** @deprecated Renamed. Use `subjectIdsFor` — the old name did not say what it converted. */
+const idsFor = subjectIdsFor;
 
 async function explainEmpty(
   db: Db,

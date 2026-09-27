@@ -44,6 +44,17 @@ FROM deps AS build
 COPY . .
 # Prisma's engine also needs a compiler-compatible toolchain in the build stage on some
 # hosts; the runtime image gets the generated client, not the engine toolchain.
+# SCHEMA_GATE_ALLOW_NO_DB=1 — and read the gate's banner if you see one.
+#
+# The schema gate's drift check replays prisma/migrations in a scratch database. There is no
+# Postgres and no docker-in-docker in this build stage, so the check cannot run here and a
+# database-less container build is exactly the case the flag exists for.
+#
+# It is opt-IN, so a developer machine and a CI job — both of which have a database — keep the
+# check. The alternative, making the check pass by default when it cannot run, is the failure
+# mode this whole check was written to prevent: it would have looked like protection in every
+# build and protected nothing in this one.
+ENV SCHEMA_GATE_ALLOW_NO_DB=1
 RUN pnpm run gates                      # schema · board · invariants · pinning · bundle
 RUN pnpm --filter @orrery/db db:generate
 RUN pnpm run build

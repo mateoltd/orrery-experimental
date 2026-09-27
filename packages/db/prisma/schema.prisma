@@ -310,6 +310,21 @@ enum Visibility {
 
 model Resource {
   id         String         @id @default(uuid(7))
+  // P3-T4 discovery facets. `plans/05` §6 asks to facet by "grade range" and "language"; the
+  // underlying columns did not exist and the plans define no grade model anywhere, so the
+  // naming is settled here rather than invented in a query layer.
+  //
+  // LANGUAGE mirrors `Question.language` exactly ('en-GB' default) rather than inventing a
+  // second convention, because a resource and the questions inside it being in different
+  // languages is a bug nobody would think to look for.
+  language   String         @default("en-GB")
+  // AGE, not grade. "Grade" is a string in every jurisdiction ("Year 7", "Grade 5", "7th
+  // grade") and a RANGE over strings cannot be compared or bucketed; age is numeric and
+  // universal, and every jurisdiction's grade maps onto an age band. A facet can label these
+  // however the deployment likes; the stored range stays numeric. Both nullable, because a
+  // resource nobody has aged yet is a real state and a sentinel age would be a lie.
+  minAge     Int?
+  maxAge     Int?
   tenantId   String?
   ownerId    String
   owner      User           @relation(fields: [ownerId], references: [id], onDelete: Restrict)
@@ -330,6 +345,19 @@ model Resource {
   archivedAt  DateTime? @db.Timestamptz(3)
   publishedAt DateTime? @db.Timestamptz(3)
 
+  // P3-T4. DENORMALISED search inputs, maintained by the application.
+  //
+  // `searchVector` below is a generated column over these four, so the WEIGHTS cannot drift
+  // from the plan. These two are the only hand-maintained part, and they are the denormalisation
+  // that the generated column makes necessary: a stored `tsvector` cannot join a join table, so
+  // the tag names and the flattened body have to be columns of the same row.
+  //
+  // They can go stale, and `reindexResource` is the repair. That is a real cost and it is
+  // recorded rather than hidden: every code path that changes tags or the current version must
+  // call it, and the integration suite corrupts a row deliberately to prove the repair works.
+  tagText     String?
+  bodyText    String?
+
   versions    ResourceVersion[] @relation("VersionChain")
   tags        ResourceTag[]
   assignments Assignment[]
@@ -338,9 +366,67 @@ model Resource {
   comments    Comment[]
 
   @@unique([ownerId, slug])
+  // `title > summary > tags > body`, as `plans/05` §6 specifies, as WEIGHTS A > B > C > D baked
+  // into the stored vector.
+  //
+  // READ THIS BEFORE EDITING. The column is a Postgres GENERATED ALWAYS ... STORED column,
+  // created in migration 0007 — Prisma's `@default(dbgenerated())` emits `DEFAULT <expr>` and
+  // Postgres refuses a column reference in a DEFAULT, so a generated column cannot be expressed
+  // through Prisma's schema language at all.
+  //
+  // The expression below is therefore POSTGRES'S CANONICAL FORM for that generated column,
+  // obtained from `pg_get_expr` on the live database and not written by hand. It is here so
+  // that Prisma's model of the column matches the migration history and the schema gate's
+  // drift check stays usable; written any other way, the two disagree over whitespace and casts
+  // and the gate reports a difference that is pure formatting.
+  //
+  // The consequence to know about: if Prisma ever decides to ALTER this column it will emit
+  // `DEFAULT <this expression>`, which Postgres will reject. That is the correct outcome — it
+  // means the change goes through migration 0007's comment instead of being applied silently.
+  // A trigger is the fallback and is a two-line change, not a redesign.
+  searchVector Unsupported("tsvector")? @default(dbgenerated("(((setweight(to_tsvector('english'::regconfig, COALESCE(title, ''::text)), 'A'::\"char\") || setweight(to_tsvector('english'::regconfig, COALESCE(summary, ''::text)), 'B'::\"char\")) || setweight(to_tsvector('english'::regconfig, COALESCE(\"tagText\", ''::text)), 'C'::\"char\")) || setweight(to_tsvector('english'::regconfig, COALESCE(\"bodyText\", ''::text)), 'D'::\"char\"))"))
+
+
+
   @@index([kind, status, visibility, updatedAt])
   @@index([subjectId, kind, status])
   @@index([tenantId, status])
+  @@index([language])
+  @@index([minAge, maxAge])
+  // The vector index. GIN, because the access pattern is `@@` containment rather than ordering.
+  @@index([searchVector], type: Gin)
+  // The trigram index for the fallback. `gin_trgm_ops` serves the `ILIKE '%term%'` and
+  // `similarity()` the fallback actually issues; a plain btree cannot serve a leading wildcard.
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([summary(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([tagText(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+/// A search that matched nothing.  (P3-T4, plans/05 §6)
+model ZeroResultQuery {
+  id String @id @default(uuid(7))
+
+  /// The NORMALISED term, lowercased and whitespace-collapsed. The plan asks for exactly this
+  /// and not the raw string, and the reason it matters is that a search box is one of the two
+  /// places a user types a name that is not meant to become a record. Normalisation collapses
+  /// "Wave  Optics " and "wave optics" into one row, which is what the aggregation wants anyway.
+  term String
+
+  /// Never the raw query. Kept as a comment on the model rather than a column, because the
+  /// temptation to add one is exactly when a search log becomes a list of what people typed.
+  subjectSlug String?
+  kind        String?
+  tags        Json?
+
+  /// Correlates a zero-result with the request that produced it, so one visitor's repeated
+  /// misses can be told from forty different people each missing once — which are opposite
+  /// commissioning signals and indistinguishable without this.
+  requestId String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([term, createdAt])
+  @@index([createdAt])
 }
 
 // INV-CONTENT-1: write-once. packages/db exposes createResourceVersion and NO content
