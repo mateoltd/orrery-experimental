@@ -19,6 +19,14 @@
     "./blocks/fixtures": {
       "types": "./dist/blocks/fixtures.d.ts",
       "default": "./dist/blocks/fixtures.js"
+    },
+    "./render": {
+      "types": "./dist/render/index.d.ts",
+      "default": "./dist/render/index.js"
+    },
+    "./render/escape": {
+      "types": "./dist/render/escape.d.ts",
+      "default": "./dist/render/escape.js"
     }
   },
   "scripts": {
@@ -28,6 +36,14 @@
     "clean": "rm -rf dist *.tsbuildinfo coverage"
   },
   "dependencies": {
+    "katex": "0.16.22",
     "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/katex": "0.16.7",
+    "@types/node": "22.10.2",
+    "jest-axe": "10.0.0",
+    "jsdom": "26.1.0",
+    "vitest": "3.2.7"
   }
 }
