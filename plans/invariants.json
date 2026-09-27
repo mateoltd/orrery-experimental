@@ -228,6 +228,18 @@
       "enforcedFrom": "P5",
       "files": ["packages/db/src/slots.ts"],
       "gates": []
+    },
+    {
+      "id": "INV-VISIBILITY-1",
+      "summary": "A resource a viewer may not see is 404 and never enters a shared cache: the read decision is re-made by packages/auth on every read, a denied read is indistinguishable from absence, and only PUBLIC published content gets a cacheable response whose key includes the visibility tier, owner and version.",
+      "status": "active",
+      "enforcedFrom": "P2",
+      "files": [
+        "packages/auth/src/matrix.ts",
+        "packages/auth/src/resources.ts",
+        "packages/contracts/src/lifecycle/index.ts"
+      ],
+      "gates": ["gate:authz", "test"]
     }
   ]
 }

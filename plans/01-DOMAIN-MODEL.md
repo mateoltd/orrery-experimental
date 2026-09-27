@@ -60,7 +60,33 @@ Entities, state machines, invariants, and the permission matrix. The Prisma sche
 `kind ∈ {LESSON, QUIZ, EXAM}`. Quiz and exam are the same object with different runtime policy; the distinction selects defaults and UI, not the data shape. One code path means one set of bugs.
 
 - `currentVersionId` → the working draft head.
-- `visibility ∈ {PRIVATE, UNLISTED, PUBLIC}`; `status ∈ {DRAFT, PUBLISHED, ARCHIVED}`.
+- `visibility ∈ {PRIVATE, UNLISTED, PUBLIC}`; `status ∈ {DRAFT, PUBLISHED, ARCHIVED, WITHDRAWN}`.
+
+`WITHDRAWN` is an addition made by P2-T8, which asked for "DRAFT → PUBLISHED → ARCHIVED plus
+WITHDRAWN" while this list held only the first three. `WITHDRAWN` is also an `Assignment` status
+in §3.x, so the packet was conflating two lifecycles. The state is nonetheless needed and
+`ARCHIVED` does not cover it: `ARCHIVED` means *no longer current*, whereas `WITHDRAWN` means
+*was published, has been found wrong, and must stop being visible to students immediately* —
+while every grade and submission referencing it stays valid, because a student's mark cannot be
+invalidated by an author fixing a typo afterwards. Folding it into `ARCHIVED` means a correction
+either stays visible to students or is hidden by archiving, which also breaks the version chain.
+`WITHDRAWN` is not restorable to `PUBLISHED` directly; it returns to `DRAFT`, so the author has
+looked at it again.
+
+### INV-VISIBILITY-1
+> A resource the viewer may not see is **404**, not 403, and **never enters a shared cache**. The
+> read decision is re-made on every read; a denied read is indistinguishable from absence; and
+> only `PUBLIC` published content gets a cacheable response, whose key includes the visibility
+> tier, owner and version.
+
+Enforced in code: the decision is `Resource.read` in the `packages/auth` matrix, so it is
+re-evaluated at each call rather than trusted from a write. The `notVisible` deny code maps to
+404 and every other deny maps to 403, so the distinction is carried by the code rather than by a
+boolean a rule author can set wrongly. `cacheKey(resource, cacheable)` in
+`packages/contracts` takes **no viewer** and returns `null` unless the decision said cacheable,
+so the key is structurally incapable of disagreeing with the permission decision. A denied read
+and an absent read are asserted to be equal. `UNLISTED` collapses only in `visibleInSearch`,
+which is the single place that knows about listings.
 
 ### 3.2 `ResourceVersion`
 
@@ -345,6 +371,7 @@ The full event table with severities and strike eligibility is in `09-EXAM-INTEG
 | INV-ABUSE-1 | Aggregate abuse limits are keyed on the **actor**, never the container | `P4-T3` + test |
 | INV-QUOTA-1 | Every write path storing user-controlled bytes has a quota enforced in the storing transaction | `P2-T6` + test |
 | INV-MIGRATE-1 | No stored block requires a human to fix it; every readable version migrates forward or publishing is refused | `P2-T1b`, `P2-T10` |
+| INV-VISIBILITY-1 | A resource the viewer may not see is 404 and never shared-cached; the read decision is re-made on every read | `P2-T8` |
 | INV-SLOT-1 | An `AssessmentSlot` list and the `Question` rows it references agree, verified at publish | `P5-T12` + test |
 
 These four were added by the P0-T9 risk review (`24-P0-RISK-REVIEW.md` MISSED-1/2/3 and

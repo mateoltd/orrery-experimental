@@ -112,7 +112,26 @@ export const IMPLEMENTED_TYPES = [
   'Classroom',
   'Enrollment',
   'Invitation',
+  // P2-T8. The read-permission re-check is the one place a visibility decision is made, and
+  // it is made HERE rather than in the content layer — the authz-ownership gate caught that
+  // instinct, correctly.
+  'Resource',
 ] as const satisfies readonly ResourceType[];
+
+/**
+ * The lifecycle vocabulary, restated rather than imported.
+ *
+ * `@orrery/contracts` exports the same two unions for its state machine, and the duplication
+ * is deliberate: `packages/auth` does not depend on the content layer, and — more importantly —
+ * auth must be able to DENY on a status it does not recognise. Importing the type would make
+ * the compiler promise that every value arriving from outside is one of four strings, and the
+ * one that is not is exactly the value a malformed row or a future status would carry.
+ */
+export const RESOURCE_LIFECYCLE_STATUSES = ['DRAFT', 'PUBLISHED', 'ARCHIVED', 'WITHDRAWN'] as const;
+export type ResourceLifecycleStatus = (typeof RESOURCE_LIFECYCLE_STATUSES)[number];
+
+export const RESOURCE_VISIBILITIES = ['PRIVATE', 'UNLISTED', 'PUBLIC'] as const;
+export type ResourceVisibility = (typeof RESOURCE_VISIBILITIES)[number];
 
 /**
  * The union of implemented types, published from HERE.
@@ -135,6 +154,16 @@ export type DenyCode =
   | 'lastActorMfa'
   | 'immutable'
   | 'notOwner'
+  /**
+   * "You may not know that this exists."  (plans/14 §3)
+   *
+   * A DISTINCT code rather than reusing `roleForbidden`, because the two map to different HTTP
+   * statuses and conflating them loses the only thing separating them: `roleForbidden` is a
+   * 403 for something the viewer already knows about, `notVisible` is a 404 that is
+   * indistinguishable from absence. A 403 on a private resource tells an attacker that the id
+   * they guessed is real, and a directory of guessed ids is a directory of the system.
+   */
+  | 'notVisible'
   | 'suspended'
   | 'reviewerForbidden';
 
@@ -205,6 +234,15 @@ export interface Subject {
    * that says so, which is the entire reason that test exists.
    */
   readonly forUserId?: string;
+  /**
+   * Resource lifecycle. Read by the Resource rules only; every other type ignores these, and
+   * the D-14 totality test is what proves a type without rules for an action never reaches a
+   * rule that would have read them.
+   */
+  readonly lifecycleStatus?: ResourceLifecycleStatus;
+  readonly visibility?: ResourceVisibility;
+  /** Classrooms this resource is shared into, as a SET so membership is a lookup not a scan. */
+  readonly sharedClassroomIds?: ReadonlySet<string>;
 }
 
 export interface Context {

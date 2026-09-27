@@ -23,14 +23,16 @@
  */
 
 import { deny, grant } from './decide.js';
-import type {
-  Action,
-  Decision,
-  DenyCode,
-  ImplementedResourceType,
-  Role,
-  Rule,
-  RuleInput,
+import {
+  type Action,
+  type Decision,
+  type DenyCode,
+  type ImplementedResourceType,
+  RESOURCE_LIFECYCLE_STATUSES,
+  RESOURCE_VISIBILITIES,
+  type Role,
+  type Rule,
+  type RuleInput,
 } from './types.js';
 
 /**
@@ -450,12 +452,143 @@ const invitationRules: Record<Action, Rule> = {
  * `can()` that quietly returns `unknownPair` at runtime for a type the author believed was
  * covered.
  */
+
+/** True when the actor is in ANY classroom this resource is shared into. */
+const sharesWith = (i: RuleInput): boolean => {
+  const shared = i.subject.sharedClassroomIds;
+  const mine = i.context?.actorClassroomIds;
+  if (!shared || !mine) return false;
+  for (const c of shared) if (mine.has(c)) return true;
+  return false;
+};
+
+const isAdmin = (i: RuleInput): boolean => i.actor.roles.includes('platformAdmin');
+const mayManage = (i: RuleInput): boolean =>
+  i.actor.roles.includes('teacher') || i.actor.roles.includes('platformAdmin');
+
+/**
+ * Is this resource visible to this actor AT ALL?  (P2-T8)
+ *
+ * The order is the design. Status before visibility, because a resource can be both PRIVATE
+ * and WITHDRAWN and "you are the owner" must not become a way to see a withdrawn resource
+ * while it is being corrected — except for the owner, who is the one fixing it.
+ *
+ * The four `notVisible` denies at the end are the ones that matter most: an UNRECOGNISED status
+ * or visibility denies rather than defaulting to a tier. A default branch here would be the
+ * exact failure this matrix was built to prevent — a new status shipped in a migration and not
+ * yet in this list would otherwise inherit PUBLIC.
+ */
+const resourceVisible = (i: RuleInput): boolean => {
+  if (i.actor.suspended && !isAdmin(i)) return false;
+
+  const status = i.subject.lifecycleStatus;
+  const visibility = i.subject.visibility;
+  // Deny on anything UNRECOGNISED, not merely on anything undefined.
+  //
+  // The first version of this checked `status === undefined` and then fell through to the
+  // visibility branches — so `{ status: 'IN_REVIEW', visibility: 'PUBLIC' }` returned TRUE and
+  // was world-readable. `undefined` and "a value I do not recognise" are the same danger, and
+  // the second is the one a migration produces. A status added by a migration before this list
+  // is updated would otherwise be silently PUBLIC, and the symptom would be a content leak
+  // reported by somebody's parent.
+  //
+  // Membership is checked against the LISTS in `types.ts` rather than a `switch`, so adding a
+  // status to the vocabulary cannot leave a stale deny here: the exhaustive switch would
+  // compile, this cannot.
+  if (status === undefined || !RESOURCE_LIFECYCLE_STATUSES.includes(status)) return false;
+  if (visibility === undefined || !RESOURCE_VISIBILITIES.includes(visibility)) return false;
+
+  if (status === 'WITHDRAWN') return isOwner(i) || isAdmin(i);
+  if (status === 'DRAFT') return isOwner(i) || isAdmin(i);
+
+  if (visibility === 'PUBLIC') return true;
+  // UNLISTED and PRIVATE differ ONLY in search (see `visibleInSearch`), not in readability.
+  return isOwner(i) || isAdmin(i) || sharesWith(i);
+};
+
+const resourceRules: Record<Action, Rule> = {
+  // ALL 22 written out, not `...notAvailable`. The spread looks tidier and is a trap twice
+  // over: placed last it OVERWRITES the explicit rules above it, silently reducing the whole
+  // type to a blanket deny, and placed first it makes a future key in `notAvailable` apply to
+  // Resource without anyone deciding that. Both happened here in the same afternoon.
+  create: (i) => (mayManage(i) ? grant(['audit']) : deny('roleForbidden')),
+
+  // A permission checked on write is not a permission. This is the re-check `plans/05` and the
+  // P2-T8 packet both demand, and it is a RULE rather than a call site so it cannot be
+  // forgotten at the one endpoint somebody adds in P3.
+  read: (i) => (resourceVisible(i) ? grant([]) : deny('notVisible')),
+
+  // Content edits: owner or admin, and only on something they can see.
+  update: (i) => {
+    if (!resourceVisible(i)) return deny('notVisible');
+    return isOwner(i) || isAdmin(i) ? grant(['audit']) : deny('notOwner');
+  },
+
+  // Deleting removes a colleague's work, so it needs the role AND the ownership, and it
+  // carries a reason: a resource cannot be un-deleted, so "why did this disappear" needs an
+  // answer. Same reasoning as `Classroom.delete`.
+  delete: (i) => {
+    if (!resourceVisible(i)) return deny('notVisible');
+    if (!mayManage(i)) return deny('roleForbidden');
+    if (!isOwner(i) && !isAdmin(i)) return deny('notOwner');
+    return grant(['audit', 'reasonRequired']);
+  },
+
+  // Lifecycle is ROLE-gated, never ownership-gated. `Resource` is teacher-authored in plans/01
+  // and students author `SimDraft`, so a student holding a Resource is an invariant violation
+  // and this denies rather than repairs. The first version let `delete` fall through to the
+  // ownership check, which would have let a student delete a resource they somehow owned — and
+  // that bug is invisible in review, because `canEdit` genuinely does grant part of it.
+  publish: (i) => {
+    if (!resourceVisible(i)) return deny('notVisible');
+    if (!mayManage(i)) return deny('roleForbidden');
+    return isOwner(i) || isAdmin(i) ? grant(['audit']) : deny('notOwner');
+  },
+
+  // ── Actions that mean nothing on a Resource, denied individually ──
+  //
+  // A shared `deny()` helper would be shorter and would hide the reasoning, which is the part
+  // worth having. Each group below says WHY in one line, so a future reader asking "why can a
+  // resource not be graded?" gets an answer rather than a shrug.
+
+  // A Resource is content, not an assessment. The assessment surface is Assignment/ExamAttempt.
+  assign: () => deny('roleForbidden'),
+  start: () => deny('roleForbidden'),
+  // `save` is a student-side autosave verb; a student's draft is a SimDraft, not a Resource.
+  save: () => deny('roleForbidden'),
+  submit: () => deny('roleForbidden'),
+  grade: () => deny('roleForbidden'),
+  // Releasing RESULTS is `ReleaseBatch`, keyed on an Assignment. A Resource has no results.
+  release: () => deny('roleForbidden'),
+  // Integrity evidence is about a student's attempt, never about a piece of content. Denying
+  // this is what stops a teacher reading the telemetry about their own class.
+  viewEvidence: () => deny('reviewerForbidden'),
+  void: () => deny('roleForbidden'),
+  excuse: () => deny('roleForbidden'),
+  regrade: () => deny('roleForbidden'),
+  // Roster actions are classroom-shaped. A Resource is shared into a classroom; it does not
+  // hold one, so inviting somebody to a "resource" is a category error, not a missing feature.
+  invite: () => deny('roleForbidden'),
+  removeMember: () => deny('roleForbidden'),
+  changeRole: () => deny('roleForbidden'),
+  importRoster: () => deny('roleForbidden'),
+  // Export is a whole-document operation, not a per-resource one, and it is handled by the
+  // export/delete-queue path under `User.export`. Granting it here would hand out the
+  // capability to extract one child's history from a single content row.
+  export: () => deny('roleForbidden'),
+  // A platform admin impersonating a teacher to check a Resource would be impersonating the
+  // one role whose ownership grants visibility. Denied outright.
+  impersonate: () => deny('roleForbidden'),
+  suspend: () => deny('roleForbidden'),
+};
+
 export const MATRIX = {
   User: userRules,
   Asset: assetRules,
   Classroom: classroomRules,
   Enrollment: enrollmentRules,
   Invitation: invitationRules,
+  Resource: resourceRules,
   // Keyed on `IMPLEMENTED_TYPES`, not on the full `ALL_RESOURCE_TYPES` list.
   //
   // Keying on all 22 would be nice — it would make an unimplemented type a compile error —
@@ -482,6 +615,7 @@ export const OVERRIDDEN_ACTIONS_ARE_EXPLICIT = ['create', 'read', 'update', 'del
 export const CONSUMERS_OF_NOT_AVAILABLE: Readonly<Record<string, Record<Action, Rule>>> = {
   Enrollment: enrollmentRules,
   Invitation: invitationRules,
+  Resource: resourceRules,
 };
 
 /** All cells, flattened. `(action, type)` pairs — the totality domain. */

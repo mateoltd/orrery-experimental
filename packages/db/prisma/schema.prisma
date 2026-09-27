@@ -279,6 +279,20 @@ enum ResourceStatus {
   DRAFT
   PUBLISHED
   ARCHIVED
+  /// `plans/01` §Resource lists only {DRAFT, PUBLISHED, ARCHIVED}, and the P2-T8 packet asks for
+  /// WITHDRAWN "plus" those. WITHDRAWN belongs to Assignment in the plan, so the packet is
+  /// conflating two lifecycles — but the need behind it is real and ARCHIVED does not cover it.
+  ///
+  /// ARCHIVED means "no longer current". WITHDRAWN means "was published, has been found
+  /// wrong, and must stop being visible to students IMMEDIATELY" — while every grade and
+  /// submission that references it stays valid, because a student's mark cannot be invalidated
+  /// by the author fixing a typo afterwards.
+  ///
+  /// Collapsing WITHDRAWN into ARCHIVED would mean a correction either (a) stays visible to
+  /// students, or (b) is hidden by archiving, which also breaks the version chain and every
+  /// reference to it. Neither is acceptable, so the state exists and the discrepancy with
+  /// plans/01 is recorded here rather than silently resolved.
+  WITHDRAWN
 }
 
 enum Visibility {

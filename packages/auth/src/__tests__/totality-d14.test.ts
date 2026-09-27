@@ -94,22 +94,24 @@ describe('the real matrix, after the classroom types were added', () => {
     for (const t of IMPLEMENTED_TYPES) expect(known.has(t), t).toBe(true);
   });
 
-  it('has grown by exactly the three classroom types', () => {
+  it('has grown by exactly the three classroom types and Resource', () => {
     // Pinned so a future extension is a deliberate, visible change rather than a diff that
-    // happens to include a type.
-    expect(IMPLEMENTED_TYPES).toHaveLength(5);
+    // happens to include a type. P2-T8 added `Resource`, which is the type the read-permission
+    // re-check lives on.
+    expect(IMPLEMENTED_TYPES).toHaveLength(6);
     expect([...IMPLEMENTED_TYPES].sort()).toEqual([
       'Asset',
       'Classroom',
       'Enrollment',
       'Invitation',
+      'Resource',
       'User',
     ]);
   });
 
-  it('is now five types x 22 actions = 110 rules, each a distinct function', () => {
+  it('is now six types x 22 actions = 132 rules, each a distinct function', () => {
     const all = [...cells()];
-    expect(all).toHaveLength(110);
+    expect(all).toHaveLength(132);
     // Distinctness: a copy-pasted rule across two actions is a bug that no cell-existence
     // test can see, and `grade` accidentally equal to `submit` is exactly that bug.
     const byAction = new Map<Action, Set<Rule>>();
