@@ -40,6 +40,8 @@
 import type { Block, ContentDocument, TextRun } from '../blocks/index.js';
 import { type ValidationIssue, validateDocument } from '../blocks/index.js';
 import { LATEST_VERSION, migrateBlocks } from '../blocks/migrate.js';
+import { canonicalJson } from '../editor/canonical.js';
+import { MAX_BLOCKS_BYTES } from '../media/index.js';
 import { classifyUrl } from '../render/escape.js';
 import { renderMath } from '../render/index.js';
 
@@ -217,7 +219,33 @@ export function validateForPublish(input: ValidateInput): Checklist {
   const doc = parsed.document;
   const blocks = doc.blocks;
 
-  // ── 2. Is there anything in it ──
+  // ── 2. The publish-time size cap. NOT an authoring-time cap ──
+  //
+  // `plans` is explicit that writing is unconstrained and only publishing is gated, and the
+  // reason is worth keeping: an author who is 2.1 MB into a lesson and cannot save has lost
+  // work, whereas an author who is told at PUBLISH time that it is a collection of lessons has
+  // learned something true about their own material. The cap is a statement about the product's
+  // shape, not a limit on typing.
+  {
+    const bytes = canonicalJson(doc).length;
+    if (bytes > MAX_BLOCKS_BYTES) {
+      issues.push(
+        issue({
+          rule: 'tooBig',
+          severity: 'blocker',
+          message: `This resource is ${(bytes / 1_000_000).toFixed(1)} MB, over the ${(MAX_BLOCKS_BYTES / 1_000_000).toFixed(0)} MB limit for one resource.`,
+          why: 'A resource over the limit is a collection of resources. Splitting it makes each part findable, and makes a student downloading one lesson download one lesson. You can keep writing — this is only checked when you publish.',
+          where: 'the whole resource',
+          blockId: null,
+          anchor: null,
+          fix: null,
+          how: 'Split it into several resources and link them, or move the reference material into the simulation catalogue and embed it.',
+        }),
+      );
+    }
+  }
+
+  // ── 3. Is there anything in it ──
   if (blocks.length === 0) {
     issues.push(
       issue({
@@ -234,7 +262,7 @@ export function validateForPublish(input: ValidateInput): Checklist {
     );
   }
 
-  // ── 3. Per-block checks ──
+  // ── 4. Per-block checks ──
   //
   // Every check here is REACHABLE: it fires on a document that has already parsed against the
   // current schema. Most of what the schema can express is therefore already enforced, and a

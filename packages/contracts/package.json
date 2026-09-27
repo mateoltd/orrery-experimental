@@ -47,6 +47,10 @@
     "./diff": {
       "types": "./dist/diff/index.d.ts",
       "default": "./dist/diff/index.js"
+    },
+    "./media": {
+      "types": "./dist/media/index.d.ts",
+      "default": "./dist/media/index.js"
     }
   },
   "scripts": {

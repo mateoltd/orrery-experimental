@@ -78,6 +78,13 @@ model User {
 
   // lifecycle
   deletingAt      DateTime? @db.Timestamptz(3)
+  // INV-QUOTA-1. BigInt, not Int: 2^31 bytes is 2 GB, and a school's shared account would cross
+  // that on one term of uploaded photographs. `storageUsedBytes` is only ever moved by the
+  // conditional UPDATE in `quota.ts`, never read-then-written. The default is 1 GB and it is
+  // asserted equal to `DEFAULT_QUOTA_BYTES` in the quota test, because "the default" living in
+  // two places is how a migration and a new account end up with different limits.
+  storageQuotaBytes BigInt @default(1000000000)
+  storageUsedBytes  BigInt @default(0)
   deletedAt       DateTime? @db.Timestamptz(3)
   anonymisedAt    DateTime? @db.Timestamptz(3)
   // When the suspension happened, as well as why. The lifecycle policy has always written

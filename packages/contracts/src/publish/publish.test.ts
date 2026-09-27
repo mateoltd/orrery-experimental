@@ -436,3 +436,35 @@ describe('individual rules', () => {
     expect(issue?.how).toContain('surprise');
   });
 });
+
+describe('the publish-time size cap', () => {
+  it('refuses a resource over 2 MB, and says a 3 MB lesson is a collection of lessons', () => {
+    // The packet's done-when. Measured with `canonicalJson`, not `JSON.stringify`, because a
+    // key-order-dependent measurement would make the cap fire at a different point on a
+    // different day.
+    const big = {
+      schemaVersion: 1,
+      title: 'Huge',
+      authorId: '55555555-5555-4555-8555-555555555555',
+      // 2000 blocks, which is the schema's own maximum, at 1 100 bytes each. The first version
+      // used 4000 blocks and the SCHEMA rejected it before the size check ever ran -- so the test
+      // was asserting the wrong error and would have kept passing if the cap were deleted.
+      blocks: Array.from({ length: 2000 }, (_, i) => ({
+        type: 'paragraph',
+        id: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+        content: [{ text: 'x'.repeat(1100) }],
+      })),
+    };
+    const result = validateForPublish({ document: big, schemaVersion: 1 });
+    expect(result.publishable).toBe(false);
+    expect(result.blockers[0]?.message).toContain('over the 2 MB limit');
+    expect(result.blockers[0]?.why).toContain('collection of resources');
+    // And explicitly: writing is not limited, so the message must not sound like a lost draft.
+    expect(result.blockers[0]?.why).toContain('only checked when you publish');
+  });
+
+  it('leaves a small resource alone', () => {
+    const result = validateForPublish(doc([p('A short lesson.')]));
+    expect(result.issues).toEqual([]);
+  });
+});

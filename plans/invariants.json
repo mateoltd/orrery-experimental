@@ -208,11 +208,11 @@
     },
     {
       "id": "INV-QUOTA-1",
-      "summary": "Every user-controlled byte write has a quota in the storing transaction.",
-      "status": "staged",
+      "summary": "Every user-controlled byte write has a quota reserved in the SAME transaction that stores the bytes: a single conditional UPDATE, so a read-then-write race cannot walk past it. Presign checks are advisory.",
+      "status": "active",
       "enforcedFrom": "P2",
-      "files": ["packages/db/src/quota.ts"],
-      "gates": []
+      "files": ["packages/db/src/quota.ts", "packages/db/src/media.ts"],
+      "gates": ["test", "test:integration"]
     },
     {
       "id": "INV-MIGRATE-1",

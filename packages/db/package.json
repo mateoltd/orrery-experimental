@@ -29,6 +29,14 @@
     "./resource-version": {
       "types": "./dist/resource-version.d.ts",
       "default": "./dist/resource-version.js"
+    },
+    "./quota": {
+      "types": "./dist/quota.d.ts",
+      "default": "./dist/quota.js"
+    },
+    "./media": {
+      "types": "./dist/media.d.ts",
+      "default": "./dist/media.js"
     }
   },
   "scripts": {
