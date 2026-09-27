@@ -30,7 +30,7 @@
  */
 
 import type { Block } from '@orrery/contracts/blocks';
-import { useCallback, useId } from 'react';
+import { useCallback } from 'react';
 
 export interface AtomicNodeViewProps<T extends Block = Block> {
   readonly block: T;
@@ -50,7 +50,6 @@ function AtomicShell(props: {
   readonly testId: string;
   children?: React.ReactNode;
 }) {
-  const headingId = useId();
   return (
     /*
      * A PLAIN `<section>`, with no role and no `aria-labelledby`.
@@ -67,9 +66,18 @@ function AtomicShell(props: {
      * on focus. Nothing is lost, and nothing is claimed that is not true.
      */
     <section className="orrery-atomic" data-testid={props.testId}>
-      <h3 id={headingId} className="orrery-atomic__label">
-        {props.label}
-      </h3>
+      {/*
+        NOT A HEADING. This was `<h3>` and axe caught it as a `heading-order` violation, which is
+        the correct catch for two reasons.
+
+        A block card cannot know its heading level. It is inserted wherever the author put it, so
+        a hardcoded `<h3>` is a violation on every insertion that is not preceded by an `<h2>`.
+
+        And a heading is worse than useless here: forty "Table" and "Code" entries in the document
+        outline is a navigation tool that has stopped being one. The label is presentational, and
+        the block's real name is on the Edit control, which is what is actually announced.
+      */}
+      <p className="orrery-atomic__label">{props.label}</p>
       <dl className="orrery-atomic__detail">
         {props.detail.map((line) => (
           <div key={line}>

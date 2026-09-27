@@ -55,6 +55,14 @@
     "./editor/palette": {
       "types": "./dist/editor/palette.d.ts",
       "default": "./dist/editor/palette.js"
+    },
+    "./a11y": {
+      "types": "./dist/a11y/contrast.d.ts",
+      "default": "./dist/a11y/contrast.js"
+    },
+    "./a11y/keymap": {
+      "types": "./dist/a11y/keymap.d.ts",
+      "default": "./dist/a11y/keymap.js"
     }
   },
   "scripts": {
