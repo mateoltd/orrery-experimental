@@ -63,6 +63,10 @@
     "./a11y/keymap": {
       "types": "./dist/a11y/keymap.d.ts",
       "default": "./dist/a11y/keymap.js"
+    },
+    "./taxonomy": {
+      "types": "./dist/taxonomy/index.d.ts",
+      "default": "./dist/taxonomy/index.js"
     }
   },
   "scripts": {
