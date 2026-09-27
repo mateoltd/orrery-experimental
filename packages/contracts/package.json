@@ -39,6 +39,10 @@
     "./editor": {
       "types": "./dist/editor/converter.d.ts",
       "default": "./dist/editor/converter.js"
+    },
+    "./merge": {
+      "types": "./dist/merge/index.d.ts",
+      "default": "./dist/merge/index.js"
     }
   },
   "scripts": {
