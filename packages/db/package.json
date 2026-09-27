@@ -25,6 +25,10 @@
     "./library": {
       "types": "./dist/library.d.ts",
       "default": "./dist/library.js"
+    },
+    "./resource-version": {
+      "types": "./dist/resource-version.d.ts",
+      "default": "./dist/resource-version.js"
     }
   },
   "scripts": {

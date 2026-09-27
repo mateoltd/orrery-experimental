@@ -15,10 +15,13 @@
     {
       "id": "INV-CONTENT-1",
       "summary": "ResourceVersion is write-once; the db layer exposes no content update path.",
-      "status": "staged",
+      "status": "active",
       "enforcedFrom": "P2",
-      "files": ["packages/db/src/resource-version.ts"],
-      "gates": ["test"]
+      "files": [
+        "packages/db/src/resource-version.ts",
+        "packages/db/src/resource-version.no-update.test.ts"
+      ],
+      "gates": ["test", "test:integration"]
     },
     {
       "id": "INV-CLASSROOM-1",

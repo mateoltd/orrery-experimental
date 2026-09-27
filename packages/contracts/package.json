@@ -43,6 +43,10 @@
     "./merge": {
       "types": "./dist/merge/index.d.ts",
       "default": "./dist/merge/index.js"
+    },
+    "./diff": {
+      "types": "./dist/diff/index.d.ts",
+      "default": "./dist/diff/index.js"
     }
   },
   "scripts": {
