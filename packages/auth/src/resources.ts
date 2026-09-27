@@ -109,7 +109,7 @@ export type ActionVerdict = { allowed: true } | { allowed: false; httpStatus: 40
 export function canActOn(
   r: ResourceView,
   actor: Actor,
-  action: 'edit' | 'publish' | 'delete',
+  action: 'edit' | 'publish' | 'delete' | 'transfer',
   actorClassroomIds: readonly string[] = [],
 ): ActionVerdict {
   const decision = ask(action === 'edit' ? 'update' : action, r, actor, actorClassroomIds);

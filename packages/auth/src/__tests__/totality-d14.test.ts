@@ -109,9 +109,9 @@ describe('the real matrix, after the classroom types were added', () => {
     ]);
   });
 
-  it('is now six types x 22 actions = 132 rules, each a distinct function', () => {
+  it('is now six types x 23 actions = 138 rules, each a distinct function', () => {
     const all = [...cells()];
-    expect(all).toHaveLength(132);
+    expect(all).toHaveLength(138);
     // Distinctness: a copy-pasted rule across two actions is a bug that no cell-existence
     // test can see, and `grade` accidentally equal to `submit` is exactly that bug.
     const byAction = new Map<Action, Set<Rule>>();

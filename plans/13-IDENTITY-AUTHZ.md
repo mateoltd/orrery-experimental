@@ -66,7 +66,14 @@ can(actor, action, subject, context?) → Decision
 4. **Carries obligations**, not just a boolean: `{ allowed: true, obligations: ['requireMfa', 'sameClassroom', 'audit'] }`. Services then assert the obligations they depend on, so a permission cannot be granted in one place and relied upon in another.
 
 ### 3.2 The matrix
-Actions: `create`, `read`, `update`, `delete`, `publish`, `assign`, `start`, `save`, `submit`, `grade`, `release`, `viewEvidence`, `void`, `excuse`, `regrade`, `invite`, `removeMember`, `changeRole`, `importRoster`, `export`, `impersonate`, `suspend`.
+Actions: `create`, `read`, `update`, `delete`, `publish`, `assign`, `start`, `save`, `submit`, `grade`, `release`, `viewEvidence`, `void`, `excuse`, `regrade`, `invite`, `removeMember`, `changeRole`, `importRoster`, `export`, `impersonate`, `suspend`, `transfer`.
+
+`transfer` is a P2-T9 addition and was not in the original list. It is the same reasoning that puts
+`changeRole` in its own action rather than folding it into `update`: transferring ownership changes
+who can see a subject, edit it, and answer for it, and folding it into `update` would give every
+"rename this" request the power to hand over somebody's lesson. Real rules exist for `Resource`
+(owner-or-admin, audited, reason required) and `Classroom` (transferable and audited, per §Classroom
+— a teacher's resignation must not leave a class without a teacher). Everything else is denied.
 
 Types: `User`, `Resource`, `ResourceVersion`, `QuestionBank`, `Question`, `QuestionPool`, `Blueprint`, `Classroom`, `Enrollment`, `Invitation`, `Assignment`, `ExamAttempt`, `QuestionResponse`, `IntegrityEvidence`, `ReviewTask`, `ReleaseBatch`, `Asset`, `AuditEvent`, `Simulation`, `SimulationDraft`, `ExternalBinding`.
 

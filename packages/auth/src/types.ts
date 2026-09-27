@@ -51,6 +51,16 @@ export const ACTIONS = [
   'invite',
   'removeMember',
   'changeRole',
+  // P2-T9. NOT in the plan's list of 22, and added anyway.
+  //
+  // The plan already puts `changeRole` in its own action, and the reason it is there rather than
+  // folded into `update` is written down in `matrix.ts`: "changeRole folded into update would be
+  // a way to change a role through the wrong door". Transferring OWNERSHIP is the same species
+  // of thing, and for a resource it is the higher-blast-radius one -- it changes who can see
+  // the content, who can edit it, and who answers for it, for something a live exam may depend
+  // on. Going through `update` would also lose the `audit` obligation that makes the
+  // after-the-fact question "who gave this away, and when" answerable.
+  'transfer',
   'importRoster',
   'export',
   'impersonate',

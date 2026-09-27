@@ -21,6 +21,10 @@
     "./resources": {
       "types": "./dist/resources.d.ts",
       "default": "./dist/resources.js"
+    },
+    "./library": {
+      "types": "./dist/library.d.ts",
+      "default": "./dist/library.js"
     }
   },
   "scripts": {

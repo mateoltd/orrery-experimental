@@ -105,6 +105,12 @@ const userRules: Record<Action, Rule> = {
   importRoster: (i) =>
     i.actor.roles.includes('teacher') ? grant(['audit', 'sameClassroom']) : deny('roleForbidden'),
 
+  // A person is not transferred. Giving this action a rule here would mean transferring an
+  // account, which is either a rename (and so `update`) or an account takeover (and so
+  // impersonation, already separately denied above). The third possibility — changing who a
+  // user IS — is a deletion and a creation, not a transfer.
+  transfer: () => deny('roleForbidden'),
+
   export: (i) =>
     i.actor.roles.includes('platformAdmin') ? grant(['audit']) : deny('roleForbidden'),
 
@@ -194,6 +200,11 @@ const assetRules: Record<Action, Rule> = {
   removeMember: () => deny('roleForbidden'),
   changeRole: () => deny('roleForbidden'),
   importRoster: () => deny('roleForbidden'),
+  // An Asset belongs to whoever uploaded it, and `plans/13` gives assets no owner-transfer
+  // story. Denied explicitly rather than left to inherit a default, so that adding one later is
+  // a visible change rather than a behaviour that appears without anyone writing it.
+  transfer: () => deny('roleForbidden'),
+
   export: (i) =>
     i.actor.roles.includes('platformAdmin') ? grant(['audit']) : deny('roleForbidden'),
   impersonate: () => deny('roleForbidden'),
@@ -333,6 +344,11 @@ export const notAvailable: Record<Action, Rule> = {
   export: () => deny('roleForbidden'),
   impersonate: () => deny('roleForbidden'),
   suspend: () => deny('roleForbidden'),
+  // Blanket deny, and the reason is the hazard rather than a feature gap. `transfer` is
+  // high-blast-radius: it changes who can see a subject, edit it, and answer for it. Folding it
+  // into `update` would hand every "rename this" request the power to hand over somebody's
+  // account or somebody's lesson. Only `Resource` and `Classroom` have real rules.
+  transfer: () => deny('roleForbidden'),
 };
 
 const classroomRules: Record<Action, Rule> = {
@@ -407,6 +423,16 @@ const classroomRules: Record<Action, Rule> = {
   changeRole: () => deny('roleForbidden'),
   importRoster: classroomScoped({ owner: isOwner }),
 
+  // `plans/01` §Classroom: "exactly one `ownerId` (transferable, audited)". So Classroom DOES
+  // transfer, and unlike Resource it is reversible by the same call, which is why it needs no
+  // live-attempt guard: a classroom with students in it can change hands, because a teacher's
+  // resignation must not leave thirty children without a teacher. The new owner gains the
+  // ability to grade and release; the old one loses it immediately, on the next request.
+  transfer: (i) => {
+    if (!isOwner(i) && !isAdmin(i)) return deny('notOwner');
+    return grant(['audit', 'reasonRequired']);
+  },
+
   // Exporting a classroom roster is PII: it is every child's name and email in one document.
   // Owner only, and audited, and it is the action most likely to end up in someone's inbox.
   export: (i) => (isOwner(i) ? grant(['audit']) : deny('notOwner')),
@@ -428,6 +454,11 @@ const enrollmentRules: Record<Action, Rule> = {
 
 const invitationRules: Record<Action, Rule> = {
   ...notAvailable,
+  // An Invitation has no owner to transfer. Re-sending it is a NEW invitation, and accepting it
+  // creates an Enrollment -- which is exactly why the wrong-door hazard is real here: a
+  // "transfer" that quietly re-pointed the invitee would be a way to enroll somebody without
+  // anybody deciding to.
+  transfer: () => deny('roleForbidden'),
   // Inviting is OWNER-only. A student cannot invite, and a teacher cannot invite into a
   // classroom they do not own.
   create: classroomScoped({ owner: isOwner }),
@@ -543,6 +574,28 @@ const resourceRules: Record<Action, Rule> = {
     if (!resourceVisible(i)) return deny('notVisible');
     if (!mayManage(i)) return deny('roleForbidden');
     return isOwner(i) || isAdmin(i) ? grant(['audit']) : deny('notOwner');
+  },
+
+  // Handing a resource to somebody else. Its own action, not `update`, for the reason the plan
+  // already gives for `changeRole`: this is a way to change who is responsible for a subject
+  // that a live exam may pin, and it must not be reachable through the "rename this" door.
+  //
+  // Owner-or-admin, audited, and it REQUIRES A REASON. The reason is the point: a transfer is
+  // the one routine action on content whose absence is hard to detect. Nobody notices a lesson
+  // quietly changing hands — the students in the classroom it is shared into simply stop being
+  // able to edit it — so the audit row has to carry why, or it is a record of a fact and not an
+  // explanation of one.
+  //
+  // The live-attempt guard is NOT here and cannot be: the matrix has no database, so "is an
+  // exam sitting in this right now" is a fact only the db layer can establish. The rule grants
+  // the PERMISSION; `transferOwnership` checks the precondition and refuses. Splitting it this
+  // way is deliberate — a rule that tried to consult a count it cannot see would be a rule that
+  // silently granted the action to everyone.
+  transfer: (i) => {
+    if (!resourceVisible(i)) return deny('notVisible');
+    if (!mayManage(i)) return deny('roleForbidden');
+    if (!isOwner(i) && !isAdmin(i)) return deny('notOwner');
+    return grant(['audit', 'reasonRequired']);
   },
 
   // ── Actions that mean nothing on a Resource, denied individually ──
