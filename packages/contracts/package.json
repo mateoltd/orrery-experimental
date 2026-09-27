@@ -27,6 +27,10 @@
     "./render/escape": {
       "types": "./dist/render/escape.d.ts",
       "default": "./dist/render/escape.js"
+    },
+    "./lifecycle": {
+      "types": "./dist/lifecycle/index.d.ts",
+      "default": "./dist/lifecycle/index.js"
     }
   },
   "scripts": {

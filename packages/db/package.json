@@ -17,6 +17,10 @@
     "./deletion": {
       "types": "./dist/deletion.d.ts",
       "default": "./dist/deletion.js"
+    },
+    "./resources": {
+      "types": "./dist/resources.d.ts",
+      "default": "./dist/resources.js"
     }
   },
   "scripts": {
@@ -34,7 +38,8 @@
   "dependencies": {
     "@orrery/clock": "workspace:*",
     "@orrery/auth": "workspace:*",
-    "@prisma/client": "6.19.3"
+    "@prisma/client": "6.19.3",
+    "@orrery/contracts": "workspace:*"
   },
   "devDependencies": {
     "@node-rs/argon2": "2.0.2",
