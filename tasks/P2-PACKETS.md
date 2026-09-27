@@ -29,6 +29,12 @@ the converter with a round-trip suite over all 16 types against the historical c
 and covers all 16 types, so blocker 2 is *handled* rather than merely counted. Blocker 1 remains
 open and is the next thing to resolve.
 
+### P2-T3c — DONE. THE TRIGGER'S LAST CHECKPOINT CLEARED.
+
+The slash palette and the four React node views shipped, and neither introduced a fourth
+blocker. The kill-switch has therefore never fired at any point in P2, and the fallback editor
+(P2-T11) remains unbuilt insurance rather than a rewrite in progress.
+
 **The next checkpoint for the trigger is P2-T3c** — the slash palette and the React node views
 for the four atomic types. Blocker 1 and blocker 2's silent-null half are both now resolved rather
 than counted, so the standing count is **1** (the P6 manifest, which the trigger's own wording

@@ -51,6 +51,10 @@
     "./media": {
       "types": "./dist/media/index.d.ts",
       "default": "./dist/media/index.js"
+    },
+    "./editor/palette": {
+      "types": "./dist/editor/palette.d.ts",
+      "default": "./dist/editor/palette.js"
     }
   },
   "scripts": {
