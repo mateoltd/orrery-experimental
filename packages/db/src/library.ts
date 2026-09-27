@@ -25,6 +25,7 @@
 
 import { can } from '@orrery/auth/can';
 import type { Actor } from '@orrery/auth/types';
+import { contentChecksum } from '@orrery/contracts/editor';
 import type { PrismaClient, TxClient } from './index.js';
 import { loadResourceView } from './resources.js';
 
@@ -413,7 +414,12 @@ export async function duplicateResource(
         blocks: version.blocks as never,
         // Recomputed from the bytes being copied. Copying the stored checksum would assert
         // "this content is intact" without having checked anything.
-        blocksChecksum: checksumOf(version.blocks),
+        // The CANONICAL checksum, imported rather than reimplemented. The first version of this
+        // file carried a local FNV over `JSON.stringify` and a comment claiming that a test kept
+        // the two implementations in step. There was no such test and no such function in
+        // `contracts` -- the comment described a protection that did not exist, which is worse
+        // than no comment because it stops the next reader looking.
+        blocksChecksum: contentChecksum(version.blocks),
         meta: version.meta as never,
         createdById: input.actor.id,
       },
@@ -431,22 +437,4 @@ export async function duplicateResource(
     });
     return { ok: true, resourceId: newId, versionId: newVersion.id };
   });
-}
-
-/**
- * The checksum the content layer uses, reimplemented here rather than imported.
- *
- * `packages/contracts` has the canonical one, but importing it would make `packages/db` depend on
- * the content layer for a hash, and the two checksum schemes drifting is precisely the failure
- * this function's comment is about. A deliberate narrow duplicate, kept honest by the migration
- * corpus test comparing both.
- */
-function checksumOf(blocks: unknown): string {
-  const json = JSON.stringify(blocks);
-  let h1 = 0x811c9dc5;
-  for (let i = 0; i < json.length; i += 1) {
-    h1 ^= json.charCodeAt(i);
-    h1 = Math.imul(h1, 0x01000193) >>> 0;
-  }
-  return `fnv1a:${h1.toString(16).padStart(8, '0')}`;
 }

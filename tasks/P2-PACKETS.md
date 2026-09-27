@@ -9,6 +9,29 @@
 > - **P2-T3 has consumed 2× its estimate** (2 × 5 days = 10 days) without the happy path working end to end.
 >
 > **Decision-maker: the P2 director, unilaterally, without escalation.** A kill-switch that needs consensus is not a kill-switch.
+
+### P2-T3a status — the trigger has NOT fired, and here is the count
+
+Assessed before writing any editor code, because the trigger is cheaper to evaluate than to trip.
+**Blockers found: 3. The trigger is >3. No 2× estimate has been consumed. The switch is NOT
+fired, and TipTap proceeds.**
+
+| # | Blocker | Verdict | Evidence |
+|---|---|---|---|
+| 1 | Virtualisation vs. focusable handles. The packet requires a 500-block document that stays responsive **and** "every block handle is a real focusable control" / "no keyboard trap anywhere". Virtualisation unmounts off-screen DOM; you cannot focus a control that is not mounted. | **Confirmed conflict, on the critical node work.** No official virtualisation extension exists (`@tiptap-pro/extension-virtual-scroll` → 404), so one of the two requirements has to give. | measured |
+| 2 | The closed union stops being the editor's type. `plans/14` rests the content-XSS argument on it — "a closed block union rendered to HTML we generate. There is no sanitiser to keep patched." | **Confirmed, and now measured.** ProseMirror's node JSON is `{type, attrs:{…}}`; ours is flat. A converter is mandatory both ways, and `attrs` is an unrecognised key under `z.strictObject`, so a straight pass-through is rejected on 100% of blocks. | measured |
+| 3 | The schema-driven simulation side panel needs a P6 `Simulation` manifest, which does not exist. Building it now means inventing P6's shape and leaves the claimed P6-T7 saving unproven. | **Confirmed, but not on the node work** — so it does not count against the trigger. | plan read |
+| — | Bundle cost. | **NOT a blocker.** Exam first load is 99.3 KB against a 250 KB budget (150.7 KB headroom), and the editor is not the exam route. TipTap v3.31.3 installs cleanly against React 19 / Next 15 — 57 packages, no peer conflicts. | measured |
+
+**What P2-T3a built, so the trigger is measurable next time.** `packages/contracts/src/editor/`:
+the converter with a round-trip suite over all 16 types against the historical corpus, and the
+`probe.ts` record of the measurement. The round trip is lossless for every block in the corpus
+and covers all 16 types, so blocker 2 is *handled* rather than merely counted. Blocker 1 remains
+open and is the next thing to resolve.
+
+**The next checkpoint for the trigger is P2-T3b** (the atomic nodes and the drag handles), because
+that is where blocker 1 actually bites. If the handle/virtualisation conflict cannot be resolved
+without breaking one of the two stated requirements, that is blocker 4 and the switch fires.
 >
 > **What is lost:** the slash palette, block drag handles, and the three-way conflict panel, down to their fallback equivalents. `P2-T11` exists precisely so this is a downgrade and not a rewrite.
 >
