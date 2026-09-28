@@ -285,7 +285,7 @@ export async function classroomCanInput(
  * trigger. A permission check that costs an extra round trip per call is a permission check
  * somebody will eventually inline instead of calling.
  */
-async function permit(
+export async function permit(
   db: Db,
   input: ClassroomCanInput,
 ): Promise<

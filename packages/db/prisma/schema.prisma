@@ -896,6 +896,15 @@ model ClassroomInvitation {
   // B17: a per-code failure counter, so a single code cannot be ground down.
   failedAttempts Int           @default(0)
   lockedAt    DateTime?        @db.Timestamptz(3)
+  /// P4-T3. The derivation counter. The code is `HMAC(secret, classroomId || counter)`
+  /// rendered into the alphabet, so regenerating is a COUNTER BUMP -- instant, auditable, and
+  /// it cannot leave the old code alive in somebody's photograph, because there is no old code
+  /// to forget. Rolling `randomBytes` and hoping is the version that leaks.
+  ///
+  /// A code is a BEARER TOKEN for a classroom, so the platform holding only a KEYED hash of it
+  /// is the point: a database leak must not hand out access. See `packages/db/src/invitations.ts`
+  /// for why the hash is a MAC and not a plain digest.
+  codeCounter Int            @default(0)
   status      InvitationStatus @default(PENDING)
   expiresAt   DateTime         @db.Timestamptz(3)
   sentById    String

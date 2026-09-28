@@ -113,55 +113,104 @@ const shadowUrl =
  * here keeps the gate self-contained, because a check that needs a step nobody documented is a
  * check that gets skipped.
  */
+/**
+ * Make sure the shadow database exists, using whatever mechanism this machine actually has.
+ *
+ * ## Why the first version of this was a hardcoded container name
+ *
+ * Because it worked on the machine it was written on. `orrery-postgres-1` is a name
+ * `docker compose` generates, so it is stable only for that compose project on that host. On a
+ * host where the database runs under a different name — or under rootless podman, or not in a
+ * container at all — `sh()` threw, the `catch` returned quietly, and the gate then failed
+ * downstream with `Database orrery_shadow does not exist`, which says nothing about the cause.
+ *
+ * A helper that silently does nothing on the machines it does not recognise is worse than one
+ * that is absent, because the failure it produces looks like a different problem entirely. So
+ * this DISCOVERS the container by matching the port the URL points at, and if it cannot, it
+ * prints the exact command to run.
+ */
 function ensureShadowDatabase(url) {
   const u = new URL(url);
   const target = u.pathname.replace(/^\//, '');
   if (target === '' || target === 'postgres') return;
-  const maintenance = new URL(url);
+
+  // `URL.origin` is the literal string "null" for any scheme that is not http(s) -- which is
+  // every scheme this project uses. The first version built its psql argument from it and
+  // produced `psql "null/postgres"`, so the "create it yourself" message it printed could not
+  // possibly work. Copy the URL and change the path instead, which keeps the scheme, the
+  // credentials and the port.
+  const maintenance = new URL(u.toString());
   maintenance.pathname = '/postgres';
+
+  const exists = `SELECT 1 FROM pg_database WHERE datname='${target}'`;
+  const create = `CREATE DATABASE "${target}"`;
+
+  // 1. A local `psql`, which is the simplest machine and needs no container at all.
   try {
-    sh(
-      'docker',
-      [
-        'exec',
-        '-i',
-        'orrery-postgres-1',
-        'psql',
-        '-U',
-        u.username,
-        '-d',
-        'postgres',
-        '-tAc',
-        `SELECT 1 FROM pg_database WHERE datname='${target}'`,
-      ],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-  } catch {
-    // The container name is not stable, or docker is not running. The diff below will report
-    // the real problem with a better message than anything invented here.
+    const out = sh('psql', [maintenance.toString(), '-U', u.username, '-tAc', exists], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (String(out).includes('1')) return;
+    sh('psql', [maintenance.toString(), '-U', u.username, '-c', create], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    note(`created shadow database ${target} (psql)`);
     return;
-  }
-  try {
-    sh(
-      'docker',
-      [
-        'exec',
-        '-i',
-        'orrery-postgres-1',
-        'psql',
-        '-U',
-        u.username,
-        '-d',
-        'postgres',
-        '-c',
-        `CREATE DATABASE "${target}"`,
-      ],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    note(`created shadow database ${target}`);
   } catch {
-    /* already exists, or no permission; the diff below is the arbiter */
+    /* no psql, or it could not connect. Try the container route. */
   }
+
+  // 2. A container PUBLISHING the port this URL points at. Discovered, not guessed: the port is
+  //    the one fact both the URL and the container agree on.
+  let container = null;
+  try {
+    const ps = sh('docker', ['ps', '--format', '{{.Names}}\t{{.Ports}}'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    for (const line of String(ps).split('\n')) {
+      const [name, ports] = line.split('\t');
+      if (name && ports && ports.includes(`:${u.port}->`)) {
+        container = name.trim();
+        break;
+      }
+    }
+  } catch {
+    /* no docker. The message below is the last word on it. */
+  }
+
+  if (container !== null) {
+    try {
+      const found = sh(
+        'docker',
+        ['exec', '-i', container, 'psql', '-U', u.username, '-d', 'postgres', '-tAc', exists],
+        {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      if (!String(found).includes('1')) {
+        sh(
+          'docker',
+          ['exec', '-i', container, 'psql', '-U', u.username, '-d', 'postgres', '-c', create],
+          {
+            stdio: ['ignore', 'pipe', 'pipe'],
+          },
+        );
+        note(`created shadow database ${target} (container ${container})`);
+      }
+      return;
+    } catch {
+      /* fall through to the message */
+    }
+  }
+
+  console.log(
+    `  ! could not create the shadow database "${target}" automatically.\n` +
+      `  ! Create it once and the gate will use it:\n` +
+      `  !     psql "${maintenance.toString()}" -U ${u.username} -c 'CREATE DATABASE "${target}"'\n` +
+      (container === null
+        ? `  ! (no container publishing port ${u.port} was found, and there is no local psql.)\n`
+        : ''),
+  );
 }
 
 if (!existsSync(migrationsDir)) {

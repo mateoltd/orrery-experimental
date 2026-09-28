@@ -44,7 +44,7 @@ Three things had to be re-established, and each is a portability finding worth k
 |---|---|
 | Commits | 50 (P3-T5 and P3-T6 landed after this file was first written) |
 | Unit tests | **938** (clock 29, ids 10, rng 16, config 48, auth 384, i18n 25, db 8, contracts 274, web 142, worker 5 — approximately; per-package counts shift as suites grow) |
-| Integration tests | **191** across 13 files, real Postgres |
+| Integration tests | **216** across 14 files, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
 | Invariants registered | 29 (8 active) |
@@ -258,12 +258,71 @@ Three findings worth carrying forward:
 |---|---|---|
 | P4-T1 `Classroom` lifecycle, ownership transfer | **DONE** | This commit. Migration `0010_membership_history`. |
 | P4-T2 Membership: roles, removal, leaving, role history | **DONE** | This commit. Append-only `MembershipEvent`. |
-| P4-T3 Invitations: email, bulk, hashed join codes | NOT STARTED | Schema exists; the service does not. |
-| P4-T4 Invitation lifecycle: accept, revoke, expire, resend cooldown | NOT STARTED | |
+| P4-T3 Invitations: email, bulk, hashed join codes | **DONE** | This commit. Migration `0011_invite_codes`. |
+| P4-T4 Invitation lifecycle: accept, revoke, expire, resend cooldown | **DONE** | This commit. |
 | P4-T5 Roster CSV: dry run, error report, idempotent apply | NOT STARTED | `RosterImport` model exists. |
 | P4-T6 Roster UI with per-student summary | NOT STARTED | |
 | P4-T7 Notifications: templates, queue, dedupe, quiet hours | NOT STARTED | `Notification` and `EmailOutbox` are still UNUSED. |
 | P4-T8 Permission matrix tests: every cell of §4 | NOT STARTED | Partial coverage in this commit; the §4 table itself is not yet exhaustive. |
+
+#### P4-T3/T4 detail (complete)
+
+**A join code is a BEARER TOKEN, and every property follows from that.** Anyone holding a code is
+in the room, so the platform holds only a KEYED hash, the code is derived rather than random, it
+expires, regenerating revokes it, failures count against the ROW, and wrong/expired/revoked/locked
+all return the same answer.
+
+  · **MAC, not a plain digest.** 8 symbols from a 25-symbol alphabet is ~47 bits, and an
+    UNKEYED SHA-256 of that is a lookup table anybody holding a stolen table can build offline —
+    so "hashed at rest" is decorative without a key. `packages/auth`'s `hashRecoveryCode` had
+    already made exactly this argument for TOTP recovery codes; the same reasoning applies and
+    the same conclusion is drawn. A deployment-wide salt rather than per-row is deliberate: one
+    stolen table is worth attacking ONCE, not 25^8 times.
+  · **Derived, so regeneration cannot leak.** `HMAC(secret, classroomId ‖ counter)`. Regenerating
+    is a counter bump — instant, auditable, and it cannot leave the old code alive in a
+    photograph because there is no old code to forget. Rolling `randomBytes` and hoping is the
+    version that leaks. Verified by test: a code is a function of the classroom, the counter AND
+    the secret.
+  · **THE ALPHABET IN `plans/01` IS STILL THE ONE B17 REJECTED.** §1 lists
+    `23456789ABCDEFGHJKMNPQRSTUVWXYZ`, which contains both `8`/`B` and both `5`/`S` — the exact
+    contradiction B17 raised, and B17 says it was "FIXED" while the plan text still shows the
+    unfixed alphabet. B17 is authoritative, the alphabet here drops `0/O`, `1/I/L`, `8/B`, `5/S`
+    and `2/Z`, and the test asserts the ABSENCE of each pair rather than trusting a document that
+    has not been corrected. **25 symbols, and the count was wrong in the first version of both
+    the comment and the test (24, because 5 + 20 was done as 5 + 19).** A stated search-space size
+    is a number somebody has to have counted.
+  · **Wrong, expired, revoked, unknown and wrong-secret are ONE answer**, asserted as a set-size
+    of 1 across all five. The cost is real — a legitimate user with an expired code is told it is
+    "not valid" — and it is paid on purpose, because the alternative is an enumeration oracle on a
+    bearer token.
+  · **The failure counter is on the ROW, not the IP**, so a distributed sweep of one code still
+    stops, and the LOCK is a separate sweeper pass. The first version locked inline, which cannot
+    work: the increment and the threshold test are not the same read, so two concurrent guesses
+    would both see 9 and both let the tenth through.
+  · **Accepting is idempotent and transactional.** A double-click must not create two enrollments
+    and must not ERROR either — a second click saying "already a member" reads as a failure to
+    somebody who has just been told they joined.
+
+#### Infrastructure fixed alongside P4-T3/T4
+
+  · **The schema gate's shadow database now CREATES ITSELF, by discovery.** It hardcoded
+    `docker exec orrery-postgres-1`, a name `docker compose` generates and that is therefore
+    stable only for that compose project on that host. Everywhere else the `catch` returned
+    quietly and the gate failed downstream with `Database orrery_shadow does not exist`, which says
+    nothing about the cause. It now tries a local `psql`, then discovers a container by matching
+    the PORT the URL points at, and if neither works prints the exact command to run. **A helper
+    that silently does nothing on the machines it does not recognise is worse than one that is
+    absent**, because the failure it produces looks like a different problem entirely. (Its
+    "create it yourself" message also printed `psql "null/postgres"`, because `URL.origin` is the
+    literal string `"null"` for every scheme this project uses.)
+  · **`_prisma_migrations` had gone missing**, which is why `migrate dev` began reporting that
+    the database was empty of all 58 tables and 26 enums while `migrate diff` said the schema and
+    database were identical. `migrate reset` restored the bookkeeping — and, usefully, REPLAYED
+    every hand-written migration from the files: all four `MembershipEvent` checks, the three
+    `Flag` checks, `Rating_value_range` and the `Resource_public_slug_key` partial index came back,
+    which is a real validation of hand-written SQL that `migrate dev` never performed.
+  · The drift check then immediately caught MY OWN omission — `codeCounter` was in schema.prisma
+    and not in migration 0011. Which is the check doing its job two days after being written.
 
 #### P4-T1/T2 detail (complete)
 
@@ -356,7 +415,7 @@ pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
 pnpm run test           # 938 unit
-pnpm run test:integration   # 191 across 13 files, needs DATABASE_URL
+pnpm run test:integration   # 216 across 14 files, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
 
