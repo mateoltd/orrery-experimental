@@ -8,6 +8,19 @@ the old file, so anything it cannot evidence is marked UNKNOWN rather than guess
 ## How to read this
 
 - Every phase has a status: **DONE**, **IN PROGRESS**, or **NOT STARTED**. Nothing is "mostly done".
+- **The summary tables are AUTHORITATIVE, and this rule exists because they were not.** A task is
+  **DONE** in a summary table only when the commit exists AND its evidence is recorded; a detail
+  section saying "complete" does not make a summary row true. A row reading `DONE` with
+  `*(this commit)*` in the commit column, or a detail section declaring a phase closed while its
+  summary rows still say `NOT STARTED`, is a **defect in this file** — the kind that makes a
+  tracker worth less than no tracker, because the one thing it exists to answer (what is done?)
+  has two answers.
+  - Therefore: a commit hash in the commit column, never `*(this commit)*` — that placeholder is
+    written before the commit exists and is the exact shape the drift took.
+  - A phase moves to **DONE** in the same commit that completes its last task, and the summary
+    rows are rewritten there, not deferred to a later tidy-up.
+  - When a detail section and a summary row disagree, the summary row is the defect. It is the
+    part a reader scans, and a scanned part that lies is worse than no part.
 - A task is DONE only if its code is committed **and** the evidence line lists a passing command.
 - The `UNKNOWN` marker means the evidence needed to decide was lost with the old tracker. Those
   items are listed so they get re-checked, not so they can be quietly treated as done.
@@ -42,7 +55,7 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 50 (P3-T5 and P3-T6 landed after this file was first written) |
+| Commits | 56 |
 | Unit tests | **1020** (auth 413 with 29 new matrix tests, contracts 311, web 158) |
 | Integration tests | **258** across 17 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
@@ -105,8 +118,8 @@ Commits `187fa19` … `82a3ae8`.
 | P3-T2 subject seed | **DONE** | `4750a3c` | 246 subjects (plan said "~120" — recorded, and the gate asserts a *range*). **The gate found nine subjects that were their own parent**, plus nine roots sharing `position: 0`. |
 | P3-T3 public library | **DONE** | `89d9c10` | No anonymous `Actor` by design. `plans/05` §6's **under-18 rule** enforced in SQL. Keyset paging. Four distinguishable empty states. |
 | P3-T4 search, facets, zero-result log | **DONE** | `11e73ed` | Weighted `tsvector` as a generated column. Also **implemented schema-gate check 2**, which had been documented since P0-T4 and never written. |
-| P3-T5 ratings, comments, flagging, takedown SLA | **DONE** | *(this commit)* | Vocabulary, schema, migration, auth rules, moderation service, 29 integration tests. The SLA is a **gate**, not a number in a column. |
-| P3-T6 slugs, canonical URLs, OG images, sitemap | **DONE** | *(this commit)* | `/library/<slug>` with the subject deliberately OUT of the path, a partial unique index for the public namespace, SVG OG cards with three security headers, and a sitemap that is a public surface and is filtered like one. |
+| P3-T5 ratings, comments, flagging, takedown SLA | **DONE** | `2bff89f` | Vocabulary, schema, migration, auth rules, moderation service, 29 integration tests. The SLA is a **gate**, not a number in a column. |
+| P3-T6 slugs, canonical URLs, OG images, sitemap | **DONE** | `460d193` | `/library/<slug>` with the subject deliberately OUT of the path, a partial unique index for the public namespace, SVG OG cards with three security headers, and a sitemap that is a public surface and is filtered like one. |
 
 #### P3-T5 detail (complete)
 
@@ -252,18 +265,22 @@ Three findings worth carrying forward:
     that as a real bug and the diff was zero — the sets were 1890 and 1890 when read together.
     `REPEATABLE READ` in one transaction is the fix, applied to both affected tests.
 
-### P4 — Classrooms, membership, invites, notifications · **IN PROGRESS** (46h est.)
+### P4 — Classrooms, membership, invites, notifications · **DONE** (46h est.)
 
-| Task | Status | Note |
+Commits `b3405c9` … `0d78de6`. Membership is a property of MEMBERSHIP rather than of a global
+role, the roster is a read model that cannot leak an unreleased grade, notifications have exactly
+one opt-out and it governs email only, and §4's table is enforced cell by cell.
+
+| Task | Status | Commit | Note |
 |---|---|---|
-| P4-T1 `Classroom` lifecycle, ownership transfer | **DONE** | This commit. Migration `0010_membership_history`. |
-| P4-T2 Membership: roles, removal, leaving, role history | **DONE** | This commit. Append-only `MembershipEvent`. |
-| P4-T3 Invitations: email, bulk, hashed join codes | **DONE** | This commit. Migration `0011_invite_codes`. |
-| P4-T4 Invitation lifecycle: accept, revoke, expire, resend cooldown | **DONE** | This commit. |
-| P4-T5 Roster CSV: dry run, error report, idempotent apply | **DONE** | This commit. Hand-written RFC 4180 parser, no new dependency. |
-| P4-T6 Roster UI with per-student summary | NOT STARTED | |
-| P4-T7 Notifications: templates, queue, dedupe, quiet hours | NOT STARTED | `Notification` and `EmailOutbox` are still UNUSED. |
-| P4-T8 Permission matrix tests: every cell of §4 | NOT STARTED | Partial coverage in this commit; the §4 table itself is not yet exhaustive. |
+| P4-T1 `Classroom` lifecycle, ownership transfer | **DONE** | `b3405c9` | Migration `0010_membership_history`; cycle-safe rename with a slug-collision retry; ownership transfer restricted to a TEACHER already in the room. |
+| P4-T2 Membership: roles, removal, leaving, role history | **DONE** | `b3405c9` | Append-only `MembershipEvent`. Fixed three P1 matrix bugs: unsatisfiable `sameClassroom` on create, teacher role-management denied, missing `owningClassroomId`. |
+| P4-T3 Invitations: email, bulk, hashed join codes | **DONE** | `edfb36e` | Migration `0011_invite_codes`; 8-character HMAC join codes on a 25-symbol alphabet; keyed hashes; exactly-one-target checks. |
+| P4-T4 Invitation lifecycle: accept, revoke, expire, resend cooldown | **DONE** | `edfb36e` | Idempotent acceptance, revoke, expiry, 10-failure lock, 5-minute resend cooldown, extension, direct add. |
+| P4-T5 Roster CSV: dry run, error report, idempotent apply | **DONE** | `d47f3c8` | Hand-written RFC 4180 parser, **no new dependency** (`plans/00` §RN). 1,000-row import 5,000 ms → 396 ms. The plan's own CSV rule created a bug; `unescapeCsvCell` is the fix. |
+| P4-T6 Roster UI with per-student summary | **DONE** | `e04fe85` | `listRoster` read model + `RosterTable`. An unreleased grade is **never selected**, so there is nothing to leak. The plan asked for dialogs; the codebase bans them, so the requirement is met by naming every person inline. |
+| P4-T7 Notifications: templates, queue, dedupe, quiet hours | **DONE** | `2f45bc2` | Migration `0012_notifications`. `emailOptOut` is the ONLY opt-out, and there is no parameter that can carry it to the in-app path. Quiet hours found by asking `Intl`, so they survive a DST change. |
+| P4-T8 Permission matrix tests: every cell of §4 | **DONE** | `0d78de6` | §4 transcribed as 21 cells and walked by a loop. **Found six bugs**, including four types with no rules at all and `User.read` being self-or-admin. |
 
 #### P4-T8 detail (complete) — P4 IS CLOSED
 
