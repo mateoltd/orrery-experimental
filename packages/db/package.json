@@ -93,6 +93,10 @@
     "./assignment-overrides": {
       "types": "./dist/assignment-overrides.d.ts",
       "default": "./dist/assignment-overrides.js"
+    },
+    "./slots": {
+      "types": "./dist/slots.d.ts",
+      "default": "./dist/slots.js"
     }
   },
   "scripts": {
@@ -108,10 +112,11 @@
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
-    "@orrery/clock": "workspace:*",
     "@orrery/auth": "workspace:*",
-    "@prisma/client": "6.19.3",
-    "@orrery/contracts": "workspace:*"
+    "@orrery/clock": "workspace:*",
+    "@orrery/contracts": "workspace:*",
+    "@orrery/rng": "workspace:*",
+    "@prisma/client": "6.19.3"
   },
   "devDependencies": {
     "@node-rs/argon2": "2.0.2",

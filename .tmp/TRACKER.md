@@ -60,8 +60,8 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 61 |
-| Unit tests | **1059** (auth 436 with 22 new P5-authoring tests, contracts 327, web 158) |
+| Commits | 62 |
+| Unit tests | **1074** (db 23 with 15 new slot tests, auth 436, contracts 327, web 158) |
 | Integration tests | **282** across 19 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
@@ -656,7 +656,7 @@ has a dozen slightly different answers.
 | P5-T6 QuestionBank CRUD | NOT STARTED | | |
 | P5-T7 QuestionPool, four draw strategies, `poolHealth` | NOT STARTED | | |
 | P5-T8 Blueprint + worst-case coverage | NOT STARTED | | |
-| P5-T9 `AssessmentSpec` slots + `variantMap` | NOT STARTED | | |
+| P5-T9 `AssessmentSpec` slots + `variantMap` resolution | **DONE** | *(next commit)* | `packages/db/src/slots.ts`. One draw, one place, per-slot forked streams. | |
 | P5-T10 Publish snapshots every drawable question | NOT STARTED | | |
 | P5-T11 "Too similar" guard | NOT STARTED | | |
 | P5-T13 Interop skeleton, `ExternalBinding` | NOT STARTED | | |
@@ -726,6 +726,48 @@ attempts run to their own deadline and remain submittable. There is no way to ca
 a mode that also cancels somebody's exam. A withdrawn assignment also cannot be re-published,
 because a withdrawal is a statement to students and silently undoing it is worse than doing
 nothing.
+
+#### P5-T9 detail (complete)
+
+**ONE STREAM PER SLOT, AND THE TEST PROVES WHY BY ADDING A SLOT.** A single RNG for the whole
+exam makes each draw depend on every draw before it, so inserting a slot at position 1 shifts
+every draw after it. That is how "fix a typo in question 3" becomes "rewrite the exam for three
+hundred students", and the pinned version stops being pinned in any sense a student would
+recognise. `rng.fork('slot:N')` gives each slot a stream derived from the attempt seed and the
+slot's own position, so slot 4 draws the same four questions whether or not slot 3 exists. The
+test runs 25 seeds, adds a slot, and asserts **zero** movements.
+
+**A DRAW COUNT LARGER THAN THE POOL IS REFUSED, NOT CLAMPED.** Clamping produces a paper with
+fewer questions than the blueprint promised, and a blueprint that silently under-delivers is worse
+than one that refuses to publish. The same reasoning refuses a quota the pool cannot supply.
+
+**A ZERO WEIGHT IS CLAMPED TO 1, NOT DROPPED, AND THE TEST SAYS WHY.** A question authored and
+weighted to nothing is far more likely a mistake than an intent, and dropping it makes the item
+unreachable for a reason nobody wrote down. The assertion is about the SHAPE of the distribution
+over 200 seeds — the heavier item is drawn more often, and all three are reachable — because that
+is the only claim a seed sweep can honestly make.
+
+**`sameVariantMap` IS A FUNCTION BECAUSE A STRINGIFY COMPARISON IS WRONG HERE.** A fresh resolve
+and a parsed snapshot differ in key ORDER, so `JSON.stringify(a) === JSON.stringify(b)` reports
+two identical papers as different — and a real equality check that is always false gets deleted
+rather than fixed.
+
+**THE RESOLUTION ORDER IS BY POSITION, NOT BY ROW ORDER.** Slots come from a database and their
+row order is not guaranteed, so a draw depending on it would give two identical assessments two
+different exams. The test resolves the same slots forwards and reversed and compares.
+
+**AN EMPTY ASSESSMENT IS NOT AN ERROR; AN EMPTY POOL IS.** Zero slots is a legitimate draft with
+no questions in it yet, and refusing to save one would stop an author writing a blueprint. A pool
+with no items is a pool that cannot be drawn from. Treating them alike would trade a real
+inconvenience for a fake safety.
+
+**THE SEED IS AN OPAQUE TYPE SO IT CANNOT BE STORED BY ACCIDENT.** INV-BANK-2 says the map is
+stored and the seed is not, because the seed is the recipe for every paper in the cohort's scheme.
+A `string` would survive a `JSON.stringify` and a log line; an opaque brand makes "somebody stored
+the seed" a type error at the point of storage rather than a review note six months later.
+
+#### P5-T9 evidence
+- 1074 unit (15 new slot tests). 8/8 gates, lint 0, typecheck 0, image builds.
 
 #### P5-T14 detail (complete)
 
@@ -855,7 +897,7 @@ pnpm run build          # must pass before typecheck; tsbuildinfo can go stale
 pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
-pnpm run test           # 1036 unit
+pnpm run test           # 1074 unit
 pnpm run test:integration   # 282 db + 6 worker, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
