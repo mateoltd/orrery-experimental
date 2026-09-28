@@ -31,10 +31,36 @@ const actor = (id: string, roles: readonly Role[]): Actor => ({
 });
 
 /** The context of an action happening INSIDE a classroom. */
-const inClassroom = (classroomId: string, enrolledIn: readonly string[]): Context => ({
+/**
+ * A context that says BOTH that the actor is in the room and what role they hold there.  (P4-T8)
+ *
+ * It took a role argument from nothing, which is the whole point: `actorClassroomIds` is
+ * role-blind, and `plans/12` §4 is not. A test that says "enrolled" and means "enrolled as a
+ * student" is the bug this function makes you write down.
+ */
+const inClassroom = (
+  classroomId: string,
+  enrolledIn: readonly string[],
+  roles: Readonly<Record<string, string>> = {},
+): Context => ({
   scopeClassroomId: classroomId,
   actorClassroomIds: new Set(enrolledIn),
+  actorClassroomRoles: roles,
 });
+
+/** The common case: enrolled in `c-1` AS A STUDENT, which is what a stranger-shaped actor is. */
+const asStudentIn = (classroomId: string, enrolledIn: readonly string[] = [classroomId]): Context =>
+  inClassroom(classroomId, enrolledIn, { [classroomId]: 'STUDENT' });
+
+/** Enrolled as staff in `classroomId`. */
+const asStaffIn = (classroomId: string, enrolledIn: readonly string[] = [classroomId]): Context =>
+  inClassroom(classroomId, enrolledIn, { [classroomId]: 'TEACHER' });
+
+/** Enrolled in `classroomId` as a REVIEWER — staff, and deliberately not a teacher. */
+const asReviewerIn = (
+  classroomId: string,
+  enrolledIn: readonly string[] = [classroomId],
+): Context => inClassroom(classroomId, enrolledIn, { [classroomId]: 'REVIEWER' });
 
 const classroom = (ownerId: string, classroomId = 'c-1'): Subject => ({
   type: 'Classroom',
@@ -210,15 +236,38 @@ describe('grading, which is the sharpest edge of INV-CLASS-1', () => {
     expect(d.allowed).toBe(true);
   });
 
-  it('a teacher who is only ENROLLED can grade — membership is the point', () => {
+  it('a CO-TEACHER can grade, because §4 grants the teacher in the room', () => {
+    // §4: "Grade and release — Owner ✓, Teacher ✓". "Teacher" here is a statement about the
+    // CLASSROOM, so the context says TEACHER and the rule matches. The first version of this
+    // test asserted that mere ENROLMENT was enough, which is a different and much weaker claim
+    // — and it was the loophole that let a teacher enrolled as a student in another teacher's
+    // room grade it.
     const coTeacher = actor('t-E', ['teacher']);
     const d = can({
       actor: coTeacher,
       action: 'grade',
       subject: ownClass,
-      context: inClassroom('c-1', ['c-1']),
+      context: asStaffIn('c-1'),
     });
     expect(d.allowed, 'a co-teacher in the class is inside the boundary').toBe(true);
+  });
+
+  it('a teacher ENROLLED AS A STUDENT in another classroom cannot grade it', () => {
+    // The adversarial case `plans/12` §4 names: "a teacher from classroom A cannot grade in
+    // classroom B". The subtle version is a teacher who is ALSO in B — as a student, sat in the
+    // back, taking the class they teach. Membership says yes; the classroom role says no.
+    const visitingTeacher = actor('t-F', ['teacher']);
+    const d = can({
+      actor: visitingTeacher,
+      action: 'grade',
+      subject: classroom('t-A', 'c-2'),
+      context: asStudentIn('c-2'),
+    });
+    expect(d.allowed, 'membership granted authority, one level up').toBe(false);
+    if (!d.allowed) {
+      // And the reason is the true one: they are in the room, they are just not staff in it.
+      expect(d.reason).toBe('roleForbidden');
+    }
   });
 
   it('a teacher from another school is refused as notMember, not merely notOwner', () => {
@@ -248,35 +297,68 @@ describe('grading, which is the sharpest edge of INV-CLASS-1', () => {
         actor: studentInA,
         action: 'grade',
         subject: ownClass,
-        context: inClassroom('c-1', ['c-1']),
+        context: asStudentIn('c-1'),
       }),
       'roleForbidden',
       'being enrolled in a class is not being in charge of it',
     );
   });
 
-  it('a REVIEWER cannot grade, and cannot see the evidence either', () => {
+  it('a REVIEWER cannot grade, and cannot publish', () => {
     // Reviewers assess integrity, not marks. Conflating the two would put a reviewer in a
     // position to change a grade, which is the thing the role exists to be separate from.
+    //
+    // The context says REVIEWER rather than the generic "enrolled", which is the point of
+    // P4-T8: a reviewer IS staff in the room, so a rule that asked for "any staff" would grant
+    // them grading. §4 gives "Create / publish assignments" to Owner and Teacher, not to staff.
     expectDeny(
       can({
         actor: reviewer,
         action: 'grade',
         subject: ownClass,
-        context: inClassroom('c-1', ['c-1']),
+        context: asReviewerIn('c-1'),
       }),
       'roleForbidden',
       'reviewers assess integrity, not marks',
     );
     expectDeny(
       can({
+        actor: reviewer,
+        action: 'publish',
+        subject: ownClass,
+        context: asReviewerIn('c-1'),
+      }),
+      'roleForbidden',
+      'reviewers assess integrity, not marks',
+    );
+  });
+
+  it('a teacher MAY view the evidence about their own class, and may NOT adjudicate it', () => {
+    // This is the plan-versus-code disagreement `plans/12` §4 resolves, and the resolution is
+    // recorded rather than buried: §4 grants "View integrity evidence — Owner ✓, Teacher ✓",
+    // and the P1 rule said REVIEWER ONLY.
+    //
+    // The reviewer separation is real, but it protects the VERDICT, not the evidence. A proctor
+    // says "three fullscreen exits" and the teacher is the person with the standing to act on
+    // it; refusing them the record makes the proctoring unreadable to the only reader who can
+    // use it. So `viewEvidence` follows the plan and `adjudicate` keeps the reviewer alone.
+    expect(
+      can({
         actor: teacherOfA,
         action: 'viewEvidence',
         subject: ownClass,
-        context: inClassroom('c-1', ['c-1']),
+        context: asStaffIn('c-1'),
+      }).allowed,
+    ).toBe(true);
+    expectDeny(
+      can({
+        actor: teacherOfA,
+        action: 'adjudicate',
+        subject: ownClass,
+        context: asStaffIn('c-1'),
       }),
       'reviewerForbidden',
-      'a teacher must not review the evidence about their own class — that separation is why the reviewer role exists',
+      'seeing the evidence and deciding the verdict are different acts',
     );
   });
 });

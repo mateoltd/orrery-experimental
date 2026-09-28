@@ -43,7 +43,7 @@ Three things had to be re-established, and each is a portability finding worth k
 | Metric | Value |
 |---|---|
 | Commits | 50 (P3-T5 and P3-T6 landed after this file was first written) |
-| Unit tests | **991** (contracts 311 with 18 new notification-policy tests, web 158, auth 384) |
+| Unit tests | **1020** (auth 413 with 29 new matrix tests, contracts 311, web 158) |
 | Integration tests | **258** across 17 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
@@ -264,6 +264,76 @@ Three findings worth carrying forward:
 | P4-T6 Roster UI with per-student summary | NOT STARTED | |
 | P4-T7 Notifications: templates, queue, dedupe, quiet hours | NOT STARTED | `Notification` and `EmailOutbox` are still UNUSED. |
 | P4-T8 Permission matrix tests: every cell of §4 | NOT STARTED | Partial coverage in this commit; the §4 table itself is not yet exhaustive. |
+
+#### P4-T8 detail (complete) — P4 IS CLOSED
+
+**THE TEST IS A TRANSCRIPTION, AND THE TRANSCRIPTION IS CHECKED TWICE.** §4 is copied into the
+test as a table of 21 cells, and a loop walks it. A hand-written assertion per cell would be a
+test covering the cells its author remembered; a walked table cannot skip one without the count
+changing. And because a transcription is a copy that rots, every cell must name an `Action` and a
+`Subject`, the test refuses to run if one does not, and each named pair is asserted to EXIST in
+the matrix — a cell naming a typo'd action would otherwise "pass" by denying, and a deny because
+of a typo is indistinguishable from a correct deny.
+
+**IT FOUND SIX BUGS, AND NOT ONE OF THEM WAS A CRASH.** Every one was reasonable-looking code
+that was not the plan:
+
+1. `assign` and `publish` were OWNER-ONLY. A co-teacher could not publish an the class they were
+   employed to teach. §4 lists `Teacher ✓` in plain sight.
+2. `grade` granted to any member holding the GLOBAL `teacher` role — so a teacher enrolled as a
+   STUDENT in another teacher's room could mark it. The fix was `actorClassroomRoles` in the
+   context, because §4's rows are about a relationship to a CLASSROOM and membership alone cannot
+   express that. The kernel could not ask the question, so it was asked of the wrong thing.
+3. `viewEvidence` was REVIEWER-ONLY, contradicting §4's `Owner ✓, Teacher ✓`. Resolved in the
+   plan's favour — a school needs its own teacher to see the proctoring record, because the
+   teacher is the person with the standing to act on it — with a NEW action, `adjudicate`, split
+   out so the reviewer's standing over a VERDICT survives the loosening. That is a plan-versus-code
+   disagreement and it is recorded rather than buried.
+4. `Assignment`, `ExamAttempt`, `IntegrityEvidence` and `ReleaseBatch` had NO RULES AT ALL. §4
+   has rows for grading, releasing, taking an assignment and viewing evidence, and all four are
+   actions on these types — so the matrix had no opinion about §4's most important cells, and the
+   test said exactly that: "§4 says nothing enforceable about this". `types.ts` had already named
+   P4-T8 as the task that appends them.
+5. `enrollmentRules` had no `changeRole`, no `removeMember` and no `invite`. P4-T2 wrote those
+   rules on `Classroom`, but the capability is about an ENROLLMENT, so a service authorising
+   against `Enrollment` got `notAvailable` and one authorising against `Classroom` got the real
+   rule. Which you got depended on which type the service happened to pass to `can()`.
+6. `User.read` was SELF-OR-ADMIN — §4's third column and not its first two. A teacher could not
+   read a student at all, so the roster page's per-student summary had no authorisation behind it.
+   The grant is "a classroom we BOTH belong to", and both sides are needed: a teacher in A cannot
+   read a student in B, and two schools cannot grant it by sharing a tenant.
+
+**§4's OWNER COLUMN MEANS THE OWNER OF THE CLASSROOM, AND FOR AN ENROLLMENT THAT IS NOT
+`subject.ownerId`.** The first version of the fix compared the owner actor against
+`subject.ownerId`, which for an Enrollment is the STUDENT — so the test was asking "is the owner"
+about the child. The owner's grant belongs on the classroom role, which they hold, because
+`createClassroom` writes an OWNER enrollment. Getting that wrong produced `roleForbidden` for the
+owner of their own roster.
+
+**A DENY CODE THAT LIES IS WORSE THAN NO DENY CODE.** Two of them. A REVIEWER who IS enrolled was
+being told `notMember` — "they are not in this class", about somebody who is — and an operations
+dashboard keyed on that code triages on it. And a student told `notVisible` about their own
+unreleased marks is told a falsehood; `releaseNotPublished` exists because "your results are not
+out yet" and "you may not see this" are different sentences with different remedies.
+
+**A STUDENT NEVER SEES COHORT AGGREGATES — AND THE TEST IS STRONGER THAN A DENIAL.** Not "one
+action is refused" but "no verb in the vocabulary hands a student aggregate performance": the
+test iterates all 28 actions and pins the granted set to exactly `['read', 'start']`. A single
+denied action can be circumvented by reaching for a different one, and the day somebody adds
+`readCohort` a weaker test would pass while the breach was live.
+
+**THE COMPILER CAUGHT A VOCABULARY MISTAKE I MADE.** The release rule first read
+`subject.lifecycleStatus !== 'RELEASED'`, and `lifecycleStatus` is the CONTENT vocabulary
+(`DRAFT | PUBLISHED | ARCHIVED | WITHDRAWN`) while a release batch is `DRAFT | RELEASED`. The
+type error was the right outcome: the invariant would have been a comparison between two
+vocabularies that happen to share letters. So `releaseBatchStatus` is its own context field, and
+the invariant is stated in the rule rather than inferred from a lifecycle enum.
+
+**THE EXISTING AUTH TESTS ENCODED THE OLD SEMANTICS, AND TWO OF THEM WERE WRONG IN A WAY THAT
+MATTERED.** One asserted that mere ENROLMENT was enough to grade — a much weaker claim than §4's
+"teacher in the room", and the loophole itself. The context builders now take a role, so "this
+actor is in the room" and "this actor is a teacher in the room" are different function calls and a
+test cannot mean the first when it needs the second.
 
 #### P4-T7 detail (complete)
 
@@ -587,7 +657,7 @@ pnpm run build          # must pass before typecheck; tsbuildinfo can go stale
 pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
-pnpm run test           # 991 unit
+pnpm run test           # 1020 unit
 pnpm run test:integration   # 258 db + 6 worker, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```

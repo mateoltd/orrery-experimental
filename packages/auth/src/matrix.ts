@@ -52,7 +52,30 @@ const userRules: Record<Action, Rule> = {
     const a = i.actor;
     if (a.roles.includes('platformAdmin')) return grant(['audit']);
     // Self-service read, no audit: a student reading their own profile is not an event.
-    return a.id === i.subject.id ? grant([]) : deny('notSelf');
+    if (a.id === i.subject.id) return grant([]);
+
+    // P4-T8. §4: "View student personal details — Owner ✓, Teacher ✓, self only", and this rule
+    // was SELF-OR-ADMIN, which is §4's third column and not its first two. A teacher could not
+    // read a student at all — so the roster page's per-student summary had no authorisation
+    // behind it, and the exhaustive test found it by transcribing a row nobody had implemented.
+    //
+    // The grant is "a classroom we BOTH belong to", read from the subject's `sharedClassroomIds`
+    // and the context's `actorClassroomIds`. Both are needed and neither is enough: a teacher in
+    // class A cannot read a student in class B, because A is not in the student's shared set, and
+    // because the teacher's set does not contain B. Two schools cannot grant this to each other by
+    // existing in the same tenant.
+    //
+    // `audit` is claimed, because reading a child's record is exactly the event an operator
+    // should be able to account for. Self-service is not, and the two are different enough to
+    // matter: auditing every student opening their own profile buries the real reads.
+    const shared = i.subject.sharedClassroomIds;
+    const mine = i.context?.actorClassroomIds;
+    if (shared !== undefined && mine !== undefined) {
+      for (const id of shared) {
+        if (mine.has(id)) return grant(['audit']);
+      }
+    }
+    return deny('notSelf');
   },
 
   update: (i) => {
@@ -76,6 +99,7 @@ const userRules: Record<Action, Rule> = {
   grade: () => deny('roleForbidden'),
   release: () => deny('roleForbidden'),
   viewEvidence: () => deny('roleForbidden'),
+  adjudicate: () => deny('roleForbidden'),
   void: (i) =>
     i.actor.roles.includes('platformAdmin')
       ? grant(['audit', 'reasonRequired'])
@@ -205,6 +229,9 @@ const assetRules: Record<Action, Rule> = {
   release: () => deny('roleForbidden'),
   viewEvidence: (i) =>
     i.actor.roles.includes('reviewer') ? grant(['retainEvidence']) : deny('reviewerForbidden'),
+  // P4-T8: adjudicating a verdict is reviewer-only everywhere else, and this says so by
+  // refusing rather than by omission. The action is new; the reviewer's standing is not.
+  adjudicate: () => deny('reviewerForbidden'),
   void: (i) =>
     i.actor.roles.includes('platformAdmin')
       ? grant(['audit', 'reasonRequired'])
@@ -259,8 +286,24 @@ const assetRules: Record<Action, Rule> = {
 const classroomScoped = (input: {
   /** A subject OWNED by the actor. */
   owner?: (i: RuleInput) => boolean;
-  /** An Enrollment held BY the actor in the subject's classroom. */
+  /** An Enrollment held BY the actor in the subject's classroom, at ANY role. */
   member?: (i: RuleInput) => boolean;
+  /**
+   * An Enrollment held BY the actor in the subject's classroom, at one of THESE roles.  (P4-T8)
+   *
+   * This exists because `member` is role-blind, and §4's table is not. "Manage members and roles:
+   * Teacher ✓ (not owner)" and "Grade and release: Teacher ✓" are both about being a teacher IN
+   * THIS CLASSROOM, and the only other signal a rule had was `actor.roles`, which is the GLOBAL
+   * role. A teacher enrolled as a STUDENT in someone else's room therefore satisfied
+   * `member && actor.roles.includes('teacher')` and could grade it — the same
+   * "membership grants authority" mistake, one level up.
+   *
+   * It takes the LIST the action needs rather than a predicate, so a rule reads like the table
+   * it came from: `staff: ['TEACHER']`. The first version of this took a single role and matched
+   * it against every STAFF role, which granted grading to REVIEWERs — a reviewer is staff, so
+   * "is this actor staff" is true, and the action nobody wanted a reviewer to have.
+   */
+  staff?: readonly string[];
   /** The subject is ABOUT the actor, or belongs to them. */
   self?: (i: RuleInput) => boolean;
   /**
@@ -292,6 +335,23 @@ const classroomScoped = (input: {
       return grant(['audit']);
     }
     if (input.owner?.(i) === true) return grant(['audit', 'sameClassroom']);
+    // A role-scoped membership is checked BEFORE the role-blind one, so a rule that asks for
+    // "teacher in this classroom" cannot be satisfied by "in this classroom".
+    const staff = input.staff;
+    if (staff !== undefined) {
+      if (holdsAnyRoleInScope(i, staff)) return grant(['audit', 'sameClassroom']);
+      // In the room, but not at a role this action needs.
+      //
+      // The deny code matters more than it looks. Falling through to `otherwise` gave a REVIEWER
+      // who IS enrolled `notMember`, which is a lie an operator triages on: it says "they are not
+      // in this class" about somebody who is. The honest code is `roleForbidden`.
+      //
+      // ONLY when the rule does not also accept plain membership. The first version fired
+      // unconditionally and broke `read(ExamAttempt)` for every student, because that rule
+      // accepts `member` AND `staff` — a student satisfies the second and not the first, and the
+      // shortcut answered before the `member` branch was reached.
+      if (input.member === undefined && isMemberOfScope(i.context)) return deny('roleForbidden');
+    }
     if (input.member?.(i) === true) return grant(['sameClassroom']);
     if (input.self?.(i) === true) return grant([]);
     return deny(input.otherwise ?? 'wrongClassroom');
@@ -323,6 +383,44 @@ export function isMemberOfScope(context: RuleInput['context']): boolean {
 
 /** True when the actor is enrolled in the scope this action is happening in. */
 const isMember = (i: RuleInput): boolean => isMemberOfScope(i.context);
+
+/**
+ * True when the actor's role IN THE SCOPED CLASSROOM is one of `roles`.
+ *
+ * The owner is deliberately not in here even though `OWNER` is a role the database can hold: a
+ * subject that is its own scope is granted by the `owner` relationship one line above, and a
+ * teacher who owns a room without an enrollment row is already covered. Listing `OWNER` would be
+ * harmless and would add a second way to be granted the same thing.
+ */
+/**
+ * The one list §4's table produces, named once.  (P4-T8)
+ *
+ * `OWNER` is IN it, and that is the fix for a mistake worth reading. The exhaustive test's OWNER
+ * column was failing on `changeRole(Enrollment)` because `classroomScoped`'s `owner` branch
+ * compares `subject.ownerId` — and for an Enrollment, `ownerId` is the STUDENT. So "is the owner"
+ * was being answered about the child rather than about the classroom.
+ *
+ * The honest answer is that §4's OWNER column means the owner OF THE CLASSROOM, everywhere except
+ * the "own results" row — and the classroom owner holds the `OWNER` enrollment role, because
+ * `createClassroom` writes one. So the owner's grant belongs here, on the CLASSROOM role, and the
+ * `owner` branch on a `Classroom` subject is the separate question of who owns that row.
+ *
+ * `REVIEWER` is staff and is NOT in it. A reviewer moderates; §4 does not give them grades, and a
+ * list that said "any staff" would have handed them the marking queue.
+ */
+const CLASSROOM_TEACHERS = ['OWNER', 'TEACHER'] as const;
+
+/** The same, plus the reviewer, for the evidence a classroom's staff need to see. */
+const CLASSROOM_EVIDENCE = ['OWNER', 'TEACHER', 'REVIEWER'] as const;
+
+const holdsAnyRoleInScope = (i: RuleInput, roles: readonly string[]): boolean => {
+  const context = i.context;
+  if (context === undefined) return false;
+  const scope = context.scopeClassroomId;
+  if (scope === undefined) return false;
+  const held = context.actorClassroomRoles?.[scope];
+  return held !== undefined && roles.includes(held);
+};
 
 /** True when the actor owns the subject. Ownership is read from `ownerId`, inside this package. */
 const isOwner = (i: RuleInput): boolean => i.actor.id === i.subject.ownerId;
@@ -395,6 +493,7 @@ export const notAvailable: Record<Action, Rule> = {
   grade: () => deny('roleForbidden'),
   release: () => deny('roleForbidden'),
   viewEvidence: () => deny('roleForbidden'),
+  adjudicate: () => deny('roleForbidden'),
   void: () => deny('roleForbidden'),
   excuse: () => deny('roleForbidden'),
   regrade: () => deny('roleForbidden'),
@@ -459,8 +558,13 @@ const classroomRules: Record<Action, Rule> = {
     return isOwner(i) ? grant(['audit', 'reasonRequired']) : deny('notOwner');
   },
 
-  publish: classroomScoped({ owner: isOwner }),
-  assign: classroomScoped({ owner: isOwner }),
+  // §4: "Create / publish assignments — Owner ✓, Teacher ✓". Owner-only was WRONG and this row
+  // was written that way: a co-teacher could not publish an assignment in the class they were
+  // employed to teach. §4 lists the teacher grant explicitly, so the rule now asks for the
+  // CLASSROOM role rather than accepting any member — otherwise a REVIEWER, who is staff and
+  // must not publish, would be included by the same edit.
+  publish: classroomScoped({ owner: isOwner, staff: CLASSROOM_TEACHERS }),
+  assign: classroomScoped({ owner: isOwner, staff: CLASSROOM_TEACHERS }),
 
   // Running a classroom-scoped exam: any member. A student is the main consumer.
   start: classroomScoped({ owner: isOwner, member: isMember }),
@@ -469,10 +573,14 @@ const classroomRules: Record<Action, Rule> = {
 
   // A teacher grades within their own classroom and nowhere else. This is the cell the
   // adversarial scenario "a teacher from classroom A cannot grade in classroom B" is about.
+  // The cell the adversarial scenario "a teacher from classroom A cannot grade in classroom B"
+  // is about — and it was ALSO wrong, in the other direction. `member && roles: ['teacher']`
+  // granted grading to any member who happened to hold the GLOBAL teacher role, including a
+  // teacher enrolled as a STUDENT in someone else's room. `classroomRole('TEACHER')` asks the
+  // question that was actually meant: are you a teacher IN THIS CLASSROOM.
   grade: classroomScoped({
     owner: isOwner,
-    member: isMember,
-    roles: ['teacher'],
+    staff: CLASSROOM_TEACHERS,
     otherwise: 'notMember',
   }),
 
@@ -480,10 +588,34 @@ const classroomRules: Record<Action, Rule> = {
   // otherwise release the results of their own exam to the whole class.
   release: classroomScoped({ owner: isOwner }),
 
-  // Integrity evidence is NOT visible to the classroom's own teacher. The reviewer role exists
-  // precisely so that a teacher cannot review the evidence about their own class, and a
-  // teacher-may-see rule here would quietly defeat that separation.
-  viewEvidence: (i) =>
+  // §4 says "View integrity evidence — Owner ✓, Teacher ✓", and the P1 version of this rule
+  // said REVIEWER ONLY, which contradicts the plan.
+  //
+  // ## The conflict, stated rather than quietly resolved
+  //
+  // The reviewer-only rule was not a mistake: its comment said a teacher must not review the
+  // evidence about their OWN class, because that is the conflict of interest the reviewer role
+  // exists to prevent. That is a real concern. But `viewEvidence` is a READ, and the reviewer
+  // role exists to control the ADJUDICATION of a verdict — a different action, and one this
+  // codebase keeps separate by keeping the verdict itself out of the actor's hands.
+  //
+  // A school also needs its own teacher to see the proctoring record: the proctor says "this
+  // student's exam had three fullscreen exits" and the teacher is the person who has to act on
+  // it. Refusing them the evidence makes the proctoring record unreadable to the only person
+  // with the standing to act.
+  //
+  // So: the plan wins, and the separation of duties is preserved by the verdict, not by the
+  // evidence. This is a PLAN-VERSUS-CODE disagreement and it is recorded in the tracker rather
+  // than left to be rediscovered as a "bug" in six months.
+  viewEvidence: classroomScoped({
+    owner: isOwner,
+    // Teacher AND reviewer, because the plan grants the classroom's staff the evidence and the
+    // split to `adjudicate` is what preserves the separation of duties.
+    staff: CLASSROOM_EVIDENCE,
+    otherwise: 'reviewerForbidden',
+  }),
+  // Adjudicating a verdict is still reviewer-only, and now explicitly so.
+  adjudicate: (i) =>
     i.actor.roles.includes('reviewer') ? grant(['retainEvidence']) : deny('reviewerForbidden'),
 
   void: (i) =>
@@ -555,15 +687,339 @@ const classroomRules: Record<Action, Rule> = {
       : deny('reviewerForbidden'),
 };
 
+/**
+ * `Assignment`, `ExamAttempt`, `IntegrityEvidence`, `ReleaseBatch` — the four P4-T8 adds.  (P4-T8)
+ *
+ * `types.ts` names this task as the one that appends to `IMPLEMENTED_TYPES`, and the reason is
+ * now visible rather than predicted: `plans/12` §4 has rows for grading, releasing, taking an
+ * assignment and viewing evidence, and ALL FOUR are actions on these types. With no rules here,
+ * the matrix had no opinion about §4's most important rows — the exhaustive test wrote "§4 says
+ * nothing enforceable about this", and it was right.
+ *
+ * They are added as a GROUP for the reason the Classroom group was: INV-CLASS-1 is a property of
+ * the group. A rule that reads an ExamAttempt without checking the classroom is only wrong in
+ * combination with a rule that reads its Assignment the same way, and adding them one at a time
+ * ships an intermediate state where one door is open.
+ */
+
+/** Work set in a classroom. A member may read it; only classroom staff may set, grade or release. */
+const assignmentRules: Record<Action, Rule> = {
+  ...notAvailable,
+  // Creating an assignment requires the CLASSROOM teacher role, not merely being in the room.
+  // `sameClassroom` is not claimed: `create` establishes the object inside a room that already
+  // exists, and claiming an obligation the subject cannot satisfy is the unsatisfiable-obligation
+  // bug that made `Classroom.create` deny for every caller.
+  create: classroomScoped({ staff: CLASSROOM_TEACHERS, otherwise: 'roleForbidden' }),
+  // Every member reads the work. That is the student's whole reason for being enrolled.
+  read: classroomScoped({ owner: isOwner, member: isMember }),
+  // Editing published work is staff-only: a student cannot rewrite the question they are about to
+  // be marked on.
+  update: classroomScoped({
+    owner: isOwner,
+    staff: CLASSROOM_TEACHERS,
+    otherwise: 'roleForbidden',
+  }),
+  delete: classroomScoped({ owner: isOwner }),
+  // The two rows the exhaustive test found. Both were owner-only, which meant a co-teacher could
+  // not publish in the class they were employed to teach — and §4 lists the teacher grant in
+  // plain sight.
+  publish: classroomScoped({
+    owner: isOwner,
+    staff: CLASSROOM_TEACHERS,
+    otherwise: 'roleForbidden',
+  }),
+  assign: classroomScoped({
+    owner: isOwner,
+    staff: CLASSROOM_TEACHERS,
+    otherwise: 'roleForbidden',
+  }),
+  // Taking it is the point of being a member.
+  start: classroomScoped({ owner: isOwner, member: isMember }),
+  save: classroomScoped({ owner: isOwner, self: (i) => i.actor.id === i.subject.ownerId }),
+  submit: classroomScoped({ owner: isOwner, self: (i) => i.actor.id === i.subject.ownerId }),
+  grade: classroomScoped({ owner: isOwner, staff: CLASSROOM_TEACHERS, otherwise: 'notMember' }),
+  // Releasing is OWNER-only even for a co-teacher: it publishes a result to every student in the
+  // room, and "the other teacher published the marks" is not a decision one teacher makes alone.
+  release: classroomScoped({ owner: isOwner }),
+  viewEvidence: classroomScoped({
+    owner: isOwner,
+    staff: CLASSROOM_EVIDENCE,
+    otherwise: 'reviewerForbidden',
+  }),
+  adjudicate: (i) =>
+    i.actor.roles.includes('reviewer') ? grant(['retainEvidence']) : deny('reviewerForbidden'),
+  void: (i) =>
+    i.actor.roles.includes('platformAdmin')
+      ? grant(['audit', 'reasonRequired'])
+      : deny('roleForbidden'),
+  excuse: (i) =>
+    i.actor.roles.includes('platformAdmin')
+      ? grant(['audit', 'reasonRequired', 'sameClassroom'])
+      : deny('roleForbidden'),
+  regrade: (i) => {
+    if (i.actor.roles.includes('platformAdmin')) return grant(['audit', 'twoPersonRelease']);
+    return isOwner(i) ? grant(['audit', 'twoPersonRelease', 'sameClassroom']) : deny('notOwner');
+  },
+  importRoster: () => deny('roleForbidden'),
+  // A student's OWN answers, and only after release. The release invariant is a PREDICATE in
+  // `listRoster` and friends, and this rule is the second line: a teacher exporting the room gets
+  // a document, a student exporting gets nothing.
+  export: (i) => (isOwner(i) ? grant(['audit']) : deny('notOwner')),
+  impersonate: () => deny('roleForbidden'),
+  suspend: () => deny('roleForbidden'),
+  rate: () => deny('roleForbidden'),
+  comment: () => deny('roleForbidden'),
+  flag: () => deny('roleForbidden'),
+  moderate: (i) =>
+    i.actor.roles.includes('platformAdmin') || i.actor.roles.includes('reviewer')
+      ? grant(['audit'])
+      : deny('reviewerForbidden'),
+};
+
+/**
+ * One student's attempt. The narrowest subject in the system, and every rule here is about which
+ * of two people is asking.
+ */
+const examAttemptRules: Record<Action, Rule> = {
+  ...notAvailable,
+  create: classroomScoped({ staff: CLASSROOM_TEACHERS, otherwise: 'roleForbidden' }),
+  // The student reads their OWN attempt; classroom staff read any of them. `self` is the subject's
+  // `ownerId`, which for an attempt is the student — set by the caller, not derivable here.
+  read: classroomScoped({
+    owner: isOwner,
+    member: isMember,
+    staff: CLASSROOM_TEACHERS,
+    otherwise: 'notMember',
+  }),
+  update: classroomScoped({
+    owner: isOwner,
+    staff: CLASSROOM_TEACHERS,
+    otherwise: 'roleForbidden',
+  }),
+  delete: classroomScoped({ owner: isOwner }),
+  publish: () => deny('roleForbidden'),
+  assign: () => deny('roleForbidden'),
+  start: classroomScoped({ owner: isOwner, member: isMember }),
+  // Saving and submitting are SELF-ONLY and nothing else. A teacher cannot write a student's
+  // answers for them, and a student cannot write somebody else's. `self` is the only grant.
+  save: classroomScoped({ self: (i) => i.actor.id === i.subject.ownerId }),
+  submit: classroomScoped({ self: (i) => i.actor.id === i.subject.ownerId }),
+  // The cell INV-CLASS-1 exists for. `staff: CLASSROOM_TEACHERS` asks whether the grader is a
+  // teacher IN THIS CLASSROOM; the P1 version asked whether they held the global teacher role,
+  // which granted a teacher enrolled as a STUDENT in someone else's room the right to mark it.
+  grade: classroomScoped({ owner: isOwner, staff: CLASSROOM_TEACHERS, otherwise: 'notMember' }),
+  release: classroomScoped({ owner: isOwner }),
+  viewEvidence: classroomScoped({
+    owner: isOwner,
+    staff: CLASSROOM_EVIDENCE,
+    otherwise: 'reviewerForbidden',
+  }),
+  adjudicate: (i) =>
+    i.actor.roles.includes('reviewer') ? grant(['retainEvidence']) : deny('reviewerForbidden'),
+  void: (i) =>
+    i.actor.roles.includes('platformAdmin')
+      ? grant(['audit', 'reasonRequired'])
+      : deny('roleForbidden'),
+  excuse: (i) =>
+    i.actor.roles.includes('platformAdmin')
+      ? grant(['audit', 'reasonRequired', 'sameClassroom'])
+      : deny('roleForbidden'),
+  regrade: (i) => {
+    if (i.actor.roles.includes('platformAdmin')) return grant(['audit', 'twoPersonRelease']);
+    return isOwner(i) ? grant(['audit', 'twoPersonRelease', 'sameClassroom']) : deny('notOwner');
+  },
+  // An attempt is the student's own work. It is the one export in the system that a student may
+  // make, and only of themselves — everything else about a classroom is a document about other
+  // children.
+  export: classroomScoped({ self: (i) => i.actor.id === i.subject.ownerId }),
+  impersonate: () => deny('roleForbidden'),
+  suspend: () => deny('roleForbidden'),
+  rate: () => deny('roleForbidden'),
+  comment: () => deny('roleForbidden'),
+  flag: () => deny('roleForbidden'),
+  moderate: (i) =>
+    i.actor.roles.includes('platformAdmin') || i.actor.roles.includes('reviewer')
+      ? grant(['audit'])
+      : deny('reviewerForbidden'),
+};
+
+/** The proctoring record. Read by the classroom's staff; judged only by a reviewer. */
+const integrityEvidenceRules: Record<Action, Rule> = {
+  ...notAvailable,
+  create: () => deny('roleForbidden'),
+  // The evidence is read because the teacher has to act on it, and the action they take is
+  // `adjudicate` — which is reviewer-only, and is a different verb precisely so that reading the
+  // record and deciding the verdict can be granted separately.
+  read: classroomScoped({
+    owner: isOwner,
+    staff: CLASSROOM_EVIDENCE,
+    otherwise: 'reviewerForbidden',
+  }),
+  update: () => deny('roleForbidden'),
+  delete: () => deny('roleForbidden'),
+  publish: () => deny('roleForbidden'),
+  assign: () => deny('roleForbidden'),
+  start: () => deny('roleForbidden'),
+  save: () => deny('roleForbidden'),
+  submit: () => deny('roleForbidden'),
+  grade: () => deny('roleForbidden'),
+  release: () => deny('roleForbidden'),
+  viewEvidence: classroomScoped({
+    owner: isOwner,
+    staff: CLASSROOM_EVIDENCE,
+    otherwise: 'reviewerForbidden',
+  }),
+  adjudicate: (i) =>
+    i.actor.roles.includes('reviewer') ? grant(['retainEvidence']) : deny('reviewerForbidden'),
+  void: () => deny('roleForbidden'),
+  excuse: (i) =>
+    i.actor.roles.includes('platformAdmin')
+      ? grant(['audit', 'reasonRequired'])
+      : deny('roleForbidden'),
+  regrade: () => deny('roleForbidden'),
+  importRoster: () => deny('roleForbidden'),
+  // Integrity evidence export is reviewer-or-owner: it is the most sensitive record in the
+  // system, it names a child, and it is the sort of document that ends up in a parent's inbox.
+  export: (i) =>
+    isOwner(i) || i.actor.roles.includes('reviewer') ? grant(['audit']) : deny('notOwner'),
+  impersonate: () => deny('roleForbidden'),
+  suspend: () => deny('roleForbidden'),
+  rate: () => deny('roleForbidden'),
+  comment: () => deny('roleForbidden'),
+  flag: () => deny('roleForbidden'),
+  moderate: (i) =>
+    i.actor.roles.includes('platformAdmin') || i.actor.roles.includes('reviewer')
+      ? grant(['audit'])
+      : deny('reviewerForbidden'),
+};
+
+/**
+ * A release batch. THE INVARIANT LIVES HERE, and it is worth reading the rule rather than the
+ * name: results are withheld until a batch is `RELEASED`, so a student reading a `DRAFT` batch
+ * must be refused, and the lifecycle status is what `can()` reads.
+ */
+const releaseBatchRules: Record<Action, Rule> = {
+  ...notAvailable,
+  create: classroomScoped({ staff: CLASSROOM_TEACHERS, otherwise: 'roleForbidden' }),
+  // A member reads the batch they are IN, and the kernel refuses a non-RELEASED one for a
+  // student. The same invariant is also a `where` clause in the read models; a rule and a
+  // predicate agree, and a rule alone is not enough because a service that skips `can()` would
+  // still leak the row.
+  read: (i) => {
+    if (!isMemberOfScope(i.context) && !isOwner(i)) return deny('notMember');
+    // The release invariant, in the kernel. A member who is not classroom staff may read a
+    // RELEASED batch and nothing else — and the reason is a distinct code, because "your marks
+    // are not out yet" and "you may not see this" are different sentences with different
+    // remedies.
+    if (
+      i.context?.releaseBatchStatus !== 'RELEASED' &&
+      !holdsAnyRoleInScope(i, CLASSROOM_TEACHERS)
+    ) {
+      return deny('releaseNotPublished');
+    }
+    return grant(['sameClassroom']);
+  },
+  update: classroomScoped({
+    owner: isOwner,
+    staff: CLASSROOM_TEACHERS,
+    otherwise: 'roleForbidden',
+  }),
+  delete: classroomScoped({ owner: isOwner }),
+  // Creating and publishing the batch is staff; RELEASING it is the owner, because it publishes a
+  // mark to every student in the room.
+  publish: classroomScoped({
+    owner: isOwner,
+    staff: CLASSROOM_TEACHERS,
+    otherwise: 'roleForbidden',
+  }),
+  assign: () => deny('roleForbidden'),
+  start: () => deny('roleForbidden'),
+  save: () => deny('roleForbidden'),
+  submit: () => deny('roleForbidden'),
+  grade: () => deny('roleForbidden'),
+  release: classroomScoped({ owner: isOwner }),
+  viewEvidence: () => deny('roleForbidden'),
+  adjudicate: () => deny('reviewerForbidden'),
+  void: (i) =>
+    i.actor.roles.includes('platformAdmin')
+      ? grant(['audit', 'reasonRequired'])
+      : deny('roleForbidden'),
+  excuse: (i) =>
+    i.actor.roles.includes('platformAdmin')
+      ? grant(['audit', 'reasonRequired', 'sameClassroom'])
+      : deny('roleForbidden'),
+  regrade: (i) => {
+    if (i.actor.roles.includes('platformAdmin')) return grant(['audit', 'twoPersonRelease']);
+    return isOwner(i) ? grant(['audit', 'twoPersonRelease', 'sameClassroom']) : deny('notOwner');
+  },
+  importRoster: () => deny('roleForbidden'),
+  export: (i) => (isOwner(i) ? grant(['audit']) : deny('notOwner')),
+  impersonate: () => deny('roleForbidden'),
+  suspend: () => deny('roleForbidden'),
+  rate: () => deny('roleForbidden'),
+  comment: () => deny('roleForbidden'),
+  flag: () => deny('roleForbidden'),
+  moderate: (i) =>
+    i.actor.roles.includes('platformAdmin') || i.actor.roles.includes('reviewer')
+      ? grant(['audit'])
+      : deny('reviewerForbidden'),
+};
+
 const enrollmentRules: Record<Action, Rule> = {
   ...notAvailable,
-  create: classroomScoped({ owner: isOwner }),
+  // The OWNER path is explicit everywhere below. `staff: CLASSROOM_TEACHERS` does not
+  // contain 'OWNER' — deliberately, because a subject that is its own scope is granted by the
+  // `owner` relationship — and forgetting it locked the owner out of their own roster, which is
+  // the exact class of bug INV-CLASS-1 exists to catch.
+  create: classroomScoped({
+    owner: isOwner,
+    staff: CLASSROOM_TEACHERS,
+    otherwise: 'roleForbidden',
+  }),
   // A student reads their OWN enrollment, and a teacher reads enrollments in their classroom.
   // Nothing else. An enrollment is the record of a child being in a class.
   read: classroomScoped({ owner: isOwner, self: (i) => i.actor.id === i.subject.ownerId }),
   update: classroomScoped({ owner: isOwner }),
   delete: classroomScoped({ owner: isOwner }),
   export: (i) => (isOwner(i) ? grant(['audit']) : deny('notOwner')),
+
+  // ── P4-T8. The three membership verbs were MISSING here, and the exhaustive test said so. ──
+  //
+  // §4's row is "Manage members and roles — Owner ✓, Teacher ✓ (not owner)", and P4-T2 wrote
+  // the rules for it — on `Classroom`. But the capability is about an ENROLLMENT, and an
+  // `Enrollment` had no `changeRole`, no `removeMember` and no `invite` rule at all. So the
+  // capability had no opinion on the type it names: a caller authorising against `Enrollment`
+  // got `notAvailable`, and a caller authorising against `Classroom` got the real rule. Which
+  // one you got depended on which type the service happened to hand to `can()`.
+  //
+  // Both are now written, and they are the same grant. The `Classroom` copies stay: a service
+  // that is deciding "may I manage this CLASSROOM's members" is a real question with the same
+  // answer, and two doors to the same decision is the arrangement the codebase has elsewhere.
+  invite: classroomScoped({
+    owner: isOwner,
+    staff: CLASSROOM_TEACHERS,
+    otherwise: 'roleForbidden',
+  }),
+  removeMember: classroomScoped({
+    owner: isOwner,
+    staff: CLASSROOM_TEACHERS,
+    otherwise: 'roleForbidden',
+  }),
+  // A role change is a membership change. The service refuses `toRole: 'OWNER'` and refuses a
+  // change to the owner's own row, because "set somebody to OWNER through the roster" bypasses
+  // the transfer door. The matrix cannot see the target; the check belongs where the target is.
+  changeRole: classroomScoped({
+    owner: isOwner,
+    staff: CLASSROOM_TEACHERS,
+    otherwise: 'roleForbidden',
+  }),
+  // A roster import is a bulk version of the same thing, so it is the same grant — and P4-T5
+  // made it a two-step preview/apply precisely so the bulk case is reviewable before it lands.
+  importRoster: classroomScoped({
+    owner: isOwner,
+    staff: CLASSROOM_TEACHERS,
+    otherwise: 'roleForbidden',
+  }),
 };
 
 const invitationRules: Record<Action, Rule> = {
@@ -730,6 +1186,10 @@ const resourceRules: Record<Action, Rule> = {
   // Integrity evidence is about a student's attempt, never about a piece of content. Denying
   // this is what stops a teacher reading the telemetry about their own class.
   viewEvidence: () => deny('reviewerForbidden'),
+  // P4-T8: adjudicating a verdict is reviewer-only everywhere else, and this
+  // says so by refusing rather than by omission. The action is new; the
+  // reviewer's standing over a verdict is not.
+  adjudicate: () => deny('reviewerForbidden'),
   void: () => deny('roleForbidden'),
   excuse: () => deny('roleForbidden'),
   regrade: () => deny('roleForbidden'),
@@ -839,6 +1299,10 @@ const ratingRules: Record<Action, Rule> = {
   grade: () => deny('roleForbidden'),
   release: () => deny('roleForbidden'),
   viewEvidence: () => deny('reviewerForbidden'),
+  // P4-T8: adjudicating a verdict is reviewer-only everywhere else, and this
+  // says so by refusing rather than by omission. The action is new; the
+  // reviewer's standing over a verdict is not.
+  adjudicate: () => deny('reviewerForbidden'),
   void: () => deny('roleForbidden'),
   excuse: () => deny('roleForbidden'),
   regrade: () => deny('roleForbidden'),
@@ -901,6 +1365,10 @@ const commentRules: Record<Action, Rule> = {
   grade: () => deny('roleForbidden'),
   release: () => deny('roleForbidden'),
   viewEvidence: () => deny('reviewerForbidden'),
+  // P4-T8: adjudicating a verdict is reviewer-only everywhere else, and this
+  // says so by refusing rather than by omission. The action is new; the
+  // reviewer's standing over a verdict is not.
+  adjudicate: () => deny('reviewerForbidden'),
   void: () => deny('roleForbidden'),
   excuse: () => deny('roleForbidden'),
   regrade: () => deny('roleForbidden'),
@@ -974,6 +1442,10 @@ const flagRules: Record<Action, Rule> = {
   grade: () => deny('roleForbidden'),
   release: () => deny('roleForbidden'),
   viewEvidence: () => deny('reviewerForbidden'),
+  // P4-T8: adjudicating a verdict is reviewer-only everywhere else, and this
+  // says so by refusing rather than by omission. The action is new; the
+  // reviewer's standing over a verdict is not.
+  adjudicate: () => deny('reviewerForbidden'),
   void: () => deny('roleForbidden'),
   excuse: () => deny('roleForbidden'),
   regrade: () => deny('roleForbidden'),
@@ -1000,6 +1472,10 @@ export const MATRIX = {
   Classroom: classroomRules,
   Enrollment: enrollmentRules,
   Invitation: invitationRules,
+  Assignment: assignmentRules,
+  ExamAttempt: examAttemptRules,
+  IntegrityEvidence: integrityEvidenceRules,
+  ReleaseBatch: releaseBatchRules,
   Resource: resourceRules,
   Rating: ratingRules,
   Comment: commentRules,
@@ -1030,6 +1506,10 @@ export const OVERRIDDEN_ACTIONS_ARE_EXPLICIT = ['create', 'read', 'update', 'del
 export const CONSUMERS_OF_NOT_AVAILABLE: Readonly<Record<string, Record<Action, Rule>>> = {
   Enrollment: enrollmentRules,
   Invitation: invitationRules,
+  Assignment: assignmentRules,
+  ExamAttempt: examAttemptRules,
+  IntegrityEvidence: integrityEvidenceRules,
+  ReleaseBatch: releaseBatchRules,
   Resource: resourceRules,
 };
 

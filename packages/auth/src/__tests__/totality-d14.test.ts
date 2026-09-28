@@ -99,15 +99,21 @@ describe('the real matrix, after the classroom types were added', () => {
     // diff that happens to include a type. P2-T8 added `Resource` (the read-permission
     // re-check); P3-T5 added `Rating`, `Comment` and `Flag` (the moderation surface, added
     // together because a rule that reads a rating without checking it belongs to the same
-    // reader is only wrong in combination).
+    // reader is only wrong in combination). P4-T8 added `Assignment`, `ExamAttempt`,
+    // `IntegrityEvidence` and `ReleaseBatch` -- the four types `plans/12` §4 has rows about,
+    // which had no rules at all, so the matrix had no opinion about §4's most important cells.
     expect([...IMPLEMENTED_TYPES].sort()).toEqual([
       'Asset',
+      'Assignment',
       'Classroom',
       'Comment',
       'Enrollment',
+      'ExamAttempt',
       'Flag',
+      'IntegrityEvidence',
       'Invitation',
       'Rating',
+      'ReleaseBatch',
       'Resource',
       'User',
     ]);
@@ -126,7 +132,10 @@ describe('the real matrix, after the classroom types were added', () => {
     // no longer asserted is a figure a human typed.
     const all = [...cells()];
     expect(all).toHaveLength(IMPLEMENTED_TYPES.length * ACTIONS.length);
-    expect(ACTIONS).toHaveLength(27);
+    // 27 in P1, 28 after P4-T8 split `adjudicate` out of `viewEvidence`. The count is here so
+    // that adding a verb has to be a decision rather than a drift, and so the figure is never
+    // asserted anywhere else.
+    expect(ACTIONS).toHaveLength(28);
     // Distinctness: a copy-pasted rule across two actions is a bug that no cell-existence
     // test can see, and `grade` accidentally equal to `submit` is exactly that bug.
     const byAction = new Map<Action, Set<Rule>>();

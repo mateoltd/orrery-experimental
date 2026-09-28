@@ -243,9 +243,17 @@ export async function classroomCanInput(
 
   const memberships = await db.enrollment.findMany({
     where: { userId: input.actor.id, status: 'ACTIVE' },
-    select: { classroomId: true },
+    select: { classroomId: true, role: true },
   });
   const actorClassroomIds = new Set(memberships.map((m) => m.classroomId));
+  // P4-T8. The actor's role IN EACH CLASSROOM, because membership is role-blind and `plans/12`
+  // §4 is not: "Manage members and roles — Teacher ✓ (not owner)" is a statement about a
+  // classroom, not about a person. Without this the kernel could only ask "are they in the room",
+  // and a rule that wanted "are they a teacher in the room" had to fall back on the GLOBAL role
+  // — which is how a teacher enrolled as a STUDENT in another teacher's class came to be able
+  // to grade it.
+  const actorClassroomRoles: Record<string, string> = {};
+  for (const m of memberships) actorClassroomRoles[m.classroomId] = String(m.role);
 
   return {
     ok: true,
@@ -272,7 +280,7 @@ export async function classroomCanInput(
         // unrecognised.
         ...(classroom.archivedAt === null ? {} : { lifecycleStatus: 'ARCHIVED' as const }),
       },
-      context: { actorClassroomIds, scopeClassroomId: classroom.id },
+      context: { actorClassroomIds, actorClassroomRoles, scopeClassroomId: classroom.id },
     },
   };
 }

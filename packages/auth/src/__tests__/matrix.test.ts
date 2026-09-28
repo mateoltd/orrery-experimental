@@ -165,17 +165,18 @@ describe('no cell grants allowed:true with a contradictory obligation', () => {
 });
 
 describe('an unrecognised pair is loud in development and safe in production', () => {
-  // A type the matrix genuinely does not implement. This was `Classroom`, which is now
-  // implemented — the test failed when reality changed underneath it, which is the correct
-  // outcome for a test whose subject is "a type with no rules".
-  const unknown: Subject = { type: 'ExamAttempt', id: 'a-1' };
+  // A type the matrix genuinely does not implement. This was `Classroom`, then `ExamAttempt`,
+  // and both became implemented — the test failed when reality changed underneath it each time,
+  // which is the correct outcome for a test whose subject is "a type with no rules". `ReviewTask`
+  // is the next unimplemented type, and it will fail the same way when P9-T2 implements it.
+  const unknown: Subject = { type: 'ReviewTask', id: 'rt-1' };
 
   it('throws in development, naming the pair', () => {
     const prev = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';
     try {
       expect(() => can({ actor: actor(), action: 'read', subject: unknown })).toThrowError(
-        /action=read, type=ExamAttempt/,
+        /action=read, type=ReviewTask/,
       );
     } finally {
       process.env.NODE_ENV = prev;

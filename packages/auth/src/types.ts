@@ -45,6 +45,14 @@ export const ACTIONS = [
   'grade',
   'release',
   'viewEvidence',
+  // P4-T8. Splitting VIEWING evidence from ADJUDICATING a verdict.
+  //
+  // `viewEvidence` was reviewer-only, and that contradicted `plans/12` §4 ("Owner ✓, Teacher
+  // ✓") — a school needs its own teacher to see the proctoring record, because the teacher is
+  // the person with the standing to act on it. The separation of duties the reviewer rule was
+  // protecting is real, but it protects the VERDICT, not the evidence, so the verb that decides
+  // a verdict gets its own name and stays reviewer-only.
+  'adjudicate',
   'void',
   'excuse',
   'regrade',
@@ -102,6 +110,14 @@ export const ALL_RESOURCE_TYPES = [
   'Classroom',
   'Enrollment',
   'Invitation',
+  // P4-T8. §4 has rows for grading, releasing, taking an assignment and viewing evidence, and
+  // all four are actions on THESE types. With no rules for them the matrix had no opinion about
+  // §4's most important rows, and the exhaustive test said so: "§4 says nothing enforceable
+  // about this". Added as a group because INV-CLASS-1 is a property of the group.
+  'Assignment',
+  'ExamAttempt',
+  'IntegrityEvidence',
+  'ReleaseBatch',
   'Assignment',
   'ExamAttempt',
   'QuestionResponse',
@@ -147,6 +163,14 @@ export const IMPLEMENTED_TYPES = [
   'Classroom',
   'Enrollment',
   'Invitation',
+  // P4-T8. §4 has rows for grading, releasing, taking an assignment and viewing evidence, and
+  // all four are actions on THESE types. With no rules for them the matrix had no opinion about
+  // §4's most important rows, and the exhaustive test said so: "§4 says nothing enforceable
+  // about this". Added as a group because INV-CLASS-1 is a property of the group.
+  'Assignment',
+  'ExamAttempt',
+  'IntegrityEvidence',
+  'ReleaseBatch',
   // P2-T8. The read-permission re-check is the one place a visibility decision is made, and
   // it is made HERE rather than in the content layer — the authz-ownership gate caught that
   // instinct, correctly.
@@ -208,7 +232,17 @@ export type DenyCode =
    */
   | 'notVisible'
   | 'suspended'
-  | 'reviewerForbidden';
+  | 'reviewerForbidden'
+  /**
+   * "You may look at this, but it has not been released."  (P4-T8)
+   *
+   * A distinct code because the two are different situations with different remedies. A student
+   * refused with `notVisible` would be told the results do not exist, and the honest answer is
+   * that they exist and are not out yet — which is what a release is. Reusing `roleForbidden`
+   * here would tell a student they are not allowed to see their own marks, which is both false
+   * and the sort of false that generates a support ticket.
+   */
+  | 'releaseNotPublished';
 
 /**
  * Obligations travel with a grant, because a boolean cannot express "you may grade this,
@@ -295,6 +329,33 @@ export interface Context {
   readonly scopeClassroomId?: string;
   /** For `grade` — the id of the student the work belongs to. */
   readonly subjectOwnerId?: string;
+  /**
+   * The actor's role IN `scopeClassroomId`, keyed by classroom id.  (P4-T8)
+   *
+   * ## Why membership alone was not enough
+   *
+   * `plans/12` §4 distinguishes "Teacher ✓" from "if enrolled as student" and from
+   * "✓ (not owner)". Those are CLASSROOM-RELATIVE, and `actorClassroomIds` only says the actor is
+   * in the room. So a teacher who is themselves enrolled as a STUDENT in another teacher's class
+   * read as a member, and a rule written `member && actor.roles.includes('teacher')` granted it
+   * — which is the same hole as "membership grants authority", one level up.
+   *
+   * The fix is to put the relationship in the context rather than to re-read the enrollment
+   * inside the kernel: `packages/auth` is the only place allowed to compare identities (the
+   * authz-ownership gate enforces it), so a rule that wanted to look this up would have to ask
+   * the caller, and the caller is where a missing field becomes a wrong answer.
+   */
+  readonly actorClassroomRoles?: Readonly<Record<string, string>>;
+  /**
+   * For `read` on a `ReleaseBatch` — the batch's OWN status, which is not the resource
+   * lifecycle.  (P4-T8)
+   *
+   * `lifecycleStatus` is the content vocabulary (`DRAFT | PUBLISHED | ARCHIVED | WITHDRAWN`) and
+   * a release batch is `DRAFT | RELEASED | ...`. The compiler caught the first attempt at reading
+   * `'RELEASED'` off `lifecycleStatus` as a type error, which is the right outcome: the release
+   * invariant would have been a comparison between two vocabularies that happen to share letters.
+   */
+  readonly releaseBatchStatus?: string;
 }
 
 export interface CanInput {
