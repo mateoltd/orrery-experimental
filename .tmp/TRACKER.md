@@ -20,8 +20,14 @@ the old file, so anything it cannot evidence is marked UNKNOWN rather than guess
   - A row describing **the commit that introduces it** cannot contain its own hash, because
     amending to add the hash changes the hash. Those rows are written `*(next commit)*` and
     **resolved by the immediately following commit**. A placeholder that survives one commit is
-    itself drift: `598cfb2` → `477a933` is what resolving it looks like, and P5-T1's row is the
-    example the rule now cites.
+    itself drift: `598cfb2` → `477a933` is what resolving it looks like.
+  - **The rule has now been broken twice and both times the fix is the same commit.** Once for
+    P5-T1, and once across three commits for P5-T2/T5/T9/T14 — four rows sat at `*(next commit)*`
+    while I wrote three more phases, which is exactly the failure the rule warns about and
+    evidence that a rule stated once is not enough. The mechanical check belongs in the loop, so
+    it is: **`grep -cE "this commit|next commit" .tmp/TRACKER.md` on a summary row is a defect**,
+    and running it is the last step of every commit from here. Rule 14 became a habit; this one
+    did not, and four rows are what that costs.
   - A phase moves to **DONE** in the same commit that completes its last task, and the summary
     rows are rewritten there, not deferred to a later tidy-up.
   - When a detail section and a summary row disagree, the summary row is the defect. It is the
@@ -649,18 +655,18 @@ has a dozen slightly different answers.
 | Task | Status | Commit | Note |
 |---|---|---|---|
 | P5-T1 `Assignment` with a pinned `resourceVersionId`, window, attempts, weight, late penalty, policy override | **DONE** | `598cfb2` | `packages/contracts/src/policy/` + `packages/db/src/assignments.ts`. The pin is STRUCTURAL: `resourceId` is derived from the version, and there is no parameter for "the current version". |
-| P5-T2 `AssignmentStudentOverride` | **DONE** | *(next commit)* | `assignment-overrides.ts`. A mid-exam grant is an **additive row**, never a rewrite of `deadlineAt` (C14). |
+| P5-T2 `AssignmentStudentOverride` | **DONE** | `ee74d2e` | `assignment-overrides.ts`. A mid-exam grant is an **additive row**, never a rewrite of `deadlineAt` (C14). |
 | P5-T3 Assignment builder, preview as student | NOT STARTED | | |
 | P5-T4 Student "to do" | NOT STARTED | | |
-| P5-T5 Pinning invariant enforcement: (a) lint rule, (b) slot-level mutation test | **DONE** | *(next commit)* | (a) the gate exists (ADR-0025). (b) the slot-level paper is **mutation-verified** per ADR-0027. |
+| P5-T5 Pinning invariant enforcement: (a) lint rule, (b) slot-level mutation test | **DONE** | `ede383a` | (a) the gate exists (ADR-0025). (b) the slot-level paper is **mutation-verified** per ADR-0027. |
 | P5-T6 QuestionBank CRUD | NOT STARTED | | |
 | P5-T7 QuestionPool, four draw strategies, `poolHealth` | NOT STARTED | | |
 | P5-T8 Blueprint + worst-case coverage | NOT STARTED | | |
-| P5-T9 `AssessmentSpec` slots + `variantMap` resolution | **DONE** | *(next commit)* | `packages/db/src/slots.ts`. One draw, one place, per-slot forked streams. | |
+| P5-T9 `AssessmentSpec` slots + `variantMap` resolution | **DONE** | `65db2b4` | `packages/db/src/slots.ts`. One draw, one place, per-slot forked streams. | |
 | P5-T10 Publish snapshots every drawable question | NOT STARTED | | |
 | P5-T11 "Too similar" guard | NOT STARTED | | |
 | P5-T13 Interop skeleton, `ExternalBinding` | NOT STARTED | | |
-| P5-T14 `can()` matrix for the new P5 types | **DONE** | *(next commit)* | Three types added with full rules. **The tests found a bank readable by its own students.** |
+| P5-T14 `can()` matrix for the new P5 types | **DONE** | `8e7d953` | Three types added with full rules. **The tests found a bank readable by its own students.** |
 | P5-T15 Author the seed banks | NOT STARTED | | D-37: nothing in 183 tasks authored a single question. |
 | P5-T12 Publish gates: pool, blueprint, metadata, `INV-SLOT-1` | NOT STARTED | | |
 
