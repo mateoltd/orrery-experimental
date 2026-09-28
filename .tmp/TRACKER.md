@@ -17,6 +17,11 @@ the old file, so anything it cannot evidence is marked UNKNOWN rather than guess
   has two answers.
   - Therefore: a commit hash in the commit column, never `*(this commit)*` — that placeholder is
     written before the commit exists and is the exact shape the drift took.
+  - A row describing **the commit that introduces it** cannot contain its own hash, because
+    amending to add the hash changes the hash. Those rows are written `*(next commit)*` and
+    **resolved by the immediately following commit**. A placeholder that survives one commit is
+    itself drift: `598cfb2` → `477a933` is what resolving it looks like, and P5-T1's row is the
+    example the rule now cites.
   - A phase moves to **DONE** in the same commit that completes its last task, and the summary
     rows are rewritten there, not deferred to a later tidy-up.
   - When a detail section and a summary row disagree, the summary row is the defect. It is the
@@ -643,7 +648,7 @@ has a dozen slightly different answers.
 
 | Task | Status | Commit | Note |
 |---|---|---|---|
-| P5-T1 `Assignment` with a pinned `resourceVersionId`, window, attempts, weight, late penalty, policy override | **DONE** | *(next commit)* | `packages/contracts/src/policy/` + `packages/db/src/assignments.ts`. The pin is STRUCTURAL: `resourceId` is derived from the version, and there is no parameter for "the current version". |
+| P5-T1 `Assignment` with a pinned `resourceVersionId`, window, attempts, weight, late penalty, policy override | **DONE** | `598cfb2` | `packages/contracts/src/policy/` + `packages/db/src/assignments.ts`. The pin is STRUCTURAL: `resourceId` is derived from the version, and there is no parameter for "the current version". |
 | P5-T2 `AssignmentStudentOverride` | NOT STARTED | | Model exists; the merge into the policy fold is written and the service is not. |
 | P5-T3 Assignment builder, preview as student | NOT STARTED | | |
 | P5-T4 Student "to do" | NOT STARTED | | |
