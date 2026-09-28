@@ -427,9 +427,21 @@ const classroomRules: Record<Action, Rule> = {
   // A teacher creates a classroom. Email verification is required first (plans/13 §1), which
   // the ROUTE guard already checks for /classrooms/new — repeated here because a route guard
   // cannot know the intent of a request made some other way.
+  // `audit`, and NOT `sameClassroom`.
+  //
+  // P4-T1 found this by calling it. `sameClassroom` means "this action happens inside a
+  // classroom the actor is a member of" — it requires a `context.scopeClassroomId` and a subject
+  // that HAS an `owningClassroomId`, and a classroom being CREATED has neither. The obligation
+  // was unsatisfiable at exactly the moment it was claimed, so every call returned
+  // `wrongClassroom` and `createClassroom` could not create anything.
+  //
+  // The fix is to drop the obligation rather than to fake a scope, and the reasoning is that the
+  // two actions mean different things: `update`, `publish` and `grade` happen INSIDE a
+  // classroom, while creation ESTABLISHES one. An obligation that cannot be satisfied by a
+  // correct caller is not a check, it is a wall.
   create: (i) =>
     i.actor.roles.includes('teacher') || i.actor.roles.includes('platformAdmin')
-      ? grant(['audit', 'sameClassroom'])
+      ? grant(['audit'])
       : deny('roleForbidden'),
 
   // INV-CLASS-1. Owner, member, or nobody. Note what is NOT a grant: being a teacher is not
@@ -490,9 +502,24 @@ const classroomRules: Record<Action, Rule> = {
     return isOwner(i) ? grant(['audit', 'twoPersonRelease', 'sameClassroom']) : deny('notOwner');
   },
 
-  invite: classroomScoped({ owner: isOwner }),
-  removeMember: classroomScoped({ owner: isOwner }),
-  changeRole: () => deny('roleForbidden'),
+  // P4-T2. §4 of `plans/12` says "Manage members and roles: OWNER ✓, TEACHER ✓ (not owner)",
+  // and the P1 version of these three rules said owner-only for two of them and DENIED the
+  // third outright. A deputy head of year who cannot add a student is a product decision nobody
+  // made, and a teacher who cannot change a role is a missing feature the plan had already
+  // specified.
+  //
+  // `roles: ['teacher']` is what stops a STUDENT who is a member from managing the roster: the
+  // `member` relationship says "inside the boundary" and the role says "allowed to do this",
+  // and both are needed. The owner passes through the `owner` branch, so a teacher-only
+  // requirement does not lock them out of their own room.
+  invite: classroomScoped({ owner: isOwner, member: isMember, roles: ['teacher'] }),
+  removeMember: classroomScoped({ owner: isOwner, member: isMember, roles: ['teacher'] }),
+  // A role change is a membership change, and refusing it entirely was leaving the capability
+  // with no rule at all. The service refuses `toRole: OWNER` and refuses a change to the
+  // owner's own row, because "set somebody to OWNER through the roster" bypasses the TEACHER
+  // check that `Classroom.transfer` applies — the matrix cannot see the target, and the check
+  // belongs where the target is.
+  changeRole: classroomScoped({ owner: isOwner, member: isMember, roles: ['teacher'] }),
   importRoster: classroomScoped({ owner: isOwner }),
 
   // `plans/01` §Classroom: "exactly one `ownerId` (transferable, audited)". So Classroom DOES

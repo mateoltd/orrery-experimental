@@ -782,6 +782,34 @@ enum ClassroomRole {
   STUDENT
 }
 
+/// Append-only membership history.  (P4-T2)
+model MembershipEvent {
+  id          String   @id @default(uuid(7))
+  classroomId String
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  /// The student or teacher whose membership changed. NOT `onDelete: Cascade` from `User`:
+  /// a deleted account's history is exactly the history nobody else can reconstruct.
+  userId      String
+  /// Who performed the change. Null for a self-service leave, which is the common case.
+  actorId     String?
+  kind        MembershipEventKind
+  fromRole    ClassroomRole?
+  toRole      ClassroomRole?
+  note        String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([classroomId, userId, createdAt])
+  @@index([classroomId, kind, createdAt])
+}
+
+enum MembershipEventKind {
+  JOINED
+  ROLE_CHANGED
+  REMOVED
+  LEFT
+  CLASSROOM_ARCHIVED
+}
+
 enum EnrollmentStatus {
   ACTIVE
   REMOVED
@@ -805,6 +833,17 @@ model Classroom {
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   enrollments    Enrollment[]
+  /// P4-T2. APPEND-ONLY state history, which is not the same thing as `AuditEvent`.
+  ///
+  /// `AuditEvent` answers "who did what" for accountability. It cannot answer "what was this
+  /// student's role in March", because a role CHANGE overwrites the enrollment row and leaves
+  /// an audit entry describing the act rather than the state. A teacher who needs to explain a
+  /// mark they gave in April needs the state as it was, and that is a projection over events.
+  ///
+  /// Never updated and never deleted, so the history cannot be quietly rewritten. Rows survive
+  /// the enrollment they describe, which is what makes INV-CLASSROOM-2 checkable: departure is
+  /// recorded here and the student's own records stay where they are.
+  membershipEvents MembershipEvent[]
   invitations    ClassroomInvitation[]
   assignments    Assignment[]
   attempts       ExamAttempt[]

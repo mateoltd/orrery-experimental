@@ -44,7 +44,7 @@ Three things had to be re-established, and each is a portability finding worth k
 |---|---|
 | Commits | 50 (P3-T5 and P3-T6 landed after this file was first written) |
 | Unit tests | **938** (clock 29, ids 10, rng 16, config 48, auth 384, i18n 25, db 8, contracts 274, web 142, worker 5 — approximately; per-package counts shift as suites grow) |
-| Integration tests | **165** across 12 files, real Postgres |
+| Integration tests | **191** across 13 files, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
 | Invariants registered | 29 (8 active) |
@@ -252,9 +252,77 @@ Three findings worth carrying forward:
     that as a real bug and the diff was zero — the sets were 1890 and 1890 when read together.
     `REPEATABLE READ` in one transaction is the fix, applied to both affected tests.
 
-### P4 … P17 — **NOT STARTED**
+### P4 — Classrooms, membership, invites, notifications · **IN PROGRESS** (46h est.)
 
-P4 classrooms/membership/invites · P5 assignments/pinning/banks/blueprints · P6 simulation platform
+| Task | Status | Note |
+|---|---|---|
+| P4-T1 `Classroom` lifecycle, ownership transfer | **DONE** | This commit. Migration `0010_membership_history`. |
+| P4-T2 Membership: roles, removal, leaving, role history | **DONE** | This commit. Append-only `MembershipEvent`. |
+| P4-T3 Invitations: email, bulk, hashed join codes | NOT STARTED | Schema exists; the service does not. |
+| P4-T4 Invitation lifecycle: accept, revoke, expire, resend cooldown | NOT STARTED | |
+| P4-T5 Roster CSV: dry run, error report, idempotent apply | NOT STARTED | `RosterImport` model exists. |
+| P4-T6 Roster UI with per-student summary | NOT STARTED | |
+| P4-T7 Notifications: templates, queue, dedupe, quiet hours | NOT STARTED | `Notification` and `EmailOutbox` are still UNUSED. |
+| P4-T8 Permission matrix tests: every cell of §4 | NOT STARTED | Partial coverage in this commit; the §4 table itself is not yet exhaustive. |
+
+#### P4-T1/T2 detail (complete)
+
+**Three real bugs in the P1 authorisation layer, found by writing the first real caller.** The
+matrix was written in P1 and exercised only by synthetic fixtures; P4 called it for real and
+found three things that could not have been found any other way. All three produced a DENY for a
+caller who was allowed, which is the safe direction and still a bug, because the feature simply
+does not work:
+
+1. **`Classroom.create` granted `sameClassroom`, which a classroom being CREATED cannot satisfy.**
+   The obligation requires a `context.scopeClassroomId` and a subject that has an
+   `owningClassroomId`; a room that does not exist yet has neither. Every call returned
+   `wrongClassroom` and no classroom could be created. The fix is to DROP the obligation rather
+   than fake a scope: `update`, `publish` and `grade` happen INSIDE a classroom, while creation
+   ESTABLISHES one. **An obligation that cannot be satisfied by a correct caller is not a check,
+   it is a wall.**
+2. **The P1 matrix contradicted `plans/12` §4.** §4 says "Manage members and roles: OWNER ✓,
+   TEACHER ✓ (not owner)" and P1 had made `invite`/`removeMember` owner-only and
+   **`changeRole` a blanket `deny('roleForbidden')`** — a capability with no rule at all. A deputy
+   head of year who cannot add a student is a product decision nobody made.
+3. **`subject.owningClassroomId` was never populated**, so `sameClassroom` denied the OWNER the
+   right to rename their OWN classroom. For a Classroom, its owning classroom is itself.
+
+The structural fix for (1)–(3) is `classroomCanInput`/`permit` in `classrooms.ts`: ONE function
+builds a complete `CanInput`, including `scopeClassroomId` and `owningClassroomId`, and reads
+`actorClassroomIds` fresh from the database on every call (which is INV-CLASSROOM-2's "within one
+request" made mechanical). The file now has exactly ONE inline `can()` — the `create` call, where
+there is no classroom to scope to — and the reason is written next to it.
+
+**A test-shaped instruction in a plan, honoured literally.** `plans/12` §4: "Classroom scoping is
+applied *in the query*, not filtered afterwards, and a test asserts the generated SQL contains
+the scope." The test captures Prisma's emitted SQL and asserts the enrollment predicate is in the
+`where` and the actor is a bound parameter. It went through three wrong versions first: one read
+a property that was a snapshot of an EMPTY array (so it "passed" vacuously — a spy that records
+nothing is worse than no spy), one looked for `FROM "Classroom"` when Prisma emits
+`FROM "public"."Classroom"`, and one asserted the actor's uuid was INLINED in the statement when
+values are always bound. The final version asserts the PROPERTY.
+
+**Role history is a table, not the audit log.** `AuditEvent` answers "who did what"; it cannot
+answer "what was this student's role in March", because a role change overwrites the enrollment
+and leaves an entry describing the act rather than the state. `MembershipEvent` is append-only,
+and three `CHECK` constraints make a lying history impossible: a `ROLE_CHANGED` row must carry
+both ends and they must differ, a `JOINED` row must have no previous role, and a departure must
+have no next one. **A history that can lie is worse than no history, because it is believed.**
+
+**Two boundary decisions worth arguing with.** `addMember` refuses `OWNER` outright — a roster
+screen that can set anybody to OWNER bypasses the TEACHER check that `transferClassroomOwnership`
+applies, and the matrix cannot see the target. And `endMembership` has no `cascade` parameter:
+the way to guarantee INV-CLASSROOM-2's "the student's records are preserved" is for the function
+to have no parameter capable of expressing the opposite.
+
+**The authz-ownership gate fired four times** on `ownerId === actorId` comparisons in the service
+layer and was right every time. All of them now ask `isSameActor` from `packages/auth`, because
+"is this mine?" is an identity question and a codebase that answers it inline in a dozen places
+has a dozen slightly different answers.
+
+### P5 … P17 — **NOT STARTED**
+
+P5 assignments/pinning/banks/blueprints · P6 simulation platform
 and the 24 gold sims · P7 quiz runtime and auto-grading · P8 exam runtime and integrity · P9 teacher
 review and grading · P10 atomic release and results · P11 item analysis and gradebook · P12
 simulation scale-out to 220 · P13 accessibility and i18n · P14 security, privacy, compliance ·
@@ -288,7 +356,7 @@ pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
 pnpm run test           # 938 unit
-pnpm run test:integration   # 165 across 12 files, needs DATABASE_URL
+pnpm run test:integration   # 191 across 13 files, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
 
