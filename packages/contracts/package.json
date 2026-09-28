@@ -71,6 +71,10 @@
     "./search/text": {
       "types": "./dist/search/text.d.ts",
       "default": "./dist/search/text.js"
+    },
+    "./urls": {
+      "types": "./dist/urls/index.d.ts",
+      "default": "./dist/urls/index.js"
     }
   },
   "scripts": {

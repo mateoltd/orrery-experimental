@@ -81,9 +81,15 @@ importers:
       '@orrery/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@orrery/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@orrery/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@orrery/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       next:
         specifier: 15.5.25
         version: 15.5.25(react-dom@19.2.0(react@19.2.0))(react@19.2.0)

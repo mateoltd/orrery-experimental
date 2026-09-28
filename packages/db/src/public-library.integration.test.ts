@@ -330,27 +330,38 @@ describe.skipIf(!DATABASE_URL)('P3-T3 subject tree counts', () => {
     const leaf = await subject('AgreeLeaf', null);
     await publicResource(owner, leaf.id);
 
-    const nodes = await subjectTree(prisma());
-    const parentOf = new Map(nodes.map((n) => [n.slug, n.parentSlug]));
-
-    // Independent: what does SQL say has a listable resource, with no rollup involved?
-    const truth = await prisma().resource.groupBy({
-      by: ['subjectId'],
-      where: {
-        status: 'PUBLISHED',
-        visibility: 'PUBLIC',
-        archivedAt: null,
-        currentVersionId: { not: null },
-        owner: { is: { isMinor: false } },
+    // ONE SNAPSHOT for both reads. This assertion compares the tree's JS rollup against a SQL
+    // group-by, and vitest runs test files in parallel against one shared database — so another
+    // file inserting a public resource between the two reads makes the sets differ and the
+    // failure reads as "the rollup and the predicate disagree", which is exactly the bug this
+    // test exists to catch and is much more expensive to chase when it is a test artefact.
+    // REPEATABLE READ is the fix; see the same note in `public-urls.integration.test.ts`.
+    const nodes = await prisma().$transaction(
+      async (tx) => {
+        const tree = await subjectTree(tx as never);
+        // Independent: what does SQL say has a listable resource, with no rollup involved?
+        const grouped = await tx.resource.groupBy({
+          by: ['subjectId'],
+          where: {
+            status: 'PUBLISHED',
+            visibility: 'PUBLIC',
+            archivedAt: null,
+            currentVersionId: { not: null },
+            owner: { is: { isMinor: false } },
+          },
+        });
+        return {
+          tree,
+          grouped,
+          byId: await tx.subject.findMany({ select: { id: true, slug: true } }),
+        };
       },
-    });
-    const occupied = new Set<string>();
-    const byId = new Map(
-      (await prisma().subject.findMany({ select: { id: true, slug: true } })).map((r) => [
-        r.id,
-        r.slug,
-      ]),
+      { isolationLevel: 'RepeatableRead' },
     );
+    const truth = nodes.grouped;
+    const parentOf = new Map(nodes.tree.map((n) => [n.slug, n.parentSlug]));
+    const occupied = new Set<string>();
+    const byId = new Map(nodes.byId.map((r) => [r.id, r.slug]));
     for (const t of truth) {
       const slug = t.subjectId === null ? undefined : byId.get(t.subjectId);
       if (slug === undefined) continue;
@@ -361,13 +372,13 @@ describe.skipIf(!DATABASE_URL)('P3-T3 subject tree counts', () => {
       }
     }
 
-    const claimed = new Set(nodes.filter((n) => !n.empty).map((n) => n.slug));
+    const claimed = new Set(nodes.tree.filter((n) => !n.empty).map((n) => n.slug));
     expect(claimed, 'the JS rollup and the SQL predicate disagree about the tree').toEqual(
       occupied,
     );
 
     // And the counts themselves, on the node we know the answer for.
-    const agree = nodes.find((n) => n.slug === leaf.slug);
+    const agree = nodes.tree.find((n) => n.slug === leaf.slug);
     expect(agree?.publicCount).toBe(1);
     expect((await browsePublic(prisma(), { subject: leaf.slug })).items).toHaveLength(1);
   });

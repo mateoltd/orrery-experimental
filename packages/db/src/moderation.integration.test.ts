@@ -403,7 +403,7 @@ describe.skipIf(!DATABASE_URL)('P3-T5 the takedown SLA', () => {
 
     // Two hours later, on a one-hour SLA.
     c.advance(2 * HOUR);
-    const queue = await moderationQueue(prisma(), {}, c);
+    const queue = await moderationQueue(prisma(), { limit: 5_000 }, c);
     const entry = queue.entries.find((e) => e.id === flagged.flag.id);
     expect(entry, 'an overdue flag must be in the queue').toBeDefined();
     expect(entry?.overdueMs).toBe(HOUR);
@@ -522,8 +522,9 @@ describe.skipIf(!DATABASE_URL)('P3-T5 the takedown SLA', () => {
     expect(old.ok && urgent.ok).toBe(true);
     if (!old.ok || !urgent.ok) return;
     // Two DIFFERENT reporters, so both rows exist and neither took the "already reported" path.
-    const queue = await moderationQueue(prisma(), { limit: 500 }, c);
+    const queue = await moderationQueue(prisma(), { limit: 5_000 }, c);
     const order = queue.entries.filter((e) => [old.flag.id, urgent.flag.id].includes(e.id));
+    expect(order, 'both flags must be in the queue page').toHaveLength(2);
     expect(order[0]?.id, 'the safeguarding flag is younger and must be first').toBe(urgent.flag.id);
   });
 
@@ -536,8 +537,14 @@ describe.skipIf(!DATABASE_URL)('P3-T5 the takedown SLA', () => {
       c,
     );
     if (!flagged.ok) return;
-    const early = await moderationQueue(prisma(), {}, c);
+    // A high limit, deliberately. `moderationQueue` returns the first N OPEN flags ordered by
+    // deadline, and this suite shares one database with no cleanup — so after a few runs the
+    // first 100 rows are other runs' flags and this test's own flag is simply not in the page.
+    // The earlier version used the default limit and failed with `expected undefined to be +0`,
+    // which reads like the queue lost a row rather than like the page did not reach it.
+    const early = await moderationQueue(prisma(), { limit: 5_000 }, c);
     const entry = early.entries.find((e) => e.id === flagged.flag.id);
+    expect(entry, 'the flag is not in the queue page').toBeDefined();
     // "Three hours early" reported as -3h would make a SUM over the queue wrong in a way that
     // averages to nothing and totals to something absurd.
     expect(entry?.overdueMs).toBe(0);

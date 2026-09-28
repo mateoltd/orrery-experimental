@@ -41,6 +41,26 @@
     "./taxonomy": {
       "types": "./dist/taxonomy.d.ts",
       "default": "./dist/taxonomy.js"
+    },
+    "./public-urls": {
+      "types": "./dist/public-urls.d.ts",
+      "default": "./dist/public-urls.js"
+    },
+    "./public-library": {
+      "types": "./dist/public-library.d.ts",
+      "default": "./dist/public-library.js"
+    },
+    "./search": {
+      "types": "./dist/search.d.ts",
+      "default": "./dist/search.js"
+    },
+    "./moderation": {
+      "types": "./dist/moderation.d.ts",
+      "default": "./dist/moderation.js"
+    },
+    "./seed/subjects": {
+      "types": "./dist/seed/subjects.d.ts",
+      "default": "./dist/seed/subjects.js"
     }
   },
   "scripts": {

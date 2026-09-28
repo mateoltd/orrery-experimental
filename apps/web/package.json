@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "@orrery/auth": "workspace:*",
+    "@orrery/config": "workspace:*",
     "@orrery/contracts": "workspace:*",
+    "@orrery/db": "workspace:*",
     "next": "15.5.25",
     "react": "19.2.0",
     "react-dom": "19.2.0"

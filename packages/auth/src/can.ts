@@ -123,3 +123,31 @@ export type {
   Subject,
 } from './types.js';
 export { ACTIONS, ALL_RESOURCE_TYPES, IMPLEMENTED_TYPES, ROLES } from './types.js';
+
+/**
+ * Do these two ids name the same person?  (P3-T6)
+ *
+ * ## Why this is a kernel function and not a one-line `===` at the call site
+ *
+ * Because the authz-ownership gate forbids comparing an owner id to an actor id outside this
+ * package, and it is right. Every such comparison is a question about IDENTITY, and a codebase
+ * with one of them per call site has a hundred slightly different answers to "is this mine?" —
+ * some comparing to an actor, some to a session user, some to a path param.
+ *
+ * The P3-T6 caller is the smallest possible example of why. `checkPublicSlug` needs to know
+ * whether the resource already holding a URL belongs to the teacher trying to claim it, purely
+ * to pick between two different sentences of copy. That is not an authorisation decision — the
+ * partial unique index and the publish path are what actually decide — but the comparison is
+ * still a question about who somebody is, and it now lives in one place.
+ *
+ * Nullable on both sides on purpose: a row with no owner is not owned by anybody, including the
+ * actor, and a `null === null` implementation would report an orphan as the actor's own.
+ */
+export function isSameActor(
+  actorId: string | null | undefined,
+  ownerId: string | null | undefined,
+): boolean {
+  if (actorId === null || actorId === undefined) return false;
+  if (ownerId === null || ownerId === undefined) return false;
+  return actorId === ownerId;
+}

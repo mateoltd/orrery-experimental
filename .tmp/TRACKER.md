@@ -42,9 +42,9 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 48 (P3-T5 landed after this file was written; see the table) |
-| Unit tests | **915** (clock 29, ids 10, rng 16, config 48, auth 384, i18n 25, db 8, contracts 251, web 139, worker 5) |
-| Integration tests | **152** across 11 files, real Postgres |
+| Commits | 50 (P3-T5 and P3-T6 landed after this file was first written) |
+| Unit tests | **938** (clock 29, ids 10, rng 16, config 48, auth 384, i18n 25, db 8, contracts 274, web 142, worker 5 — approximately; per-package counts shift as suites grow) |
+| Integration tests | **165** across 12 files, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
 | Invariants registered | 29 (8 active) |
@@ -97,7 +97,7 @@ Commits `187fa19` … `82a3ae8`.
 - The slash palette and four atomic node views; editor/renderer accessibility — computed contrast,
   a real key map.
 
-### P3 — Subjects, library, search & moderation · **IN PROGRESS** (30h est.)
+### P3 — Subjects, library, search & moderation · **DONE** (30h est.)
 
 | Task | Status | Commit | Note |
 |---|---|---|---|
@@ -106,7 +106,7 @@ Commits `187fa19` … `82a3ae8`.
 | P3-T3 public library | **DONE** | `89d9c10` | No anonymous `Actor` by design. `plans/05` §6's **under-18 rule** enforced in SQL. Keyset paging. Four distinguishable empty states. |
 | P3-T4 search, facets, zero-result log | **DONE** | `11e73ed` | Weighted `tsvector` as a generated column. Also **implemented schema-gate check 2**, which had been documented since P0-T4 and never written. |
 | P3-T5 ratings, comments, flagging, takedown SLA | **DONE** | *(this commit)* | Vocabulary, schema, migration, auth rules, moderation service, 29 integration tests. The SLA is a **gate**, not a number in a column. |
-| P3-T6 slugs, canonical URLs, OG images, sitemap | NOT STARTED | — | |
+| P3-T6 slugs, canonical URLs, OG images, sitemap | **DONE** | *(this commit)* | `/library/<slug>` with the subject deliberately OUT of the path, a partial unique index for the public namespace, SVG OG cards with three security headers, and a sitemap that is a public surface and is filtered like one. |
 
 #### P3-T5 detail (complete)
 
@@ -190,6 +190,68 @@ child's name on a public resource is harmful on the same timescale, and a slower
 rank it as less urgent than a rude word. **These need a human decision before GA** — the file
 is the documentation `plans/05` asks for, and the numbers are the part to argue with.
 
+#### P3-T6 detail (complete)
+
+The design decision, and the one to argue with: **the canonical path is `/library/<slug>` and the
+subject is NOT in it.** The obvious URL is `/library/maths/algebra/quadratics` — keyword-rich,
+what a CMS generates — and it is wrong here because `moveSubject` is a shipped, cycle-safe
+feature (P3-T1) and moving a subject would break the URL of every resource beneath it. Dropping
+the subject costs two things and both are handled:
+
+  · **Ambiguity.** Two public resources cannot share a slug, enforced by a PARTIAL unique index —
+    `UNIQUE (slug) WHERE visibility = 'PUBLIC'` — so uniqueness is required exactly where the URL
+    is ambiguous and NOT in the authors' private libraries, where two teachers each having a
+    draft called `quadratics` is correct. A global unique index would have blocked ordinary
+    authoring to protect an ambiguity that does not yet exist, and it is the kind of wrong that
+    looks right. Prisma cannot express a partial index, so it lives in migration 0009 as SQL and
+    is declared in the schema as a plain `@@index` so `migrate diff` agrees.
+  · **Renames.** The slug is assigned ONCE at creation and is **immutable**, so a title can change
+    forever without touching a URL. That is what removes the need for a redirect table: there is
+    no rename path, so there is nothing to redirect. An alias table would have been a second
+    place to keep URLs in step, and a second place is a second thing to get out of step. If
+    resource renames are ever a requirement, `packages/contracts/src/urls` is the file to revisit.
+
+  · **`APP_URL`, not the `Host` header.** A sitemap needs absolute URLs and the obvious source of
+    the origin is the request header, which is attacker-controlled. Reflecting it means a
+    poisoned sitemap that a crawler submits on somebody else's instructions. `APP_URL` already
+    existed in config with a "not localhost in production" refinement — I added a second
+    `PUBLIC_ORIGIN` before noticing, and reverted it. **One origin, one place** is the lesson and
+    it cost me one commit's worth of churn.
+
+  · **The sitemap is a PUBLIC SURFACE.** It is built from the same exported `PUBLIC_LISTING`
+    predicate as the public library and the search, so it inherits the `plans/05` §6 under-18
+    rule. A sitemap entry is the hardest thing on the platform to take back: it ends up in a
+    search engine's index and can be cached by third parties for months.
+
+  · **The OG card is SVG, and an SVG is a document.** No image library, so it is a pure function
+    and a reviewable diff. The consequence is that a browser will EXECUTE a script in an SVG it
+    navigates to, which is what every link previewer does — so three things are required
+    together and none suffices: XML-escape every interpolated value (the title is author text),
+    send `Content-Security-Policy: default-src 'none'`, and send `X-Content-Type-Options:
+    nosniff`. A missing resource is a 404, not a placeholder card, because a preview service
+    caches whatever it is given and a generic card for a 404 becomes its permanent preview.
+
+Three findings worth carrying forward:
+
+  · **`<loc>` was relative, and no test caught it.** `renderSitemap` is path-based on purpose (it
+    has no idea what a deployment is called), the unit tests assert paths — and the bug lived in
+    the one layer between the tested function and the wire. Running the route against the real
+    database and *reading the output* is what found it. There is now a test stating the contract:
+    `renderSitemap` does NOT add an origin, so a caller who forgets produces relative URLs
+    silently.
+  · **A test that deliberately corrupts shared state breaks unrelated tests.** The
+    cycle-termination check created a two-node subject cycle, queried, then repaired it — leaving
+    a window in which a globally shared tree was cyclic. Two other test FILES read that tree and
+    one started failing with "the JS rollup and the SQL predicate disagree", which looks exactly
+    like the bug that test exists to catch. It is now inside a transaction that rolls back. A test
+    that corrupts shared state is a test that can break other tests however carefully it repairs
+    itself.
+  · **ANY assertion that compares two reads must take them in ONE snapshot.** Vitest runs test
+    files in parallel against one shared database, so a resource inserted *between* two reads
+    makes the sets differ and the failure reads as "these two predicates have drifted". I chased
+    that as a real bug and the diff was zero — the sets were 1890 and 1890 when read together.
+    `REPEATABLE READ` in one transaction is the fix, applied to both affected tests.
+
 ### P4 … P17 — **NOT STARTED**
 
 P4 classrooms/membership/invites · P5 assignments/pinning/banks/blueprints · P6 simulation platform
@@ -209,6 +271,10 @@ P15 reliability, performance, DR · P16 interop (QTI/xAPI/LTI/OneRoster) · P17 
 - **`docker-compose.yml` is unverified on this host** (SELinux). The Postgres it declares works
   when run directly; the compose path does not. This should be fixed in the compose file with a
   `:z` relabel so `docker compose up` is portable to SELinux hosts, and that is a real task.
+- **The shared integration database now holds thousands of fixture rows** from repeated runs,
+  with no cleanup. Every test therefore uses exact per-run slugs rather than prefixes, and
+  assertions that compare two reads use a `REPEATABLE READ` snapshot. A `--force` reset is
+  occasionally worth doing by hand; the suite does not depend on being clean, but it is large.
 - **P2-T11 remains unbuilt insurance.** The P2-T3 kill-switch never fired.
 
 ## Evidence commands
@@ -221,8 +287,8 @@ pnpm run build          # must pass before typecheck; tsbuildinfo can go stale
 pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
-pnpm run test           # 915 unit
-pnpm run test:integration   # 152 across 11 files, needs DATABASE_URL
+pnpm run test           # 938 unit
+pnpm run test:integration   # 165 across 12 files, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
 
