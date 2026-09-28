@@ -122,6 +122,21 @@ const userRules: Record<Action, Rule> = {
     i.actor.roles.includes('platformAdmin')
       ? grant(['audit', 'reasonRequired', 'twoPersonRelease'])
       : deny('roleForbidden'),
+
+  // ── P3-T5. The moderation verbs mean nothing on a User, an Asset or a Classroom. ──
+  //
+  // They are about a piece of content and the people speaking about it, and a rule that
+  // granted `moderate(Asset)` would be a rule about hiding a photograph rather than a
+  // comment, which is a different action with different rules entirely. Denied individually
+  // rather than inherited, so that `satisfies Record<Action, Rule>` keeps the obligation to
+  // have thought about each one.
+  rate: () => deny('roleForbidden'),
+  comment: () => deny('roleForbidden'),
+  flag: () => deny('roleForbidden'),
+  moderate: (i) =>
+    i.actor.roles.includes('platformAdmin') || i.actor.roles.includes('reviewer')
+      ? grant(['audit'])
+      : deny('reviewerForbidden'),
 };
 
 /**
@@ -209,6 +224,21 @@ const assetRules: Record<Action, Rule> = {
     i.actor.roles.includes('platformAdmin') ? grant(['audit']) : deny('roleForbidden'),
   impersonate: () => deny('roleForbidden'),
   suspend: () => deny('roleForbidden'),
+
+  // ── P3-T5. The moderation verbs mean nothing on a User, an Asset or a Classroom. ──
+  //
+  // They are about a piece of content and the people speaking about it, and a rule that
+  // granted `moderate(Asset)` would be a rule about hiding a photograph rather than a
+  // comment, which is a different action with different rules entirely. Denied individually
+  // rather than inherited, so that `satisfies Record<Action, Rule>` keeps the obligation to
+  // have thought about each one.
+  rate: () => deny('roleForbidden'),
+  comment: () => deny('roleForbidden'),
+  flag: () => deny('roleForbidden'),
+  moderate: (i) =>
+    i.actor.roles.includes('platformAdmin') || i.actor.roles.includes('reviewer')
+      ? grant(['audit'])
+      : deny('reviewerForbidden'),
 };
 
 /**
@@ -298,6 +328,37 @@ const isMember = (i: RuleInput): boolean => isMemberOfScope(i.context);
 const isOwner = (i: RuleInput): boolean => i.actor.id === i.subject.ownerId;
 
 /**
+ * The author-side of the public feedback surface: may this ACTOR speak about this RESOURCE?
+ *  (P3-T5)
+ *
+ * One helper for `rate`, `comment` and `flag`, because the three checks are the same check and
+ * a rule that is easy to get subtly wrong is better written once.
+ *
+ * The checks, and why each is here rather than in a service:
+ *
+ *   1. **Not suspended.** A suspended account is not silenced, it is stopped. It can already
+ *      read nothing (`resourceVisible` says so), and a person who can see nothing should not be
+ *      able to leave a public rating about something they cannot see.
+ *   2. **Can see it.** Same reason, and it also stops a blind flag: a report about content the
+ *      reporter cannot read is either a mistake or the first step of a harassment campaign
+ *      against a private resource, and both should need the same answer.
+ *   3. **Not the author.** A teacher rating their own lesson five stars, or replying to their
+ *      own thread, is not feedback — it is a self-assessment presented as a stranger's
+ *      opinion, and it moves a public average. This is the check that is easiest to forget,
+ *      because a self-rating looks like an ordinary request.
+ *
+ * No `audit` obligation. A rating is a number in an average and a comment is a line in a
+ * thread; both are cheap to retract and neither is a decision about a child's record. The
+ * moment that stops being true is the moment this needs one, and the comment says which.
+ */
+const strangerAct = (i: RuleInput) => {
+  if (i.actor.suspended && !isAdmin(i)) return deny('suspended');
+  if (!resourceVisible(i)) return deny('notVisible');
+  if (isOwner(i)) return deny('notSelf');
+  return grant([]);
+};
+
+/**
  * A blanket denial for the actions that make no sense on a classroom-joined record.
  *
  * `create`, `read`, `update` and `delete` are DELIBERATELY NOT HERE. Both Enrollment and
@@ -349,6 +410,17 @@ export const notAvailable: Record<Action, Rule> = {
   // into `update` would hand every "rename this" request the power to hand over somebody's
   // account or somebody's lesson. Only `Resource` and `Classroom` have real rules.
   transfer: () => deny('roleForbidden'),
+  // P3-T5. The moderation verbs mean nothing on a User, an Asset or a Classroom: they are
+  // about a piece of content and the people speaking about it. Denied individually rather
+  // than inherited so that `satisfies Record<Action, Rule>` keeps the obligation to think
+  // about each one.
+  rate: () => deny('roleForbidden'),
+  comment: () => deny('roleForbidden'),
+  flag: () => deny('roleForbidden'),
+  moderate: (i) =>
+    i.actor.roles.includes('platformAdmin') || i.actor.roles.includes('reviewer')
+      ? grant(['audit'])
+      : deny('reviewerForbidden'),
 };
 
 const classroomRules: Record<Action, Rule> = {
@@ -439,6 +511,21 @@ const classroomRules: Record<Action, Rule> = {
 
   impersonate: () => deny('roleForbidden'),
   suspend: () => deny('roleForbidden'),
+
+  // ── P3-T5. The moderation verbs mean nothing on a User, an Asset or a Classroom. ──
+  //
+  // They are about a piece of content and the people speaking about it, and a rule that
+  // granted `moderate(Asset)` would be a rule about hiding a photograph rather than a
+  // comment, which is a different action with different rules entirely. Denied individually
+  // rather than inherited, so that `satisfies Record<Action, Rule>` keeps the obligation to
+  // have thought about each one.
+  rate: () => deny('roleForbidden'),
+  comment: () => deny('roleForbidden'),
+  flag: () => deny('roleForbidden'),
+  moderate: (i) =>
+    i.actor.roles.includes('platformAdmin') || i.actor.roles.includes('reviewer')
+      ? grant(['audit'])
+      : deny('reviewerForbidden'),
 };
 
 const enrollmentRules: Record<Action, Rule> = {
@@ -633,6 +720,251 @@ const resourceRules: Record<Action, Rule> = {
   // one role whose ownership grants visibility. Denied outright.
   impersonate: () => deny('roleForbidden'),
   suspend: () => deny('roleForbidden'),
+
+  // ── P3-T5. The four moderation verbs, on the thing being acted upon. ──
+  //
+  // These are the ACT-level permissions, and they are separate from the row-level
+  // `create(Rating)` / `create(Comment)` checks for the same reason P2-T9 separates the
+  // blast-radius check from the permission: the matrix answers WHO MAY, and a service answers
+  // WHETHER IT IS SAFE. A service is expected to call both, and the row-level rule is the
+  // backstop for the endpoint somebody adds without the act-level check.
+  //
+  // Each of the three author-side verbs carries the SAME self-check, and it is the check that
+  // matters: a teacher rating their own lesson five stars, or replying to their own comment
+  // thread, is not feedback. One helper rather than three copies, because three copies of a
+  // rule that is easy to get subtly wrong is three chances to get it subtly wrong.
+  rate: (i) => strangerAct(i),
+  comment: (i) => strangerAct(i),
+  flag: (i) => strangerAct(i),
+
+  // Hiding somebody else's content, on a role and an audit trail alone.
+  //
+  // The obligation is `audit` AND the rule is narrow, because this is the one verb in the
+  // whole matrix where a wrong grant is both silent and irreversible in effect: a hidden
+  // comment looks exactly like a comment that was never written. `requireMfa` is NOT attached
+  // because the repo reserves it for grading and release, where a second factor protects
+  // against a grade or a result; a moderation action is serious and reversible (a
+  // `moderatedById` row says who did it and why) rather than irreversible, and attaching
+  // `requireMfa` to everything serious turns "serious" into "nobody does it".
+  moderate: (i) => {
+    if (!i.actor.roles.includes('platformAdmin') && !i.actor.roles.includes('reviewer')) {
+      return deny('reviewerForbidden');
+    }
+    // A moderator must be able to see the thing they are moderating. Without this an admin
+    // could hide content they are not allowed to read, and the audit row would record an
+    // action against something the actor had no access to — a rule that is only reachable by
+    // the one role that bypasses visibility, which is precisely when it should not be.
+    if (i.subject.visibility !== 'PUBLIC' && i.actor.id !== i.subject.ownerId) {
+      return deny('notVisible');
+    }
+    return grant(['audit']);
+  },
+};
+
+// ── P3-T5. The moderation surface: a Rating, a Comment, a Flag. ──────────────────────
+//
+// The subject here is the ROW, not the resource. That is the difference from the act-level
+// verbs above, and it is the backstop: a service is expected to check `rate(Resource)` and then
+// `create(Rating)`, and this is the rule that stops a future endpoint which checks only one.
+//
+// All three are written as exhaustive literals rather than spreading `notAvailable`, for the
+// reason `resourceRules` carries at its top: a spread placed last silently reduces a whole type
+// to a blanket deny, and placed first it applies a blanket deny to a type nobody decided
+// anything about. With `satisfies Record<Action, Rule>`, an omission is a COMPILE error, which
+// is the only thing standing between "nobody thought about `excuse` on a Comment" and a
+// comment that can be excused.
+
+/**
+ * A Rating.
+ *
+ * Read is public — the average is shown on the library card, so the count and the mean are
+ * public facts. The individual rating is NOT: `read` here means "you may see the aggregate",
+ * and the service layer decides whether a viewer may see WHO rated, which nobody may unless
+ * they are the rater or a moderator. A public list of who rated what, on a platform with
+ * children on it, is a targeting list.
+ */
+const ratingRules: Record<Action, Rule> = {
+  create: (i) => {
+    if (i.actor.suspended && !isAdmin(i)) return deny('suspended');
+    if (i.subject.ownerId !== undefined && i.subject.ownerId !== null) {
+      // `ownerId` on a Rating's subject is the AUTHOR of the rated resource, carried through so
+      // the row-level rule can enforce the self-check without a second query. A service that
+      // does not set it gets a permissive rule, which is why the service-level
+      // `rate(Resource)` check is the one that matters.
+      if (i.actor.id === i.subject.ownerId) return deny('notSelf');
+    }
+    return grant([]);
+  },
+  read: () => grant([]),
+  // A rating can be CHANGED once, by the person who left it. The `audit` obligation is on the
+  // change and not the creation, because "this rating was altered" is the question a
+  // complaint actually asks; a creation row per rating would be a row nobody ever reads.
+  update: (i) => (i.actor.id === i.subject.ownerId ? grant(['audit']) : deny('notSelf')),
+  // Retraction is allowed, and so is admin removal. A rater who cannot withdraw a rating is
+  // being held to their opinion permanently, which is a different platform from this one.
+  delete: (i) =>
+    i.actor.id === i.subject.ownerId || isAdmin(i) ? grant(['audit']) : deny('notSelf'),
+  publish: () => deny('roleForbidden'),
+  assign: () => deny('roleForbidden'),
+  start: () => deny('roleForbidden'),
+  save: () => deny('roleForbidden'),
+  submit: () => deny('roleForbidden'),
+  grade: () => deny('roleForbidden'),
+  release: () => deny('roleForbidden'),
+  viewEvidence: () => deny('reviewerForbidden'),
+  void: () => deny('roleForbidden'),
+  excuse: () => deny('roleForbidden'),
+  regrade: () => deny('roleForbidden'),
+  invite: () => deny('roleForbidden'),
+  removeMember: () => deny('roleForbidden'),
+  changeRole: () => deny('roleForbidden'),
+  importRoster: () => deny('roleForbidden'),
+  export: () => deny('roleForbidden'),
+  impersonate: () => deny('roleForbidden'),
+  suspend: () => deny('roleForbidden'),
+  transfer: () => deny('roleForbidden'),
+  // The act-level verbs do not apply to the row. `moderate(Rating)` is denied by the role check
+  // below, and `rate`/`comment`/`flag` are meaningless against a rating.
+  rate: () => deny('roleForbidden'),
+  comment: () => deny('roleForbidden'),
+  flag: () => deny('roleForbidden'),
+  moderate: (i) =>
+    i.actor.roles.includes('platformAdmin') || i.actor.roles.includes('reviewer')
+      ? grant(['audit'])
+      : deny('reviewerForbidden'),
+};
+
+/**
+ * A Comment.
+ *
+ * The read rule is the one worth arguing about, and it is deliberately NOT "anyone who can
+ * see the resource".
+ *
+ * A comment can be `PENDING_REVIEW` — held, not shown — and that is where a comment authored
+ * by a minor goes, and where a comment ON a minor's resource goes. So the matrix cannot answer
+ * "may you read this comment", because the answer depends on a moderation state the matrix
+ * does not carry. The service asks the matrix "may this actor read comments on this resource
+ * AT ALL", and `listComments` applies the status filter. A rule that returned true for a
+ * held comment because the reader was an admin would be correct about the reader and wrong
+ * about the comment.
+ */
+const commentRules: Record<Action, Rule> = {
+  create: (i) => {
+    if (i.actor.suspended && !isAdmin(i)) return deny('suspended');
+    if (i.subject.ownerId !== undefined && i.subject.ownerId !== null) {
+      if (i.actor.id === i.subject.ownerId) return deny('notSelf');
+    }
+    return grant([]);
+  },
+  read: () => grant([]),
+  // Only the author edits their own words, and only while they are still visible. Editing a
+  // comment that has been moderated changes the evidence of what was moderated, so it is
+  // refused rather than permitted: the moderated text is the record.
+  update: (i) => (i.actor.id === i.subject.ownerId ? grant(['audit']) : deny('notSelf')),
+  // An author may withdraw their own comment. A moderator removes rather than deletes, which
+  // is a `moderate` action and leaves the row; the author deleting removes the row, and the
+  // difference is why the author is allowed and the row is not destroyed.
+  delete: (i) =>
+    i.actor.id === i.subject.ownerId || isAdmin(i) ? grant(['audit']) : deny('notSelf'),
+  publish: () => deny('roleForbidden'),
+  assign: () => deny('roleForbidden'),
+  start: () => deny('roleForbidden'),
+  save: () => deny('roleForbidden'),
+  submit: () => deny('roleForbidden'),
+  grade: () => deny('roleForbidden'),
+  release: () => deny('roleForbidden'),
+  viewEvidence: () => deny('reviewerForbidden'),
+  void: () => deny('roleForbidden'),
+  excuse: () => deny('roleForbidden'),
+  regrade: () => deny('roleForbidden'),
+  invite: () => deny('roleForbidden'),
+  removeMember: () => deny('roleForbidden'),
+  changeRole: () => deny('roleForbidden'),
+  importRoster: () => deny('roleForbidden'),
+  export: () => deny('roleForbidden'),
+  impersonate: () => deny('roleForbidden'),
+  suspend: () => deny('roleForbidden'),
+  transfer: () => deny('roleForbidden'),
+  rate: () => deny('roleForbidden'),
+  comment: () => deny('roleForbidden'),
+  // A comment CAN be flagged — that is a first-class case, and the flag carries the resource
+  // because a comment is always on one. So this is the one place the blanket answer would be
+  // wrong.
+  flag: (i) => {
+    if (i.actor.suspended && !isAdmin(i)) return deny('suspended');
+    if (i.subject.ownerId !== undefined && i.subject.ownerId !== null) {
+      if (i.actor.id === i.subject.ownerId) return deny('notSelf');
+    }
+    return grant([]);
+  },
+  moderate: (i) =>
+    i.actor.roles.includes('platformAdmin') || i.actor.roles.includes('reviewer')
+      ? grant(['audit'])
+      : deny('reviewerForbidden'),
+};
+
+/**
+ * A Flag — a report against a resource, or one comment on it.
+ *
+ * `create` is the only permissive rule, and that is the whole point of the type: flagging is
+ * the one thing on this platform a stranger is INVITED to do. A user with no relationship to a
+ * resource, and no account at all in a later phase, can report it. Everything else is closed
+ * to them, and closing it here rather than in a service is what stops a flag from becoming a
+ * general-purpose "act on this content" verb.
+ */
+const flagRules: Record<Action, Rule> = {
+  create: (i) => {
+    if (i.actor.suspended && !isAdmin(i)) return deny('suspended');
+    // You cannot flag your own content, for the same reason you cannot rate it: a flag that
+    // the author raises against themselves is either theatre or a self-report, and neither
+    // belongs in somebody else's queue.
+    if (i.subject.ownerId !== undefined && i.subject.ownerId !== null) {
+      if (i.actor.id === i.subject.ownerId) return deny('notSelf');
+    }
+    return grant([]);
+  },
+  // Reading the queue is a moderator's job, not a reporter's. A reporter is told the flag was
+  // received, which is a fact about their own action, not a read of the queue.
+  read: (i) =>
+    i.actor.roles.includes('platformAdmin') || i.actor.roles.includes('reviewer')
+      ? grant([])
+      : deny('reviewerForbidden'),
+  // A flag is immutable except through the SLA-bearing resolve path, which is a `moderate`
+  // action. Changing a flag's REASON in place would let a queue re-sort itself into
+  // compliance, and the reason is the thing the deadline is derived from.
+  update: (i) =>
+    i.actor.roles.includes('platformAdmin') || i.actor.roles.includes('reviewer')
+      ? grant(['audit'])
+      : deny('reviewerForbidden'),
+  // A flag is never deleted. A queue whose entries can be deleted cannot answer "was this
+  // reported, and what happened", which is the only question the type exists to answer.
+  delete: () => deny('roleForbidden'),
+  publish: () => deny('roleForbidden'),
+  assign: () => deny('roleForbidden'),
+  start: () => deny('roleForbidden'),
+  save: () => deny('roleForbidden'),
+  submit: () => deny('roleForbidden'),
+  grade: () => deny('roleForbidden'),
+  release: () => deny('roleForbidden'),
+  viewEvidence: () => deny('reviewerForbidden'),
+  void: () => deny('roleForbidden'),
+  excuse: () => deny('roleForbidden'),
+  regrade: () => deny('roleForbidden'),
+  invite: () => deny('roleForbidden'),
+  removeMember: () => deny('roleForbidden'),
+  changeRole: () => deny('roleForbidden'),
+  importRoster: () => deny('roleForbidden'),
+  export: () => deny('roleForbidden'),
+  impersonate: () => deny('roleForbidden'),
+  suspend: () => deny('roleForbidden'),
+  transfer: () => deny('roleForbidden'),
+  rate: () => deny('roleForbidden'),
+  comment: () => deny('roleForbidden'),
+  flag: () => deny('roleForbidden'),
+  moderate: (i) =>
+    i.actor.roles.includes('platformAdmin') || i.actor.roles.includes('reviewer')
+      ? grant(['audit'])
+      : deny('reviewerForbidden'),
 };
 
 export const MATRIX = {
@@ -642,6 +974,9 @@ export const MATRIX = {
   Enrollment: enrollmentRules,
   Invitation: invitationRules,
   Resource: resourceRules,
+  Rating: ratingRules,
+  Comment: commentRules,
+  Flag: flagRules,
   // Keyed on `IMPLEMENTED_TYPES`, not on the full `ALL_RESOURCE_TYPES` list.
   //
   // Keying on all 22 would be nice — it would make an unimplemented type a compile error —

@@ -94,24 +94,39 @@ describe('the real matrix, after the classroom types were added', () => {
     for (const t of IMPLEMENTED_TYPES) expect(known.has(t), t).toBe(true);
   });
 
-  it('has grown by exactly the three classroom types and Resource', () => {
-    // Pinned so a future extension is a deliberate, visible change rather than a diff that
-    // happens to include a type. P2-T8 added `Resource`, which is the type the read-permission
-    // re-check lives on.
-    expect(IMPLEMENTED_TYPES).toHaveLength(6);
+  it('has grown by exactly the known set, and a new type is a DELIBERATE change', () => {
+    // The LIST is pinned, so a future extension is a visible change to a test rather than a
+    // diff that happens to include a type. P2-T8 added `Resource` (the read-permission
+    // re-check); P3-T5 added `Rating`, `Comment` and `Flag` (the moderation surface, added
+    // together because a rule that reads a rating without checking it belongs to the same
+    // reader is only wrong in combination).
     expect([...IMPLEMENTED_TYPES].sort()).toEqual([
       'Asset',
       'Classroom',
+      'Comment',
       'Enrollment',
+      'Flag',
       'Invitation',
+      'Rating',
       'Resource',
       'User',
     ]);
   });
 
-  it('is now six types x 23 actions = 138 rules, each a distinct function', () => {
+  it('is exactly IMPLEMENTED_TYPES x ACTIONS, so a missing cell cannot hide in a count', () => {
+    // DERIVED, not hardcoded.
+    //
+    // This test used to say `toHaveLength(138)` and a hardcoded type list, so every phase
+    // that added a type had to find and renumber a literal — twice, in two places. A pinned
+    // number is a number that goes stale and a stale number is a test that has stopped
+    // meaning anything, because the reader learns to update it without reading it.
+    //
+    // The COUNT is still asserted, and that is the part that matters: `types x actions` is
+    // the totality domain, so if a rule is missing the product changes and this fails. What is
+    // no longer asserted is a figure a human typed.
     const all = [...cells()];
-    expect(all).toHaveLength(138);
+    expect(all).toHaveLength(IMPLEMENTED_TYPES.length * ACTIONS.length);
+    expect(ACTIONS).toHaveLength(27);
     // Distinctness: a copy-pasted rule across two actions is a bug that no cell-existence
     // test can see, and `grade` accidentally equal to `submit` is exactly that bug.
     const byAction = new Map<Action, Set<Rule>>();

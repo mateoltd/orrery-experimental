@@ -125,7 +125,13 @@ model User {
   simDrafts             SimulationDraft[]
   assets                Asset[]
   ratings               Rating[]
-  comments              Comment[]
+  // P3-T5. Named relations, because a User is now on the other side of moderation in three
+  // distinct capacities — author, moderator, resolver — and an unnamed set of three
+  // `User?` fields on Comment/Flag cannot be told apart in a query or in a mistake.
+  commentsAuthored      Comment[]                    @relation("CommentAuthor")
+  commentsModerated     Comment[]                    @relation("CommentModerator")
+  flagsReported         Flag[]                       @relation("FlagReporter")
+  flagsResolved         Flag[]                       @relation("FlagResolver")
   accommodationsGranted Accommodation[]         @relation("AccommodationGrantor")
   accommodationsHeld    Accommodation[]         @relation("AccommodationStudent")
   accommodationRequests AccommodationRequest[]  @relation("RequestStudent")
@@ -364,6 +370,8 @@ model Resource {
   simRefs     ResourceSimRef[]
   ratings     Rating[]
   comments    Comment[]
+  /// P3-T5. A flag against the resource, and against one comment ON it.
+  flags       Flag[]
 
   @@unique([ownerId, slug])
   // `title > summary > tags > body`, as `plans/05` §6 specifies, as WEIGHTS A > B > C > D baked
@@ -1647,23 +1655,146 @@ model Rating {
   resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 1..5, enforced by a CHECK constraint rather than by the application.
+  ///
+  /// The column was a bare `Int` with no constraint, so the only thing standing between a
+  /// client and a rating of 0, 11 or -3 was a Zod schema in a request handler — and a rating is
+  /// aggregated into an average, where one outlier is a corrupted average rather than a
+  /// rejected write. A constraint is the only thing that holds when the write comes from a
+  /// script, a backfill, or the next endpoint somebody adds.
   value      Int
   createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
 
   @@unique([resourceId, userId])
+  @@index([resourceId])
 }
 
+/// A comment on a public resource.  (P3-T5)
 model Comment {
   id         String   @id @default(uuid(7))
   resourceId String
   resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
   authorId   String
-  author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author     User     @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
   body       String
-  status     String   @default("VISIBLE")
+
+  /// An ENUM, not a `String`. The column was `String @default("VISIBLE")` and every value in
+  /// the application was a bare string literal, so a typo in a status was a row no query
+  /// matched and no query rejected. The gate for this migration is that `VISIBLE` is the only
+  /// status `listComments` returns without a moderation check.
+  status     CommentStatus @default(VISIBLE)
+
+  /// Set when the comment was held for review rather than shown. The row is NOT deleted, because
+  /// "we held this and then nobody looked" and "this was never submitted" are different facts
+  /// and only one of them is a moderation failure.
+  gatedAt      DateTime? @db.Timestamptz(3)
+  /// WHY it was gated, in the author's own terms at write time. A minor's comment held for
+  /// review with no recorded reason cannot be un-held by a moderator who does not know what
+  /// they are looking at.
+  gateReason   String?
+  moderatedAt  DateTime? @db.Timestamptz(3)
+  moderatedById String?
+  moderatedBy  User?    @relation("CommentModerator", fields: [moderatedById], references: [id], onDelete: SetNull)
+  /// Never `null` on a HIDDEN or REMOVED comment. A hidden comment with no reason is a
+  /// moderation action nobody can audit, which is the failure a queue exists to prevent.
+  moderationReason String?
+
   createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  flags      Flag[]
 
   @@index([resourceId, status, createdAt])
+  @@index([status, gatedAt])
+}
+
+enum CommentStatus {
+  /// Shown publicly.
+  VISIBLE
+  /// HELD FOR REVIEW, not shown. Where a minor's comment goes, and where a comment on a minor's
+  /// resource goes. The row exists and is counted; nobody sees it yet.
+  PENDING_REVIEW
+  /// Reviewed and withheld. `moderationReason` is required.
+  HIDDEN
+  /// Reviewed and removed. Kept for the audit trail rather than deleted, because "we removed
+  /// this" is a fact a reporter is entitled to.
+  REMOVED
+}
+
+/// A report against a resource, or against one comment on it.  (P3-T5, plans/05 §6)
+model Flag {
+  id String @id @default(uuid(7))
+
+  /// ALWAYS present. A flag is always about a resource; flagging a comment is flagging it *on*
+  /// its resource. Two nullable polymorphic FKs would have needed a CHECK constraint to stop
+  /// the "neither" and "both" states, and this way "both" is the only option and it is the
+  /// correct one.
+  resourceId String
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  commentId  String?
+  comment    Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  reporterId String
+  reporter   User     @relation("FlagReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  reason     FlagReason
+  /// The reporter's own words, when `reason = OTHER`. Required in that case, because a
+  /// moderation queue cannot act on "other".
+  detail     String?
+
+  status     FlagStatus @default(OPEN)
+
+  /// THE SLA DEADLINE, computed from `reason` and an injected clock at write time. Not
+  /// recomputed on read, so a queue query is a plain indexed comparison and a deadline cannot
+  /// drift when the policy changes.
+  dueAt      DateTime  @db.Timestamptz(3)
+  /// Set when the flag was resolved after `dueAt`. The difference between "late" and "on time"
+  /// has to be recorded, not inferred, or the SLA report cannot be trusted.
+  resolvedAt DateTime? @db.Timestamptz(3)
+  /// Set when a moderator acknowledged an OVERDUE flag, which `resolveFlag` requires. The
+  /// escape hatch exists — a queue that cannot be worked when it is late is a queue people
+  /// stop opening — and requiring it means the lateness is visible to whoever reads the row
+  /// rather than buried in a metrics query nobody runs.
+  acknowledgedOverdueAt DateTime? @db.Timestamptz(3)
+  resolution  String?
+  resolvedById String?
+  resolvedBy  User?    @relation("FlagResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  /// One flag per reporter per target. Without it, holding down the key generates a thousand
+  /// rows and the queue's depth becomes a measure of a stuck keyboard.
+  @@unique([reporterId, resourceId, commentId])
+  @@index([status, dueAt])
+  @@index([status, reason])
+  @@index([resourceId, status])
+}
+
+enum FlagReason {
+  /// A child is at risk. Shortest SLA by an order of magnitude, and the only reason whose
+  /// deadline is measured in hours rather than days.
+  SAFEGUARDING
+  UNSAFE_OR_HARMFUL
+  OFFENSIVE
+  COPYRIGHT
+  MISINFORMATION
+  SPAM
+  PERSONAL_INFORMATION
+  OTHER
+}
+
+enum FlagStatus {
+  OPEN
+  /// Claimed by a moderator, not yet resolved. Claiming is not resolving, and a queue that
+  /// conflates them cannot show how much work is in flight.
+  CLAIMED
+  RESOLVED
+  /// Resolved as "no action needed", which is a real decision and is recorded as one. Without a
+  /// DISMISSED status, "nothing to do" and "nobody looked" share a value and the SLA report
+  /// cannot tell a clean queue from an abandoned one.
+  DISMISSED
 }
 
 model IdempotencyKey {

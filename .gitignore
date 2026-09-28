@@ -22,6 +22,10 @@ coverage/
 .worktrees/
 .local/
 .tmp/
+# …except the tracker. It lives here because it is the project's execution record, and it was
+# LOST once already when the workspace moved between hosts: an untracked file in a scratch
+# directory survives nothing. Durable history belongs in the repository, not in `/tmp`.
+!.tmp/TRACKER.md
 tmp/
 
 playwright-report/

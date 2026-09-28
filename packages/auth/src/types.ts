@@ -65,6 +65,24 @@ export const ACTIONS = [
   'export',
   'impersonate',
   'suspend',
+  // ── P3-T5. Four moderation verbs, and the plan's list of 22 does not contain any of them. ──
+  //
+  // `rate` and `comment` are separate verbs rather than folded into `create`, because a rating
+  // and a comment are different acts with different visibility and different blast radius, and
+  // `create(Comment)` is the door through which "comment as a minor" would become an ordinary
+  // create. `flag` is separate because flagging is a report AGAINST somebody's content, which
+  // is the opposite direction from every other verb here: it grants a stranger a channel.
+  //
+  // `moderate` is the one that is genuinely new in kind. Every other action changes or reads
+  // content the actor is party to; this one acts on a third party's content on the strength of
+  // a role alone, which is why it is a separate verb and why its rules are the strictest in the
+  // file. Folding it into `update` would make "hide this comment because it is a slur" and
+  // "edit this comment's text" indistinguishable to a rule, to an audit row, and to a reader
+  // trying to find out who hid something.
+  'rate',
+  'comment',
+  'flag',
+  'moderate',
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -95,6 +113,13 @@ export const ALL_RESOURCE_TYPES = [
   'Simulation',
   'SimulationDraft',
   'ExternalBinding',
+  // P3-T5. The moderation surface. `Takedown` is NOT a type: a takedown is a resolution of a
+  // `Flag`, and it lands on the thing itself — `Resource.status = WITHDRAWN` (P2-T8) or
+  // `Comment.status = HIDDEN`. A separate `Takedown` type would have been a second place to
+  // record "this content is down" and therefore a second thing to get out of step.
+  'Rating',
+  'Comment',
+  'Flag',
 ] as const;
 export type ResourceType = (typeof ALL_RESOURCE_TYPES)[number];
 
@@ -126,6 +151,14 @@ export const IMPLEMENTED_TYPES = [
   // it is made HERE rather than in the content layer — the authz-ownership gate caught that
   // instinct, correctly.
   'Resource',
+  // P3-T5. All three at once, and the reason is the same one the Classroom group was added for
+  // in P1: a rule that reads a rating without checking it belongs to the same reader, and a rule
+  // that hides a comment without checking the author is a minor, is only wrong IN COMBINATION.
+  // Adding them one at a time would have shipped an intermediate state where a stranger could
+  // rate or comment on a resource that a rule believed was moderated.
+  'Rating',
+  'Comment',
+  'Flag',
 ] as const satisfies readonly ResourceType[];
 
 /**
