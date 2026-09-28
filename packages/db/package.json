@@ -85,6 +85,10 @@
     "./prisma": {
       "types": "./dist/prisma.d.ts",
       "default": "./dist/prisma.js"
+    },
+    "./assignments": {
+      "types": "./dist/assignments.d.ts",
+      "default": "./dist/assignments.js"
     }
   },
   "scripts": {

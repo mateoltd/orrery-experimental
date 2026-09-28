@@ -55,9 +55,9 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 56 |
-| Unit tests | **1020** (auth 413 with 29 new matrix tests, contracts 311, web 158) |
-| Integration tests | **258** across 17 db files + 6 worker outbox, real Postgres |
+| Commits | 58 |
+| Unit tests | **1036** (contracts 327, auth 413, web 158) |
+| Integration tests | **268** across 18 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
 | Invariants registered | 29 (8 active) |
@@ -639,7 +639,94 @@ layer and was right every time. All of them now ask `isSameActor` from `packages
 "is this mine?" is an identity question and a codebase that answers it inline in a dozen places
 has a dozen slightly different answers.
 
-### P5 … P17 — **NOT STARTED**
+### P5 — Assignments, pinning, question banks & blueprints · **IN PROGRESS** (56h est.)
+
+| Task | Status | Commit | Note |
+|---|---|---|---|
+| P5-T1 `Assignment` with a pinned `resourceVersionId`, window, attempts, weight, late penalty, policy override | **DONE** | *(next commit)* | `packages/contracts/src/policy/` + `packages/db/src/assignments.ts`. The pin is STRUCTURAL: `resourceId` is derived from the version, and there is no parameter for "the current version". |
+| P5-T2 `AssignmentStudentOverride` | NOT STARTED | | Model exists; the merge into the policy fold is written and the service is not. |
+| P5-T3 Assignment builder, preview as student | NOT STARTED | | |
+| P5-T4 Student "to do" | NOT STARTED | | |
+| P5-T5 Pinning invariant enforcement (a) lint rule, (b) slot-level mutation test | PARTIAL | | (a) the gate exists (`scripts/pinning-gate.mjs`, ADR-0025). (b) the weak mutation test is done; the **slot-level** byte-identity check is not. |
+| P5-T6 QuestionBank CRUD | NOT STARTED | | |
+| P5-T7 QuestionPool, four draw strategies, `poolHealth` | NOT STARTED | | |
+| P5-T8 Blueprint + worst-case coverage | NOT STARTED | | |
+| P5-T9 `AssessmentSpec` slots + `variantMap` | NOT STARTED | | |
+| P5-T10 Publish snapshots every drawable question | NOT STARTED | | |
+| P5-T11 "Too similar" guard | NOT STARTED | | |
+| P5-T13 Interop skeleton, `ExternalBinding` | NOT STARTED | | |
+| P5-T14 `can()` matrix for the new P5 types | NOT STARTED | | `QuestionBank`/`QuestionPool`/`Blueprint` still have no rules. |
+| P5-T15 Author the seed banks | NOT STARTED | | D-37: nothing in 183 tasks authored a single question. |
+| P5-T12 Publish gates: pool, blueprint, metadata, `INV-SLOT-1` | NOT STARTED | | |
+
+#### P5-T1 detail (complete)
+
+**THE PLAN'S OWN EXAM DEFAULTS CANNOT SURVIVE A ROUND TRIP THROUGH THE DATABASE.**
+`plans/09` §4.1 specifies `thresholds: { …, pointerLockLosses: Infinity, … }`, and the reasoning
+is sound and documented (Escape releases pointer lock and browsers deliberately prevent
+interception, so counting it penalises a documented browser behaviour). But `ExamAttempt.
+policySnapshot` is a Prisma `Json` column and `JSON.stringify(Infinity)` is `null`. That policy
+would store as "no threshold", read back as undefined — and an undefined threshold is a threshold
+of **zero**, which terminates every student who presses Escape. So "never" is a first-class
+value in the serialised form, `null` on the wire, mapped back to `Infinity` internally. One place
+decides the difference between `0` and "never", instead of every comparison remembering it.
+
+**`Object.freeze` IS SHALLOW, AND INV-POLICY-1 IS ABOUT A SNAPSHOT THAT CANNOT CHANGE.** The first
+version froze once, and a test caught `policy.thresholds.fullscreenExits = 0` going straight
+through — a frozen shell around a mutable object. `freezePolicy` freezes `thresholds` and
+`escalation` as well.
+
+**MY `narrowest` IMPLEMENTED THE WIDEST, AND A TEST CAUGHT IT IMMEDIATELY.** It took the earliest
+start and the latest end, which is the union of every window anyone states. So a student given a
+personal window was handed back the longest one of the lot — narrowing is the entire point of a
+per-student override, and the buggy version quietly undid it while looking completely correct.
+It also compares by INSTANT, because a version policy may carry `+01:00` and an override `Z`, and
+`09:00+01:00` is earlier than `08:00Z` while sorting later as a string.
+
+**C13's `extraTimePercent` TAKES THE LARGER, AND THE DIRECTION MATTERS MORE THAN THE RULE.** A
+teacher granting 25% and an accommodation saying 50% do not disagree, they stack, and the smaller
+would silently under-grant a child time the law and the plan both promise. And an **untimed** exam
+plus extra time stays untimed: there is no limit to extend, and inventing one would turn an
+untimed assignment into a timed one *because* a student disclosed a right.
+
+**`INV-TIME-1` CAUGHT `Date.now()` INSIDE WHAT WAS SUPPOSED TO BE A PURE FOLD, AND IT WAS RIGHT
+FOR A REASON BEYOND THE RULE.** A function that reads the host clock is not pure, so an
+accommodation expiring at 16:00 was evaluated against the server's wall clock rather than the one
+the caller believes in, and a test could only reach the branch by changing the machine's clock.
+`now` is an input now. And with no `now` supplied, an accommodation carrying an expiry is treated
+as **ACTIVE**: defaulting to "denied" would mean a caller who forgot the parameter silently
+stripped a child's extra time.
+
+**THE PIN IS STRUCTURAL, NOT A CHECK.** `createAssignment` takes `resourceVersionId` and DERIVES
+`resourceId` from it, because accepting both would let a caller pair version 3 of one resource
+with version 1 of another — and every later read would join two ids that were never related.
+There is no parameter through which "the current version" could arrive instead, so a caller that
+forgets the version cannot call the function.
+
+**A DRAFT PINS, AND PUBLISHING IS THE ACT OF SHOWING THE PIN.** Pinning at publish is one refactor
+too many changes: a teacher edits the questions, a colleague publishes, and the colleague
+published something the teacher never saw. `publishAssignment` RETURNS the pinned version so the
+authoring surface can say "you are about to publish version 4" and a teacher can stop. Publishing
+twice returns an answer rather than a 409 — a teacher double-clicking Publish must not get a
+conflict that reads like a problem with their exam.
+
+**THE PINNING TEST IS IN ITS STRONG FORM.** The weak version — "the assignment still points at
+the old version id" — passes for an implementation that renders from the resource HEAD and merely
+records the pin. So the test resolves the assessment SURFACE, publishes a new version, moves the
+head onto it, and compares the resolved surface before and after. `P5-T5` adds the slot-level
+version of this.
+
+**WITHDRAWAL HAS NO ATTEMPT PARAMETER, AND THAT IS THE MECHANISM.** `INV-ASSIGN-2`: in-flight
+attempts run to their own deadline and remain submittable. There is no way to call the function in
+a mode that also cancels somebody's exam. A withdrawn assignment also cannot be re-published,
+because a withdrawal is a statement to students and silently undoing it is worse than doing
+nothing.
+
+#### P5-T1 evidence
+- 327 contracts unit (16 new for the policy), 268 db integration (10 new).
+- 8/8 gates, lint 0, typecheck 0, image builds.
+
+### P6 … P17 — **NOT STARTED**
 
 P5 assignments/pinning/banks/blueprints · P6 simulation platform
 and the 24 gold sims · P7 quiz runtime and auto-grading · P8 exam runtime and integrity · P9 teacher
@@ -674,8 +761,8 @@ pnpm run build          # must pass before typecheck; tsbuildinfo can go stale
 pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
-pnpm run test           # 1020 unit
-pnpm run test:integration   # 258 db + 6 worker, needs DATABASE_URL
+pnpm run test           # 1036 unit
+pnpm run test:integration   # 268 db + 6 worker, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
 

@@ -87,7 +87,7 @@ function scopedSubject(
 
 const C = 'c-1';
 
-function ctx(actorId: string, role: Capability['role'] | 'REVIEWER' | null): Context {
+function ctx(_actorId: string, role: Capability['role'] | 'REVIEWER' | null): Context {
   return {
     scopeClassroomId: C,
     actorClassroomIds: role === null ? new Set() : new Set([C]),
