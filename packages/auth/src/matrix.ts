@@ -413,6 +413,39 @@ const CLASSROOM_TEACHERS = ['OWNER', 'TEACHER'] as const;
 /** The same, plus the reviewer, for the evidence a classroom's staff need to see. */
 const CLASSROOM_EVIDENCE = ['OWNER', 'TEACHER', 'REVIEWER'] as const;
 
+/**
+ * Is the subject shared with a classroom the ACTOR is in?  (P5-T14)
+ *
+ * The same relationship `User.read` uses for "a teacher sees a student in their classroom",
+ * factored out because a question bank needs it for the same reason and the reason is the same:
+ * the grant must be to a CLASSROOM both parties belong to, or it is a grant to anybody in the
+ * tenant. Both sides are required — a bank shared with class A grants nothing to a teacher who
+ * is only in class B.
+ */
+const inSharedClassroom = (i: RuleInput): boolean => {
+  const shared = i.subject.sharedClassroomIds;
+  const mine = i.context?.actorClassroomIds;
+  if (shared === undefined || mine === undefined) return false;
+  for (const id of shared) {
+    if (mine.has(id)) return true;
+  }
+  return false;
+};
+
+/**
+ * True when the subject names a resource the actor owns.  (P5-T14)
+ *
+ * A `QuestionPool` belongs to a bank, and a pool's items ARE questions — so "may this actor read
+ * this pool" is really "may they read the bank it is in". The owner ids come from the CONTEXT for
+ * the same reason `actorClassroomRoles` does: the kernel is the only place allowed to compare
+ * identities, so a rule that wanted to look this up would have to ask the caller, and the caller
+ * is where a missing field becomes a wrong answer.
+ */
+const ownsBank = (i: RuleInput): boolean => {
+  const bankId = i.subject.sharedResourceIds?.[0];
+  return bankId !== undefined && i.context?.ownedResourceIds?.has(bankId) === true;
+};
+
 const holdsAnyRoleInScope = (i: RuleInput, roles: readonly string[]): boolean => {
   const context = i.context;
   if (context === undefined) return false;
@@ -965,6 +998,176 @@ const releaseBatchRules: Record<Action, Rule> = {
       : deny('reviewerForbidden'),
 };
 
+/**
+ * A bank of questions, and the authoring side of an assessment.  (P5-T14)
+ *
+ * ## Why a bank needs its OWN read rule and not the resource one
+ *
+ * A `Resource` is content with a public/private lifecycle. A `QuestionBank` is a teacher's
+ * WORKING SET — the half-finished question they are going to put in an exam next week — and the
+ * two want opposite defaults. So `read` is owner-or-shared-to-a-classroom, and the classroom
+ * relationship is read from the subject's `sharedClassroomIds`, which is the same mechanism
+ * `User.read` uses for a teacher seeing a student.
+ *
+ * The dangerous thing about a bank being readable is that its questions are reusable: leaking one
+ * question to a class that is ABOUT to sit it is leaking the exam. So the grant is deliberately
+ * narrow — a classroom the bank is explicitly shared with, and nothing else.
+ */
+const questionBankRules: Record<Action, Rule> = {
+  ...notAvailable,
+  create: (i) =>
+    i.actor.roles.includes('teacher') || i.actor.roles.includes('platformAdmin')
+      ? grant(['audit'])
+      : deny('roleForbidden'),
+  // Owner, or the STAFF of a classroom the bank was explicitly shared with. Not "any teacher in
+  // the school", and — the bug this test caught — not "any MEMBER of that school class" either.
+  //
+  // `inSharedClassroom` alone was enough to hand a question bank to every STUDENT in the class
+  // it was shared with. A bank is shared with a classroom so that its TEACHERS can build an exam
+  // out of it; the students of that class are, by definition, the people about to sit it. A test
+  // that only checked "teacher in another class is refused" passed against that, because it never
+  // asked who else is in the class.
+  read: (i) => {
+    if (isOwner(i)) return grant([]);
+    if (inSharedClassroom(i) && holdsAnyRoleInScope(i, CLASSROOM_TEACHERS)) return grant(['audit']);
+    return deny('notVisible');
+  },
+  // NOT `classroomScoped`: a bank is not inside a classroom, so claiming `sameClassroom` on it is
+  // an unsatisfiable obligation for every correct caller. The first version did that and the owner
+  // could not edit their own bank — the same family of bug as `Classroom.create` claiming a scope
+  // for a room that does not exist yet.
+  update: (i) => (isOwner(i) ? grant(['audit']) : deny('notOwner')),
+  delete: (i) => (isOwner(i) ? grant(['audit', 'reasonRequired']) : deny('notOwner')),
+  publish: () => deny('roleForbidden'),
+  assign: () => deny('roleForbidden'),
+  start: () => deny('roleForbidden'),
+  save: () => deny('roleForbidden'),
+  submit: () => deny('roleForbidden'),
+  grade: () => deny('roleForbidden'),
+  release: () => deny('roleForbidden'),
+  viewEvidence: () => deny('roleForbidden'),
+  adjudicate: () => deny('reviewerForbidden'),
+  void: () => deny('roleForbidden'),
+  excuse: () => deny('roleForbidden'),
+  regrade: () => deny('roleForbidden'),
+  invite: () => deny('roleForbidden'),
+  removeMember: () => deny('roleForbidden'),
+  changeRole: () => deny('roleForbidden'),
+  transfer: (i) => (isOwner(i) ? grant(['audit', 'reasonRequired']) : deny('notOwner')),
+  importRoster: () => deny('roleForbidden'),
+  // A bank export is every question in the teacher's working set, including the unpublished
+  // ones. Owner only.
+  export: (i) => (isOwner(i) ? grant(['audit']) : deny('notOwner')),
+  impersonate: () => deny('roleForbidden'),
+  suspend: () => deny('roleForbidden'),
+  rate: () => deny('roleForbidden'),
+  comment: () => deny('roleForbidden'),
+  flag: () => deny('roleForbidden'),
+  moderate: (i) =>
+    i.actor.roles.includes('platformAdmin') || i.actor.roles.includes('reviewer')
+      ? grant(['audit'])
+      : deny('reviewerForbidden'),
+};
+
+/**
+ * A pool, which lives INSIDE a bank.
+ *
+ * The read grant is the bank's, reached through the bank id. A pool that a teacher could read
+ * without the bank being readable would be a way to read a bank's questions, because a pool's
+ * items ARE questions.
+ */
+const questionPoolRules: Record<Action, Rule> = {
+  ...notAvailable,
+  create: (i) => (ownsBank(i) ? grant(['audit']) : deny('notOwner')),
+  // The same staff requirement as the bank, for the same reason: a pool's items are the
+  // questions, so "the class this pool is shared with" is the class about to be examined.
+  read: (i) =>
+    ownsBank(i) || (inSharedClassroom(i) && holdsAnyRoleInScope(i, CLASSROOM_TEACHERS))
+      ? grant([])
+      : deny('notVisible'),
+  update: (i) => (ownsBank(i) ? grant(['audit']) : deny('notOwner')),
+  // A pool with items in it is not deletable by the matrix alone; the service refuses, because
+  // the items are questions and deleting a pool must never delete them.
+  delete: (i) => (ownsBank(i) ? grant(['audit', 'reasonRequired']) : deny('notOwner')),
+  publish: () => deny('roleForbidden'),
+  assign: () => deny('roleForbidden'),
+  start: () => deny('roleForbidden'),
+  save: () => deny('roleForbidden'),
+  submit: () => deny('roleForbidden'),
+  grade: () => deny('roleForbidden'),
+  release: () => deny('roleForbidden'),
+  viewEvidence: () => deny('roleForbidden'),
+  adjudicate: () => deny('reviewerForbidden'),
+  void: () => deny('roleForbidden'),
+  excuse: () => deny('roleForbidden'),
+  regrade: () => deny('roleForbidden'),
+  invite: () => deny('roleForbidden'),
+  removeMember: () => deny('roleForbidden'),
+  changeRole: () => deny('roleForbidden'),
+  transfer: () => deny('roleForbidden'),
+  importRoster: () => deny('roleForbidden'),
+  export: (i) => (ownsBank(i) ? grant(['audit']) : deny('notOwner')),
+  impersonate: () => deny('roleForbidden'),
+  suspend: () => deny('roleForbidden'),
+  rate: () => deny('roleForbidden'),
+  comment: () => deny('roleForbidden'),
+  flag: () => deny('roleForbidden'),
+  moderate: (i) =>
+    i.actor.roles.includes('platformAdmin') || i.actor.roles.includes('reviewer')
+      ? grant(['audit'])
+      : deny('reviewerForbidden'),
+};
+
+/**
+ * A blueprint: what an exam SHOULD cover, as a matrix of topic, response process, points and
+ * tolerance.
+ *
+ * ## A blueprint is a TEMPLATE, and that is why the read grant is so narrow
+ *
+ * It contains the intended shape of an exam — "2 short answers on photosynthesis, 1 essay". A
+ * teacher who could read another teacher's blueprint for a class they share would learn the
+ * shape of the exam before they write it. So: owner, or a reviewer (whose job is exactly that).
+ */
+const blueprintRules: Record<Action, Rule> = {
+  ...notAvailable,
+  create: (i) =>
+    i.actor.roles.includes('teacher') || i.actor.roles.includes('platformAdmin')
+      ? grant(['audit'])
+      : deny('roleForbidden'),
+  read: (i) => (isOwner(i) || i.actor.roles.includes('reviewer') ? grant([]) : deny('notVisible')),
+  // Not `classroomScoped` either: a blueprint is a template, not a thing inside a classroom.
+  update: (i) => (isOwner(i) ? grant(['audit']) : deny('notOwner')),
+  delete: (i) => (isOwner(i) ? grant(['audit', 'reasonRequired']) : deny('notOwner')),
+  publish: () => deny('roleForbidden'),
+  assign: () => deny('roleForbidden'),
+  start: () => deny('roleForbidden'),
+  save: () => deny('roleForbidden'),
+  submit: () => deny('roleForbidden'),
+  grade: () => deny('roleForbidden'),
+  release: () => deny('roleForbidden'),
+  viewEvidence: () => deny('roleForbidden'),
+  adjudicate: () => deny('roleForbidden'),
+  void: () => deny('roleForbidden'),
+  excuse: () => deny('roleForbidden'),
+  regrade: () => deny('roleForbidden'),
+  invite: () => deny('roleForbidden'),
+  removeMember: () => deny('roleForbidden'),
+  changeRole: () => deny('roleForbidden'),
+  transfer: (i) => (isOwner(i) ? grant(['audit', 'reasonRequired']) : deny('notOwner')),
+  importRoster: () => deny('roleForbidden'),
+  export: (i) =>
+    isOwner(i) || i.actor.roles.includes('reviewer') ? grant(['audit']) : deny('notOwner'),
+  impersonate: () => deny('roleForbidden'),
+  suspend: () => deny('roleForbidden'),
+  rate: () => deny('roleForbidden'),
+  comment: () => deny('roleForbidden'),
+  flag: () => deny('roleForbidden'),
+  moderate: (i) =>
+    i.actor.roles.includes('platformAdmin') || i.actor.roles.includes('reviewer')
+      ? grant(['audit'])
+      : deny('reviewerForbidden'),
+};
+
 const enrollmentRules: Record<Action, Rule> = {
   ...notAvailable,
   // The OWNER path is explicit everywhere below. `staff: CLASSROOM_TEACHERS` does not
@@ -1472,6 +1675,9 @@ export const MATRIX = {
   Classroom: classroomRules,
   Enrollment: enrollmentRules,
   Invitation: invitationRules,
+  QuestionBank: questionBankRules,
+  QuestionPool: questionPoolRules,
+  Blueprint: blueprintRules,
   Assignment: assignmentRules,
   ExamAttempt: examAttemptRules,
   IntegrityEvidence: integrityEvidenceRules,
@@ -1506,6 +1712,9 @@ export const OVERRIDDEN_ACTIONS_ARE_EXPLICIT = ['create', 'read', 'update', 'del
 export const CONSUMERS_OF_NOT_AVAILABLE: Readonly<Record<string, Record<Action, Rule>>> = {
   Enrollment: enrollmentRules,
   Invitation: invitationRules,
+  QuestionBank: questionBankRules,
+  QuestionPool: questionPoolRules,
+  Blueprint: blueprintRules,
   Assignment: assignmentRules,
   ExamAttempt: examAttemptRules,
   IntegrityEvidence: integrityEvidenceRules,

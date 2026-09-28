@@ -110,14 +110,12 @@ export const ALL_RESOURCE_TYPES = [
   'Classroom',
   'Enrollment',
   'Invitation',
-  // P4-T8. §4 has rows for grading, releasing, taking an assignment and viewing evidence, and
-  // all four are actions on THESE types. With no rules for them the matrix had no opinion about
-  // §4's most important rows, and the exhaustive test said so: "§4 says nothing enforceable
-  // about this". Added as a group because INV-CLASS-1 is a property of the group.
-  'Assignment',
-  'ExamAttempt',
-  'IntegrityEvidence',
-  'ReleaseBatch',
+  // P4-T8 note: `Assignment`, `ExamAttempt`, `IntegrityEvidence` and `ReleaseBatch` were already
+  // listed below in the content group. They were added to `IMPLEMENTED_TYPES` at the same time,
+  // and a replace-all that matched both lists put a SECOND copy of each one here. Nothing failed:
+  // a duplicated entry in a union of string literals collapses to the same type, so TypeScript
+  // was satisfied and `can()` behaved identically. It is only visible by counting, which is why
+  // `ALL_RESOURCE_TYPES has no duplicates` is now a test.
   'Assignment',
   'ExamAttempt',
   'QuestionResponse',
@@ -171,6 +169,14 @@ export const IMPLEMENTED_TYPES = [
   'ExamAttempt',
   'IntegrityEvidence',
   'ReleaseBatch',
+  // P5-T14. The authoring side of an assessment: a teacher builds a bank, organises it into
+  // pools, and declares a blueprint of what an exam should cover. All three are added as a group
+  // for the reason the Classroom group was: the rule that makes a POOLED slot safe is the rule
+  // that makes a bank private, and shipping one without the other leaves a bank whose pools can
+  // be read by anybody who can see one question in it.
+  'QuestionBank',
+  'QuestionPool',
+  'Blueprint',
   // P2-T8. The read-permission re-check is the one place a visibility decision is made, and
   // it is made HERE rather than in the content layer — the authz-ownership gate caught that
   // instinct, correctly.
@@ -320,6 +326,15 @@ export interface Subject {
   readonly visibility?: ResourceVisibility;
   /** Classrooms this resource is shared into, as a SET so membership is a lookup not a scan. */
   readonly sharedClassroomIds?: ReadonlySet<string>;
+  /**
+   * Resources this subject hangs OFF rather than inside.  (P5-T14)
+   *
+   * A `QuestionPool` belongs to a bank, and a pool's items are questions — so reading a pool is
+   * really reading the bank. Carrying the parent id on the subject keeps "which bank" out of the
+   * rule and puts it where the caller already knows it, rather than inviting a rule to go and
+   * look a parent up, which is a database call inside an authorisation decision.
+   */
+  readonly sharedResourceIds?: readonly string[];
 }
 
 export interface Context {
@@ -356,6 +371,16 @@ export interface Context {
    * invariant would have been a comparison between two vocabularies that happen to share letters.
    */
   readonly releaseBatchStatus?: string;
+  /**
+   * Resources the actor OWNS, for subjects that hang off a resource rather than a classroom.  (P5-T14)
+   *
+   * A `QuestionPool` belongs to a bank, and a pool's items are questions — so "may this actor read
+   * this pool" is really "may they read the bank it is in". Putting the owner ids in the CONTEXT
+   * rather than on the subject is the same reasoning as `actorClassroomRoles`: the kernel is the
+   * only place allowed to compare identities, so a rule that wanted to look this up would have to
+   * ask the caller, and the caller is where a missing field becomes a wrong answer.
+   */
+  readonly ownedResourceIds?: ReadonlySet<string>;
 }
 
 export interface CanInput {

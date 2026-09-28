@@ -60,8 +60,8 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 60 |
-| Unit tests | **1036** (contracts 327, auth 413, web 158) |
+| Commits | 61 |
+| Unit tests | **1059** (auth 436 with 22 new P5-authoring tests, contracts 327, web 158) |
 | Integration tests | **282** across 19 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
@@ -660,7 +660,7 @@ has a dozen slightly different answers.
 | P5-T10 Publish snapshots every drawable question | NOT STARTED | | |
 | P5-T11 "Too similar" guard | NOT STARTED | | |
 | P5-T13 Interop skeleton, `ExternalBinding` | NOT STARTED | | |
-| P5-T14 `can()` matrix for the new P5 types | NOT STARTED | | `QuestionBank`/`QuestionPool`/`Blueprint` still have no rules. |
+| P5-T14 `can()` matrix for the new P5 types | **DONE** | *(next commit)* | Three types added with full rules. **The tests found a bank readable by its own students.** |
 | P5-T15 Author the seed banks | NOT STARTED | | D-37: nothing in 183 tasks authored a single question. |
 | P5-T12 Publish gates: pool, blueprint, metadata, `INV-SLOT-1` | NOT STARTED | | |
 
@@ -726,6 +726,51 @@ attempts run to their own deadline and remain submittable. There is no way to ca
 a mode that also cancels somebody's exam. A withdrawn assignment also cannot be re-published,
 because a withdrawal is a statement to students and silently undoing it is worse than doing
 nothing.
+
+#### P5-T14 detail (complete)
+
+**`QuestionBank`, `QuestionPool` and `Blueprint` HAD NO RULES, and P4-T8 had just found the same
+class of bug.** `types.ts` names this task as the one that appends to `IMPLEMENTED_TYPES`, so it
+is not a discovery — it is the second occurrence of a shape that a phase packet predicted and
+nobody had written down as a checklist item. Both types and rules are here now, and the totality
+test still runs before and after.
+
+**THE TEST FOUND A QUESTION BANK READABLE BY THE STUDENTS OF THE CLASS IT WAS SHARED WITH.** The
+grant was "a classroom the actor is in", and a student IS in the class. So a bank shared with
+Year 9 so its teachers could build an exam was readable by Year 9 — who are, by definition, the
+people about to sit it. A leaked question is a leaked EXAM, because a question is reusable, and
+this is the single worst bug the phase could have shipped. The test that caught it asked "can a
+STUDENT read a shared bank"; the test that did not catch it asked "can a teacher in another class
+read it", and passed.
+
+The rule now requires classroom STAFF, not membership. And the same requirement was applied to
+`QuestionPool.read`, whose items ARE questions — a pool readable without its bank readable would
+be a back door around the bank rule.
+
+**A BANK IS NOT INSIDE A CLASSROOM, SO `classroomScoped` WAS THE WRONG HELPER.** `update` used
+it, which claims a `sameClassroom` obligation that no correct caller can satisfy for an object with
+no classroom — so the owner could not edit their own bank. This is the third instance of the
+unsatisfiable-obligation family in this file, after `Classroom.create` and the classroom
+`owningClassroomId`. The pattern is now worth naming: **a rule that claims a relationship the
+subject does not have is a wall, not a check.**
+
+**`ALL_RESOURCE_TYPES` HAD FOUR DUPLICATED ENTRIES, AND NOTHING FAILED.** My P4-T8 edit used a
+replace that matched both `ALL_RESOURCE_TYPES` and `IMPLEMENTED_TYPES` and put a second copy of
+`Assignment`, `ExamAttempt`, `IntegrityEvidence` and `ReleaseBatch` into the former. A duplicated
+entry in a union of string literals collapses to the same type, so TypeScript was satisfied, every
+behavioural test passed, and the only symptom was a list that had grown by four without anybody
+adding a type. It is visible only by COUNTING, which is why `ALL_RESOURCE_TYPES has no
+duplicates` is now a test — a defect invisible to every other kind of check is the definition of
+the kind worth writing one for.
+
+**THE TOTALITY TEST'S OWN PLANTED TYPE STOPPED BEING A VALID EXAMPLE, AND THAT WAS THE RIGHT
+OUTCOME.** It plants a type with no rules to prove the check fires. `QuestionBank` was the
+example, and P5-T14 made it a real one, so the test failed. A test whose subject is "a hole" going
+stale because the hole was filled is the best outcome it can have; the planted type is now
+`Question`, which P5-T6 will retire the same way.
+
+#### P5-T14 evidence
+- 436 auth unit (22 new). 8/8 gates, lint 0, typecheck 0, image builds.
 
 #### P5-T2 detail (complete)
 

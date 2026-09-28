@@ -42,10 +42,15 @@ describe('the totality check can actually fail', () => {
 
   it('DETECTS a type that was claimed but has no rules at all', () => {
     // This is the exact mistake D-14 is about: a type added to IMPLEMENTED_TYPES without
-    // writing its rules. It must produce 22 named gaps, not a silent pass.
-    const gaps = totalityGaps(MATRIX, [...IMPLEMENTED_TYPES, 'QuestionBank'], ACTIONS);
+    // writing its rules. It must produce one named gap per action, not a silent pass.
+    //
+    // The planted type was `QuestionBank` and that stopped being a valid example the moment
+    // P5-T14 gave it real rules -- the test failed for the RIGHT reason, which is the best
+    // outcome a test whose subject is "a hole" can have. `Question` is unimplemented and its
+    // own P5-T6 will retire it the same way.
+    const gaps = totalityGaps(MATRIX, [...IMPLEMENTED_TYPES, 'Question'], ACTIONS);
     expect(gaps).toHaveLength(ACTIONS.length);
-    expect(gaps).toContain('QuestionBank/grade');
+    expect(gaps).toContain('Question/grade');
   });
 
   it('DETECTS a type with a PARTIAL rule set, naming the missing actions', () => {
@@ -94,6 +99,31 @@ describe('the real matrix, after the classroom types were added', () => {
     for (const t of IMPLEMENTED_TYPES) expect(known.has(t), t).toBe(true);
   });
 
+  it('ALL_RESOURCE_TYPES has no duplicates, because a union cannot notice one', () => {
+    // P4-T8 added four types to `IMPLEMENTED_TYPES` with a replace that matched BOTH lists, and
+    // put a second copy of each into `ALL_RESOURCE_TYPES`. Nothing failed: a duplicated entry in
+    // a union of string literals collapses to the same type, so TypeScript was satisfied, `can()`
+    // behaved identically, and every behavioural test passed. The only symptom was a list that
+    // had grown by four without anybody adding a type.
+    //
+    // This is the test for a defect that is invisible to every other kind of check, which is the
+    // definition of the kind worth writing a test for.
+    const seen = new Set<string>();
+    const duplicates = ALL_RESOURCE_TYPES.filter((t) => {
+      if (seen.has(t)) return true;
+      seen.add(t);
+      return false;
+    });
+    expect(
+      duplicates,
+      `ALL_RESOURCE_TYPES lists these more than once: ${duplicates.join(', ')}`,
+    ).toEqual([]);
+    // And every implemented type is a declared type, which is the other direction.
+    for (const type of IMPLEMENTED_TYPES) {
+      expect(ALL_RESOURCE_TYPES).toContain(type);
+    }
+  });
+
   it('has grown by exactly the known set, and a new type is a DELIBERATE change', () => {
     // The LIST is pinned, so a future extension is a visible change to a test rather than a
     // diff that happens to include a type. P2-T8 added `Resource` (the read-permission
@@ -102,9 +132,13 @@ describe('the real matrix, after the classroom types were added', () => {
     // reader is only wrong in combination). P4-T8 added `Assignment`, `ExamAttempt`,
     // `IntegrityEvidence` and `ReleaseBatch` -- the four types `plans/12` §4 has rows about,
     // which had no rules at all, so the matrix had no opinion about §4's most important cells.
+    // P5-T14 added `QuestionBank`, `QuestionPool` and `Blueprint` -- the authoring side of an
+    // assessment, added as a group because the rule that makes a pooled slot safe is the rule
+    // that makes a bank private.
     expect([...IMPLEMENTED_TYPES].sort()).toEqual([
       'Asset',
       'Assignment',
+      'Blueprint',
       'Classroom',
       'Comment',
       'Enrollment',
@@ -112,6 +146,8 @@ describe('the real matrix, after the classroom types were added', () => {
       'Flag',
       'IntegrityEvidence',
       'Invitation',
+      'QuestionBank',
+      'QuestionPool',
       'Rating',
       'ReleaseBatch',
       'Resource',
