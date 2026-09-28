@@ -61,6 +61,22 @@
     "./seed/subjects": {
       "types": "./dist/seed/subjects.d.ts",
       "default": "./dist/seed/subjects.js"
+    },
+    "./classrooms": {
+      "types": "./dist/classrooms.d.ts",
+      "default": "./dist/classrooms.js"
+    },
+    "./roster": {
+      "types": "./dist/roster.d.ts",
+      "default": "./dist/roster.js"
+    },
+    "./invitations": {
+      "types": "./dist/invitations.d.ts",
+      "default": "./dist/invitations.js"
+    },
+    "./roster-page": {
+      "types": "./dist/roster-page.d.ts",
+      "default": "./dist/roster-page.js"
     }
   },
   "scripts": {

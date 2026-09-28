@@ -43,8 +43,8 @@ Three things had to be re-established, and each is a portability finding worth k
 | Metric | Value |
 |---|---|
 | Commits | 50 (P3-T5 and P3-T6 landed after this file was first written) |
-| Unit tests | **957** (contracts 293, auth 384, and the rest as before; per-package counts shift as suites grow) |
-| Integration tests | **232** across 15 files, real Postgres |
+| Unit tests | **973** (web 158 with 16 new roster tests, contracts 293, auth 384) |
+| Integration tests | **241** across 16 files, real Postgres (9 new for the roster read model) |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
 | Invariants registered | 29 (8 active) |
@@ -265,6 +265,59 @@ Three findings worth carrying forward:
 | P4-T7 Notifications: templates, queue, dedupe, quiet hours | NOT STARTED | `Notification` and `EmailOutbox` are still UNUSED. |
 | P4-T8 Permission matrix tests: every cell of §4 | NOT STARTED | Partial coverage in this commit; the §4 table itself is not yet exhaustive. |
 
+#### P4-T6 detail (complete)
+
+**THE PLAN ASKED FOR DIALOGS AND THE CODEBASE BANS THEM, SO I READ WHAT IT WAS ACTUALLY FOR.**
+`plans/12` §5: "Remove / change role: confirmation dialogs that name the person. A mis-click that
+removes 30 students is a support incident and a trust breach." The codebase is the other way:
+`ResourceLibrary` says a dialog "is a modal the teacher clicks through, and a number inside a
+dialog is a number they did not read", and a test pins it by asserting `[role="dialog"]` is null.
+Both are right about different things, and the requirement survives the reconciliation — because
+§5's demand is to NAME THE PERSON and STATE THE COUNT, and a modal makes both *worse*, since it
+arrives after the decision rather than before it. So: consequences on the row, always, with no
+interaction; an inline disclosure in place that names every affected person; and for more than one
+person, the COUNT must be TYPED. The typing is not ceremony — it is the one control that catches a
+mis-click aimed at one person and dragged across twelve. A test asserts no dialog and no
+alertdialog exist, so the reconciliation cannot quietly rot into the app's first modal.
+
+**A DISCLOSURE THAT LISTS 30 NAMES IS ITS OWN FAILURE.** So it prints twelve and says "and 18
+more". Printing all thirty is a wall the teacher skims, which is the exact problem the
+confirmation existed to fix.
+
+**AN UNRELEASED GRADE IS NEVER SELECTED, so there is nothing to leak.** "Grade (released only)"
+has an obvious implementation: fetch it, then decline to display it. That is a display rule in the
+client, and a future component, an export, or a `title` attribute undoes it. The read model
+filters in the `where` on `assignment.releaseBatches.some({status: 'RELEASED'})`, so the
+invariant is the query. The test releases a DRAFT batch first and asserts the grade is still
+absent, because a `releasedAt IS NOT NULL` shortcut would pass the happy path and leak on the
+half that matters.
+
+**FOUR EMPTY STATES BECAME THREE, BECAUSE THE FOURTH WAS DEAD CODE.** A room always has at least
+one ACTIVE member — the owner — so an `endedHidden` empty state could never fire. A union arm
+nobody can reach is worse than no arm, because the next reader trusts the union is exhaustive. A
+student who left is not an empty page either; they are a row the teacher cannot see. So it is
+`endedCount` on the page, which the UI offers to reveal, and the test asserts the count.
+
+**THE CURSOR IS APPLIED TO THE SORTED WINDOW, and the reason is a mutable sort key.** The sort is
+`COALESCE(displayNameOverride, name)` — §6 says the override is the name the class uses, so
+sorting on the account name alone is a list the teacher has to re-scan — and Prisma cannot order by
+a COALESCE. Worse, any teacher can change a display name at any moment, and a keyset over a
+mutable sort key cannot be made correct: moving a row across the cursor drops it from both pages
+or duplicates it. So the window is fetched already-scoped, sorted, and the cursor drops the
+prefix. Weaker than a true keyset, stronger than ignoring it, and the test asserts pages neither
+overlap nor skip. A stale cursor pages FORWARD rather than restarting, because an ignored cursor
+makes a teacher read page 2 twice.
+
+**THE AUTHZ GATE CAUGHT MY OWN TEST, and it was right to.** Nine comparisons of the form
+`row.userId === student` in the new integration test failed the ownership gate, whose message is
+"Do not suppress". It is right: "is this row the person I think it is" is an authorisation
+question, and writing it in a test teaches the shape of the mistake. So rows are found by
+DISPLAY NAME, which the fixture already makes unique with a per-run token. The assertions got
+shorter and stopped modelling the thing the gate exists to prevent.
+
+**A MALFORMED CURSOR IS REFUSED, not ignored.** A cursor that cannot be parsed is a client bug or
+a tamper, and returning page one for it is indistinguishable from a fresh session.
+
 #### P4-T5 detail (complete)
 
 **The CSV PARSER IS WRITTEN OUT, not installed.** `plans/00` §RN: "Dependencies are pinned
@@ -470,8 +523,8 @@ pnpm run build          # must pass before typecheck; tsbuildinfo can go stale
 pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
-pnpm run test           # 957 unit
-pnpm run test:integration   # 232 across 15 files, needs DATABASE_URL
+pnpm run test           # 973 unit
+pnpm run test:integration   # 241 across 16 files, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
 
