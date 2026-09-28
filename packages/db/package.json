@@ -77,6 +77,14 @@
     "./roster-page": {
       "types": "./dist/roster-page.d.ts",
       "default": "./dist/roster-page.js"
+    },
+    "./notifications": {
+      "types": "./dist/notifications.d.ts",
+      "default": "./dist/notifications.js"
+    },
+    "./prisma": {
+      "types": "./dist/prisma.d.ts",
+      "default": "./dist/prisma.js"
     }
   },
   "scripts": {

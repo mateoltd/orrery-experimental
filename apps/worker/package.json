@@ -9,10 +9,15 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "start": "node dist/index.js",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
+    "@orrery/clock": "workspace:*",
     "@orrery/config": "workspace:*",
-    "@orrery/clock": "workspace:*"
+    "@orrery/db": "workspace:*"
+  },
+  "devDependencies": {
+    "@orrery/db": "workspace:*"
   }
 }

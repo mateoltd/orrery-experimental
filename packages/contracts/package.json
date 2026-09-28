@@ -79,6 +79,10 @@
     "./csv": {
       "types": "./dist/csv/index.d.ts",
       "default": "./dist/csv/index.js"
+    },
+    "./notifications": {
+      "types": "./dist/notifications/index.d.ts",
+      "default": "./dist/notifications/index.js"
     }
   },
   "scripts": {

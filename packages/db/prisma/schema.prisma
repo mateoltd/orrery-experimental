@@ -1668,10 +1668,16 @@ model Notification {
   body      String
   href      String?
   data      Json?
+  // P4-T7: the thing being notified about. NULLABLE on purpose — "your membership changed" for
+  // a removed student has no row left to point at, and a sentinel would collide with itself.
+  refId     String?
   readAt    DateTime? @db.Timestamptz(3)
   emailedAt DateTime? @db.Timestamptz(3)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
 
+  // §7: "Every notification is deduped on (userId, kind, refId)". A constraint, not a service
+  // check, because a check is a statement somebody can forget and this is a fact about the table.
+  @@unique([userId, kind, refId])
   @@index([userId, readAt, createdAt])
 }
 
@@ -1864,6 +1870,9 @@ model EmailOutbox {
   template    String
   payload     Json
   dedupeKey   String   @unique
+  // P4-T7: whose email this is, so the opt-out is re-checked at SEND time and an unsubscribe can
+  // suppress what is still queued. Nullable: an email to an address with no account is still real.
+  userId      String?
   status      String   @default("QUEUED")
   attempts    Int      @default(0)
   lastError   String?
@@ -1871,7 +1880,33 @@ model EmailOutbox {
   sentAt      DateTime? @db.Timestamptz(3)
   createdAt   DateTime @default(now()) @db.Timestamptz(3)
 
+  // Serves the drain ("due WHERE status = 'QUEUED' ORDER BY scheduledAt") because `status`
+  // leads, and the 200-invitation count ("this kind, to this address, still QUEUED") by
+  // `@@index([toEmail, template, status])` below.
   @@index([status, scheduledAt])
+  @@index([toEmail, template, status])
+}
+
+/// P4-T7. Per-user email preferences. Created lazily; a missing row means the defaults.
+model NotificationPreference {
+  id        String   @id @default(uuid(7))
+  userId    String   @unique
+  // THE ONLY OPT-OUT, and named for what it governs so no future column can become a global
+  // mute. §7: "unsubscribing never disables in-app notifications a user needs for coursework" —
+  // and there is no other boolean here for that sentence to be violated through.
+  emailOptOut Boolean @default(false)
+  digestIntervalMinutes Int @default(60)
+  // Minutes from local midnight. `quietFrom > quietTo` wraps midnight; EQUALITY IS CLOSED, not
+  // "always quiet", because an unset preference that reads as silence loses every email.
+  quietFromMinute Int @default(1260)
+  quietToMinute  Int @default(420)
+  /// Nullable so a preference cannot silently override the account's own zone.
+  timezone String?
+  // One token per USER, not per message, so an unsubscribe can be revoked once and covers
+  // everything. uuid(4) because it is a bearer capability reachable from a URL.
+  unsubscribeToken String @unique
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @db.Timestamptz(3)
 }
 
 // Never the source of truth — a denormalised list view only.

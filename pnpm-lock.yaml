@@ -127,6 +127,9 @@ importers:
       '@orrery/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@orrery/db':
+        specifier: workspace:*
+        version: link:../../packages/db
 
   packages/auth:
     dependencies:

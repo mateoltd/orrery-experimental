@@ -43,8 +43,8 @@ Three things had to be re-established, and each is a portability finding worth k
 | Metric | Value |
 |---|---|
 | Commits | 50 (P3-T5 and P3-T6 landed after this file was first written) |
-| Unit tests | **973** (web 158 with 16 new roster tests, contracts 293, auth 384) |
-| Integration tests | **241** across 16 files, real Postgres (9 new for the roster read model) |
+| Unit tests | **991** (contracts 311 with 18 new notification-policy tests, web 158, auth 384) |
+| Integration tests | **258** across 17 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
 | Invariants registered | 29 (8 active) |
@@ -264,6 +264,70 @@ Three findings worth carrying forward:
 | P4-T6 Roster UI with per-student summary | NOT STARTED | |
 | P4-T7 Notifications: templates, queue, dedupe, quiet hours | NOT STARTED | `Notification` and `EmailOutbox` are still UNUSED. |
 | P4-T8 Permission matrix tests: every cell of §4 | NOT STARTED | Partial coverage in this commit; the §4 table itself is not yet exhaustive. |
+
+#### P4-T7 detail (complete)
+
+**"UNSUBSCRIBE" IS NOT A GLOBAL MUTE, AND THAT IS A SCHEMA DECISION.** §7's last rule is "one-click
+unsubscribe on every email, and unsubscribing never disables in-app notifications a user needs
+for their coursework." "Unsubscribe" reads like a global mute, and a `muted` boolean would
+satisfy the first half of that sentence and quietly break the second. So there is exactly ONE
+opt-out column, named `emailOptOut`, `notify` has no parameter that can carry it, and
+`unsubscribe` has no parameter that could reach the notifications table. A test reads the inbox
+after unsubscribing and asserts the notification is still there; a second one asserts a LATER
+notification still arrives. The type is the guarantee and the tests are the echo.
+
+**UNSUBSCRIBING HAS TO SUPPRESS THE QUEUE, not just set a flag.** Setting `emailOptOut` alone
+leaves every already-queued message, and the drain sends them: a person who unsubscribes at 09:00
+and receives forty emails over the afternoon has not been unsubscribed, and the next thing they
+do is mark the sending domain as spam, which is much worse for the school than a delayed message.
+So the queued rows go to `SUPPRESSED` in the same transaction — a state that exists precisely so
+that "held" and "suppressed" can be told apart when somebody asks why an email did not arrive.
+
+**A DIGEST ACTUALLY DIGESTS — AND THE FIRST VERSION DID NOT.** `DIGEST_NOW` was treated as "send
+this third one on its own", which is not a digest, it is three emails with a different shape. The
+test written for it passed and the plan's requirement was unimplemented behind it. Now the
+individuals already queued for that address and kind are SUPPRESSED and replaced by ONE digest
+row. Its dedupe key is derived from the ids being absorbed, so a concurrent second run produces
+the same key and dedupes instead of sending twice; a timestamp or a random key would make every
+run unique and the dedupe would protect nothing.
+
+**NOTHING IN `notify` SENDS AN EMAIL, and that is the enforcement.** There is no send import, no
+HTTP client, and no call that can block, so "a slow email provider must never delay a page render
+or an autosave" is a fact about the module graph rather than a promise in a comment. The only
+function that talks to a provider is `drainOnce` in the worker, and `EmailTransport` is injected
+with NO DEFAULT — a default transport would be a function that can send from a test, and a test
+that can send is one `vi.mock` from sending in production.
+
+**A THROWN TRANSPORT IS A FAILED MESSAGE, not a failed drain.** The first version had one `try`
+around the whole batch, so a provider that threw on the third message marked nothing and returned
+a report that looked like success — the queue silently stopped draining. Now each message is
+settled on its own. A bounced address in one school is not a reason forty other students get
+nothing. And the claim happens BEFORE the send so a crashed worker's `SENDING` rows can be
+released; the alternative, sending first, sends twice after a crash, and two copies of "your
+results are out" is worse than a late one.
+
+**QUIET HOURS ARE FOUND BY ASKING `Intl`, NOT BY ADDING AN OFFSET — and the test is a DST one.**
+"07:00 local" is a different instant either side of a clock change, so any offset table in the
+code is wrong twice a year and quietly so. `endOfWindow` steps a minute at a time and asks
+`Intl` the local time at each step: 600 steps for a ten-hour window, correct across the
+transition because it never computes an offset. The test asserts a window that ENDS INSIDE the
+transition resolves to `06:00Z` on 29 March 2026 and reports 9h30 rather than 10h — the lost hour
+is inside the quiet window. Three real bugs came out of this: an unbounded recursion between
+`quietWindow` and `endOfWindow` that hung the suite (fixed by splitting out a non-recursive
+`isInsideWindow`), a `minutesRemaining` that used the evening formula on the morning leg and
+reported 25 hours for a window that ends in one, and `Intl.DateTimeFormat` being reconstructed on
+every one of 1,440 steps, which made a ten-second window cost seconds of CPU.
+
+**A MISSING PREFERENCE ROW IS THE DEFAULT, not an error.** Rows are created lazily on first
+write. A migration that inserted one per user would be a migration whose rows then drift from
+the default the code actually applies, and the first read of every user would be a row nobody
+chose.
+
+**TWO TESTS FOUND BUGS IN THE TESTS, WHICH IS THE USUAL CASE.** The quiet-hours test used
+`RESULTS_RELEASED` and failed, and the failure was CORRECT: §7 calls results "the single
+most-wanted notification we send", so they are deliberately not held, and a test quietly
+assuming every kind respects quiet hours would have deleted that decision. And the worker test
+used `void notify(...)` without awaiting, so the drain correctly claimed nothing.
 
 #### P4-T6 detail (complete)
 
@@ -523,8 +587,8 @@ pnpm run build          # must pass before typecheck; tsbuildinfo can go stale
 pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
-pnpm run test           # 973 unit
-pnpm run test:integration   # 241 across 16 files, needs DATABASE_URL
+pnpm run test           # 991 unit
+pnpm run test:integration   # 258 db + 6 worker, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
 
