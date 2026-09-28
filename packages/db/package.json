@@ -89,6 +89,10 @@
     "./assignments": {
       "types": "./dist/assignments.d.ts",
       "default": "./dist/assignments.js"
+    },
+    "./assignment-overrides": {
+      "types": "./dist/assignment-overrides.d.ts",
+      "default": "./dist/assignment-overrides.js"
     }
   },
   "scripts": {

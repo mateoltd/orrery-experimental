@@ -60,9 +60,9 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 58 |
+| Commits | 60 |
 | Unit tests | **1036** (contracts 327, auth 413, web 158) |
-| Integration tests | **268** across 18 db files + 6 worker outbox, real Postgres |
+| Integration tests | **282** across 19 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
 | Invariants registered | 29 (8 active) |
@@ -649,7 +649,7 @@ has a dozen slightly different answers.
 | Task | Status | Commit | Note |
 |---|---|---|---|
 | P5-T1 `Assignment` with a pinned `resourceVersionId`, window, attempts, weight, late penalty, policy override | **DONE** | `598cfb2` | `packages/contracts/src/policy/` + `packages/db/src/assignments.ts`. The pin is STRUCTURAL: `resourceId` is derived from the version, and there is no parameter for "the current version". |
-| P5-T2 `AssignmentStudentOverride` | NOT STARTED | | Model exists; the merge into the policy fold is written and the service is not. |
+| P5-T2 `AssignmentStudentOverride` | **DONE** | *(next commit)* | `assignment-overrides.ts`. A mid-exam grant is an **additive row**, never a rewrite of `deadlineAt` (C14). |
 | P5-T3 Assignment builder, preview as student | NOT STARTED | | |
 | P5-T4 Student "to do" | NOT STARTED | | |
 | P5-T5 Pinning invariant enforcement (a) lint rule, (b) slot-level mutation test | PARTIAL | | (a) the gate exists (`scripts/pinning-gate.mjs`, ADR-0025). (b) the weak mutation test is done; the **slot-level** byte-identity check is not. |
@@ -727,6 +727,50 @@ a mode that also cancels somebody's exam. A withdrawn assignment also cannot be 
 because a withdrawal is a statement to students and silently undoing it is worse than doing
 nothing.
 
+#### P5-T2 detail (complete)
+
+**C14'S SYMPTOM WAS IN A DIFFERENT SYSTEM THAN ITS CAUSE, WHICH IS WHY IT SURVIVED REVIEW.**
+Rewriting `ExamAttempt.deadlineAt` for extra time broke `INV-POLICY-1` in a way nobody saw in the
+exam system: `verify-receipt` began reporting DIVERGENCE on a legitimate action, and a teacher
+receiving that message has no way to guess a fair accommodation caused it. So `deadlineAt` is
+written once at first start and never again, and the test asserts on THE COLUMN rather than on
+the arithmetic — because a rewrite and an addition produce the same effective deadline for one
+extension, and only the column tells them apart.
+
+`effectiveDeadlineAt = deadlineAt + Σ addedSec + pausedAccumSec` is one exported function taking
+the extension rows as an argument, so the sweep, the exam header and the receipt verifier read
+the same arithmetic instead of each having its own idea.
+
+**THE GRACE PERIOD IS NOT PART OF THE DEADLINE A STUDENT IS TOLD.** It is a tolerance the SWEEP
+applies when deciding to auto-submit. `plans/09` says the sweep runs at `deadlineAt + grace +
+30s`. A student told "you have until 11:00" should be able to submit at 11:00:59, and baking the
+grace into the displayed deadline would hand them 60 seconds the exam never agreed to give.
+
+**A REASON IS ENFORCED IN THE SERVICE, NOT ONLY BY THE COLUMN.** The column is `NOT NULL`, which
+stops an empty string and nothing else. A 5-character reason is a reason nobody can use in a
+conversation with a parent six months later, so the minimum is 10 characters on both the override
+and the extension. And a refusal leaves NO row behind: a refusal that still wrote a row would be
+worse than no refusal, because the row looks like the grant somebody asked for.
+
+**AN OVERRIDE IS A SETTING, NOT A RECORD, SO REVOKING DELETES IT.** The audit of *why* the
+accommodation existed lives in the reason text and in the attempt events; keeping a revoked row
+around with a flag would make every read have to filter, and a filter somebody forgets is a
+child with extra time nobody can explain.
+
+**A DECIMAL IS MAPPED TO A STRING ON THE WAY OUT, DELIBERATELY.** Prisma's `Decimal` serialises
+through `toJSON` as a string, so a caller typing the field as `number` gets no type error,
+`undefined` at the boundary and `NaN` in the first arithmetic expression it meets. A string the
+UI can format is the honest answer, and the test asserts the runtime type rather than trusting
+the annotation.
+
+**THE TEST THAT CHECKS THE OVERRIDE DOES NOT LEAK.** One student with 50% extra time is the case
+everybody writes; the more likely bug is the merge reaching the class policy, so the same test
+resolves the policy twice — once for the student, once for nobody — and asserts the second is
+untouched.
+
+#### P5-T2 evidence
+- 282 db integration (14 new). 8/8 gates, lint 0, typecheck 0, image builds.
+
 #### P5-T1 evidence
 - 327 contracts unit (16 new for the policy), 268 db integration (10 new).
 - 8/8 gates, lint 0, typecheck 0, image builds.
@@ -767,7 +811,7 @@ pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
 pnpm run test           # 1036 unit
-pnpm run test:integration   # 268 db + 6 worker, needs DATABASE_URL
+pnpm run test:integration   # 282 db + 6 worker, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
 
