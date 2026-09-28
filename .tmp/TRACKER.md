@@ -60,9 +60,9 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 62 |
+| Commits | 63 |
 | Unit tests | **1074** (db 23 with 15 new slot tests, auth 436, contracts 327, web 158) |
-| Integration tests | **282** across 19 db files + 6 worker outbox, real Postgres |
+| Integration tests | **285** across 20 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
 | Invariants registered | 29 (8 active) |
@@ -652,7 +652,7 @@ has a dozen slightly different answers.
 | P5-T2 `AssignmentStudentOverride` | **DONE** | *(next commit)* | `assignment-overrides.ts`. A mid-exam grant is an **additive row**, never a rewrite of `deadlineAt` (C14). |
 | P5-T3 Assignment builder, preview as student | NOT STARTED | | |
 | P5-T4 Student "to do" | NOT STARTED | | |
-| P5-T5 Pinning invariant enforcement (a) lint rule, (b) slot-level mutation test | PARTIAL | | (a) the gate exists (`scripts/pinning-gate.mjs`, ADR-0025). (b) the weak mutation test is done; the **slot-level** byte-identity check is not. |
+| P5-T5 Pinning invariant enforcement: (a) lint rule, (b) slot-level mutation test | **DONE** | *(next commit)* | (a) the gate exists (ADR-0025). (b) the slot-level paper is **mutation-verified** per ADR-0027. |
 | P5-T6 QuestionBank CRUD | NOT STARTED | | |
 | P5-T7 QuestionPool, four draw strategies, `poolHealth` | NOT STARTED | | |
 | P5-T8 Blueprint + worst-case coverage | NOT STARTED | | |
@@ -726,6 +726,43 @@ attempts run to their own deadline and remain submittable. There is no way to ca
 a mode that also cancels somebody's exam. A withdrawn assignment also cannot be re-published,
 because a withdrawal is a statement to students and silently undoing it is worse than doing
 nothing.
+
+#### P5-T5 detail (complete) — the P5 EXIT CRITERION
+
+**THE ID-POINTING TEST IS NOT ENOUGH, AND THE PLAN ALREADY SAID SO.** `plans/20` P5-T5(b): "the
+**stronger** assertion the original mutation test missed — the resolved attempt's questions are
+byte-identical to the pinned version's slot list (24 MISSED-6)". The weak form — "the assignment
+still points at the old version id" — passes for an implementation that stores the pin and
+renders from the resource HEAD anyway. What tells them apart is the RESOLVED PAPER: the question
+ids a student actually receives, in order.
+
+**AND THE TEST IS MUTATION-VERIFIED, per ADR-0027.** A pinning test that passes vacuously is
+worse than no pinning test, because it converts the phase's central invariant into a comment. So
+the pin was deliberately replaced with a read of `Resource.currentVersionId` — pools and all, so
+every input stayed self-consistent and the only thing that could fail was the comparison — and
+the test failed with exactly the right error:
+
+```
+expected '{"0":["z1-…"],"1":["z2-…' to be '{"0":["q1-…"],"1":["q4-…'
+```
+
+The first mutation attempt was also run, and it failed on `UNKNOWN_POOL` rather than on the
+comparison. That is the second lesson in ADR-0027: a mutation that fails for an incidental reason
+has not demonstrated the test can see the real thing. A self-consistent mutation is the one that
+counts.
+
+**A NEW VERSION CHANGED EVERY INPUT AT ONCE, ON PURPOSE.** Different slot list, different pool,
+different questions, different strategy, and the head moved onto it. A pinning test that
+mutates one field proves the pin exists; one that mutates everything proves nothing else is
+reaching around it.
+
+**THE COLUMN CLAIM AND THE PAPER CLAIM ARE SEPARATE TESTS, BECAUSE THEY FAIL DIFFERENTLY.** An
+implementation that renders from the head passes the paper test only if it also stores the pin, so
+both are needed — and a failure in the first tells you which half broke.
+
+#### P5-T5 evidence
+- 285 db integration (3 new). 8/8 gates, lint 0, typecheck 0, image builds.
+- **Mutation-verified**: the pinning test fails when the pin is replaced by the resource head.
 
 #### P5-T9 detail (complete)
 
@@ -898,7 +935,7 @@ pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
 pnpm run test           # 1074 unit
-pnpm run test:integration   # 282 db + 6 worker, needs DATABASE_URL
+pnpm run test:integration   # 285 db + 6 worker, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
 
