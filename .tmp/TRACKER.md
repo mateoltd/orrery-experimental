@@ -43,8 +43,8 @@ Three things had to be re-established, and each is a portability finding worth k
 | Metric | Value |
 |---|---|
 | Commits | 50 (P3-T5 and P3-T6 landed after this file was first written) |
-| Unit tests | **938** (clock 29, ids 10, rng 16, config 48, auth 384, i18n 25, db 8, contracts 274, web 142, worker 5 — approximately; per-package counts shift as suites grow) |
-| Integration tests | **216** across 14 files, real Postgres |
+| Unit tests | **957** (contracts 293, auth 384, and the rest as before; per-package counts shift as suites grow) |
+| Integration tests | **232** across 15 files, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
 | Invariants registered | 29 (8 active) |
@@ -260,10 +260,66 @@ Three findings worth carrying forward:
 | P4-T2 Membership: roles, removal, leaving, role history | **DONE** | This commit. Append-only `MembershipEvent`. |
 | P4-T3 Invitations: email, bulk, hashed join codes | **DONE** | This commit. Migration `0011_invite_codes`. |
 | P4-T4 Invitation lifecycle: accept, revoke, expire, resend cooldown | **DONE** | This commit. |
-| P4-T5 Roster CSV: dry run, error report, idempotent apply | NOT STARTED | `RosterImport` model exists. |
+| P4-T5 Roster CSV: dry run, error report, idempotent apply | **DONE** | This commit. Hand-written RFC 4180 parser, no new dependency. |
 | P4-T6 Roster UI with per-student summary | NOT STARTED | |
 | P4-T7 Notifications: templates, queue, dedupe, quiet hours | NOT STARTED | `Notification` and `EmailOutbox` are still UNUSED. |
 | P4-T8 Permission matrix tests: every cell of §4 | NOT STARTED | Partial coverage in this commit; the §4 table itself is not yet exhaustive. |
+
+#### P4-T5 detail (complete)
+
+**The CSV PARSER IS WRITTEN OUT, not installed.** `plans/00` §RN: "Dependencies are pinned
+exactly in the lockfile and updated by a dedicated, reviewed task — **never as a drive-by**."
+Adding `csv-parse` inside a roster feature is a drive-by, and it is a dependency for a problem
+with a published specification, in a codebase that names "zero runtime dependencies" as a value
+and cites a decade-old jQuery becoming a liability (`RN-07`) as the reason to care. It is safe to
+write out because it is a pure function over a string and it is TESTED — the dangerous version of
+this file is not "somebody hand-rolled a parser" but "somebody hand-rolled one and never checked
+it against a quoted newline". Which is the case: `a quoted field containing a NEWLINE is ONE
+field` is in the suite, and it is the case that breaks every line-oriented approach.
+
+**The plan's own CSV rule CREATED A BUG, and the fix is a precise inverse.** §3 says prefix a
+dangerous cell with `'` on BOTH import and export. Export alone is fine; doing it on import too
+means a name we exported returns with a stray apostrophe, because the apostrophe has become DATA.
+The roster test caught a pupil stored as `'=HYPERLINK(...)`, which is a different name.
+`unescapeCsvCell` undoes it, and it is unambiguous because our escape is specifically `'` + a
+FORMULA-START character: a pupil genuinely called `'Twas Nightingale` survives intact. The one
+name it cannot distinguish is a pupil literally called `'=1`, and that cost is documented rather
+than left to be discovered.
+
+**A DRY RUN THAT CANNOT WRITE, structurally.** There is no `dryRun` parameter on the apply path,
+so there is no way to call the writing function in a mode that pretends not to write. A boolean
+meaning "do the dangerous thing but maybe not" is a boolean somebody will pass `true`. The test
+asserts it by READING the roster, users, events and import rows afterwards, because asserting
+the absence of a parameter is the weak version of the claim.
+
+**A malformed row NEVER blocks the good ones**, which is the requirement that shapes the shapes:
+60 rows with four broken ones in the middle, 60 applied, 4 in a downloadable CSV report with one
+line per PROBLEM (not per row — a row with two problems needs two fixes, and cramming them into
+one cell is how the second fix gets skipped). Failing the whole import on the first bad row is
+what a spreadsheet does, and it is why school IT gives up on imports.
+
+**The P4 EXIT CRITERION, tested verbatim: a 1,000-row import completes.** 5,000 ms → 396 ms, and
+the route there is the more interesting part. The first version did three queries PER ROW, and the
+timing assertion I wrote to catch an N+1 caught it. Then a comment I wrote said "a test that
+asserts a completion time only tells you about the FIRST N+1 you removed" — and there was
+another one left: 1,000 individual `membershipEvent` inserts, and then 1,000 individual
+`enrollment` inserts. Batching the lookups, the events and the enrollments is what took it to
+396 ms. The lesson is the comment: the second N+1 was only findable by holding the first fix in
+mind while looking for the next.
+
+**Two false failures worth remembering.** The first fixture CSV for the injection test was built
+by interpolating a payload containing double quotes into a quoted field — which is not valid CSV,
+so the parse failed and the test measured MY quoting rather than the product. Fixtures are now
+built with the renderer, so a fixture cannot be malformed. And the fixed addresses in the roster
+tests (`a1@school.example`) collided across runs in the shared database, turning every `new` into
+`unchanged`; they now carry a per-run token, like every other fixture here.
+
+**`INV-TIME-1` caught the timing assertion twice, and was right both times.** `Date.now()` can be
+adjusted mid-measurement, and `performance.now()` is the same class of thing — the gate restricts
+every direct reading of the host clock. The fix was not to find a different host API but to go
+through the one wrapper the codebase sanctions: `systemClock.monotonic()`, which
+`@orrery/clock` documents as being for exactly this ("`monotonic()`: use for measuring elapsed
+time and durations; never for storing an instant").
 
 #### P4-T3/T4 detail (complete)
 
@@ -414,8 +470,8 @@ pnpm run build          # must pass before typecheck; tsbuildinfo can go stale
 pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
-pnpm run test           # 938 unit
-pnpm run test:integration   # 216 across 14 files, needs DATABASE_URL
+pnpm run test           # 957 unit
+pnpm run test:integration   # 232 across 15 files, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
 

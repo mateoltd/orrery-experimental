@@ -75,6 +75,10 @@
     "./urls": {
       "types": "./dist/urls/index.d.ts",
       "default": "./dist/urls/index.js"
+    },
+    "./csv": {
+      "types": "./dist/csv/index.d.ts",
+      "default": "./dist/csv/index.js"
     }
   },
   "scripts": {
