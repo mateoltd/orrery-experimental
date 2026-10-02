@@ -293,6 +293,13 @@ export async function withdrawAssignment(
 
 export interface PolicySources {
   readonly mode: AssignmentMode;
+  /**
+   * `Assignment.maxAttempts` as a COLUMN, applied over the policy's value.
+   *
+   * The bug this fixes: the policy profile's default is 1, so a teacher who set the column to 2
+   * and a student who had used one attempt were told the work was complete. The column is the
+   * teacher's explicit choice and the profile default is a fallback, so the fallback must lose.
+   */
   readonly versionPolicy: PolicyOverride | null;
   readonly assignmentOverride: PolicyOverride | null;
   readonly availableFrom: Date | null;
@@ -311,6 +318,13 @@ export interface PolicySources {
     readonly revokedAt?: Date | null;
     readonly expiresAt?: Date | null;
   } | null;
+  /**
+   * `Assignment.maxAttempts` as a COLUMN, applied over the policy's value.
+   *
+   * The bug this fixes: the policy profile's default is 1, so a teacher who set the column to 2
+   * and a student who had used one attempt were told the work was COMPLETE. The column is the
+   * teacher's explicit choice and the profile default is a fallback, so the fallback must lose.
+   */
   readonly maxAttempts: number;
 }
 
@@ -332,6 +346,7 @@ export function resolveForStudent(sources: PolicySources): ExamPolicy {
       studentOverride: sources.studentOverride ?? null,
       accommodation: sources.accommodation ?? null,
       assignmentWindow: { from: sources.availableFrom, until: sources.availableUntil },
+      assignmentMaxAttempts: sources.maxAttempts ?? null,
     }),
   );
 }

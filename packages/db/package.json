@@ -105,6 +105,10 @@
     "./version-snapshot": {
       "types": "./dist/version-snapshot.d.ts",
       "default": "./dist/version-snapshot.js"
+    },
+    "./todo": {
+      "types": "./dist/todo.d.ts",
+      "default": "./dist/todo.js"
     }
   },
   "scripts": {

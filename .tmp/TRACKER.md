@@ -66,9 +66,9 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 69 |
+| Commits | 71 |
 | Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
-| Integration tests | **302** across 22 db files + 6 worker outbox, real Postgres |
+| Integration tests | **309** across 23 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
 | Invariants registered | 29 (8 active) |
@@ -657,18 +657,18 @@ has a dozen slightly different answers.
 | P5-T1 `Assignment` with a pinned `resourceVersionId`, window, attempts, weight, late penalty, policy override | **DONE** | `598cfb2` | `packages/contracts/src/policy/` + `packages/db/src/assignments.ts`. The pin is STRUCTURAL: `resourceId` is derived from the version, and there is no parameter for "the current version". |
 | P5-T2 `AssignmentStudentOverride` | **DONE** | `ee74d2e` | `assignment-overrides.ts`. A mid-exam grant is an **additive row**, never a rewrite of `deadlineAt` (C14). |
 | P5-T3 Assignment builder, preview as student | NOT STARTED | | |
-| P5-T4 Student "to do" | NOT STARTED | | |
+| P5-T4 Student "to do": available / upcoming / completed / expired | **DONE** | *(next commit)* | `packages/db/src/todo.ts`. An ATTEMPT beats the window, always. |
 | P5-T5 Pinning invariant enforcement: (a) lint rule, (b) slot-level mutation test | **DONE** | `ede383a` | (a) the gate exists (ADR-0025). (b) the slot-level paper is **mutation-verified** per ADR-0027. |
 | P5-T6 QuestionBank CRUD, sharing, move/duplicate | **DONE** | `ca0f0b1` | `packages/db/src/question-banks.ts`. Banks are PRIVATE or classroom-shared, never public. |
 | P5-T7 `poolHealth`: M vs N, distinct, expected overlap | **DONE** | `96af48c` | `packages/contracts/src/pool-health/`. **I wrote a wrong formula, justified it as an improvement, and brute force proved the plan right.** |
 | P5-T8 Blueprint + worst-case coverage | **DONE** | `ca0f0b1` | `packages/contracts/src/blueprint/`. Exact, not sampled (P-18). |
 | P5-T9 `AssessmentSpec` slots + `variantMap` resolution | **DONE** | `65db2b4` | `packages/db/src/slots.ts`. One draw, one place, per-slot forked streams. | |
-| P5-T10 Version publish snapshots every drawable question | **DONE** | *(next commit)* | `packages/db/src/version-snapshot.ts`. INV-BANK-3. |
-| P5-T11 "Too similar" guard | **DONE** | *(next commit)* | Stem trigram + answer key + numeric, with operators PRESERVED. |
+| P5-T10 Version publish snapshots every drawable question | **DONE** | `0980680` | `packages/db/src/version-snapshot.ts`. INV-BANK-3. |
+| P5-T11 "Too similar" guard | **DONE** | `0980680` | Stem trigram + answer key + numeric, with operators PRESERVED. |
 | P5-T13 Interop skeleton, `ExternalBinding` | NOT STARTED | | |
 | P5-T14 `can()` matrix for the new P5 types | **DONE** | `8e7d953` | Three types added with full rules. **The tests found a bank readable by its own students.** |
 | P5-T15 Author the seed banks | NOT STARTED | | D-37: nothing in 183 tasks authored a single question. |
-| P5-T12 Publish gates: pool, blueprint, metadata, `INV-SLOT-1` | **DONE** | *(next commit)* | `packages/db/src/publish-gates.ts`. **Reports every problem, not the first.** |
+| P5-T12 Publish gates: pool, blueprint, metadata, `INV-SLOT-1` | **DONE** | `8df711d` | `packages/db/src/publish-gates.ts`. **Reports every problem, not the first.** |
 
 #### P5-T1 detail (complete)
 
@@ -732,6 +732,37 @@ attempts run to their own deadline and remain submittable. There is no way to ca
 a mode that also cancels somebody's exam. A withdrawn assignment also cannot be re-published,
 because a withdrawal is a statement to students and silently undoing it is worse than doing
 nothing.
+
+#### P5-T4 detail (complete)
+
+**AN ATTEMPT BEATS THE WINDOW, AND THAT ORDERING IS THE WHOLE FILE.** The four states are disjoint
+and every assignment is in exactly one, which means the tempting chain — check the window, then
+the attempt — is silent about an assignment that is BOTH past its window and attempted. "Available"
+tells a student to do work they have already handed in; "expired" tells them they missed it when
+they did not. So: a live attempt first, then attempts exhausted, then the window. A window is when
+work is OFFERED, not when it is OWED. The test exercises the ambiguous case directly.
+
+**THE COLUMN A TEACHER CHANGED WAS BEING IGNORED, AND THE STUDENT WAS TOLD THEIR WORK WAS DONE.**
+`Assignment.maxAttempts` is a column, and the policy profile's default is 1. The fold was taking
+the PROFILE's number, so a teacher who set the column to 2 and a student who had used one attempt
+saw `completed` — the second attempt silently did not exist. The column is the teacher's explicit
+choice and the profile default is a fallback, so the fallback has to lose, and it now does:
+`assignmentMaxAttempts` is applied after the policy merge and before the student override.
+
+**THE LIST AND THE EXAM MUST AGREE, SO THE LIST RUNS THE SAME FOLD.** The to-do item resolves its
+window through `resolveForStudent` rather than comparing `availableUntil` directly, because a
+student override's window is narrower than the assignment's and a list that says "until Friday"
+when the exam says "until Tuesday" is a bug report at the worst moment.
+
+**`minutesRemaining` IS NULL FOR TWO DIFFERENT REASONS, AND BOTH ARE HONEST.** Not-yet-open and
+never-closing are different sentences to a student, and neither is "0".
+
+**SCOPING IS IN THE QUERY, AND A CLASSROOM THE STUDENT IS NOT IN RETURNS AN EMPTY LIST RATHER
+THAN THROWING.** "Nothing here" and "here is somebody else's class" have to be the same answer,
+because the second one is an existence oracle.
+
+#### P5-T4 evidence
+- 309 db integration (7 new). 8/8 gates, lint 0, typecheck 0, image builds.
 
 #### P5-T10/T11 detail (complete)
 
@@ -1124,7 +1155,7 @@ pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
 pnpm run test           # 1125 unit
-pnpm run test:integration   # 302 db + 6 worker, needs DATABASE_URL
+pnpm run test:integration   # 309 db + 6 worker, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
 

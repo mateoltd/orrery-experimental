@@ -199,6 +199,19 @@ export interface ResolveInput {
   /** `Assignment.availableFrom/Until`, folded into the window when the policy has none. */
   readonly assignmentWindow?: { readonly from: Date | null; readonly until: Date | null };
   /**
+   * `Assignment.maxAttempts` — the COLUMN, not a policy field.
+   *
+   * This exists because the first version of the to-do list told a student with two attempts
+   * allowed and one used that their work was `completed`. The column is the teacher-set value and
+   * the policy profile default is 1, and the fold was taking the PROFILE's number — so the
+   * column a teacher had explicitly changed was silently ignored, and the student was told their
+   * remaining attempt did not exist.
+   *
+   * So the column is applied after the policy merge and before the student override: the column
+   * is what the teacher set for the class, and the override is what they set for one child.
+   */
+  readonly assignmentMaxAttempts?: number | null;
+  /**
    * When the fold happens, for the accommodation expiry test.  (P5-T1)
    *
    * The first version called `Date.now()` inside `activeAccommodation`, and INV-TIME-1 caught it
@@ -283,7 +296,7 @@ export function resolvePolicy(input: ResolveInput): ExamPolicy {
     availabilityWindow,
     totalTimeLimitSec,
     perQuestionTimeLimitSec,
-    maxAttempts: studentOverride?.maxAttempts ?? merged.maxAttempts,
+    maxAttempts: studentOverride?.maxAttempts ?? input.assignmentMaxAttempts ?? merged.maxAttempts,
   });
 }
 
