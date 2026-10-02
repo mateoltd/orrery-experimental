@@ -66,7 +66,7 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 93 |
+| Commits | 94 |
 | Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
 | Integration tests | **336** across 27 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
@@ -1357,7 +1357,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T4 Build pipeline: esbuild → hashed, cache-busted ESM + CSS | **DONE** | `51d1066` | `scripts/sim-build.mjs`. Hashed filenames, a logical→hashed registry entry, `--check` for CI. |
 | P6-T5 Dual-target enforcement: `./browser` + pure `./grader` in Node, zero Node builtins (`B14`) | **DONE** | `51d1066` | 13 tests. The BUILT grader is imported in a bare Node process, 3 runs, byte-identical. |
 | P6-T6 Sandbox host: `sandbox="allow-scripts"`, dedicated origin, **the exact CSP from `03` §1** (`B6`), nonce messaging, resize protocol, offline check, failure UI | **DONE** | *(next commit)* | `packages/interop/src/csp.ts` (B6 as 15 tests), `apps/web/src/features/sim/`. `SIM_ORIGIN` is REQUIRED in config. |
-| P6-T7 `embedSimulation` block: manifest-driven param editor, seed policies, lazy mount, static fallback, print fallback, state capture | NOT STARTED | | |
+| P6-T7 `embedSimulation` block, seed policies, lazy mount, static fallback, print fallback | **DONE** | *(next commit)* | `apps/web/src/features/sim/embedSimulation.ts`, 20 tests. A lesson block is a PINNED reference, so a DISABLED version still renders. |
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | *(next commit)* | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is P6-T12-scope. |
 | P6-T9 Conformance matrix over every registered sim | NOT STARTED | | |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new` | **DONE** | `677f2b2` | `sims/_template/`, `sims/README.md`, `scripts/sim-new.mjs`. The scaffold is asserted CLEAN, not merely created. The dev playground is NOT DONE — see the note. |
@@ -1724,6 +1724,53 @@ the same digest. An order-dependent digest makes every rebuild look like a chang
 detector that always fires is one people learn to ignore.
 
 #### P6-T8 evidence
+#### P6-T7 detail (complete)
+
+**A LESSON IS NEVER BROKEN BY A REGISTRY PROBLEM.** An unknown `simId@simVersion` renders the TEXT
+ALTERNATIVE plus a blocking authoring warning — not an error, not an empty box, and not a crash in a
+lesson a teacher has already shared. The alternative text is rendered *even on the failure paths*,
+because for a student blocked by a firewall that sentence is the entire lesson.
+
+**A DISABLED VERSION STILL RENDERS FOR A PINNED LESSON.** A block stores a version, so resolution is
+always pinned. The alternative is every student in a live classroom losing the simulation out of
+their lesson on the day it was switched off.
+
+**EACH SEED POLICY MAPS TO ITS OWN HOST POLICY.** The first version mapped `PER_VIEW` to
+`PER_STUDENT`, on the theory that both meant "not fixed". They do not: one re-rolls per mount, the
+other per person, so collapsing them makes a student's refresh show a different ball every time they
+blink. `PER_STUDENT` derives from `USER_ID` — never `ASSIGNMENT_ID`, which would give a whole cohort
+the same numbers, and never `ATTEMPT_ID`, which would make a retry a different question.
+
+**THE PARAMETER EDITOR IS DRIVEN BY THE REGISTRY, NOT BY THE BLOCK.** The block carries values; the
+registry carries the ranges, labels and units. A slider whose bounds come from the lesson lets a
+teacher set a value the sim cannot render, and a sim author who widens a range has to find every
+lesson that assumed the old one.
+
+**A PARAMETER THE SIM NO LONGER DECLARES IS DROPPED AND REPORTED.** Clamping it instead would send a
+value to a simulation that never asked for it, and the block would carry it forever — so the lesson
+looks authored and behaves like something else. It is reported as a *warning* because a dropped value
+has no row to hang itself on, and silently dropping it means a lesson quietly stops configuring
+something it still claims to.
+
+**THE PRINT PROJECTION MARKS A CORRECTED VALUE.** "Print/PDF: poster plus text summary, so a printed
+worksheet still teaches something." Without the mark, a student printing before a test works from
+60 m/s while the lesson says 500, and neither is right.
+
+**`@orrery/clock` WAS IMPORTED BY `apps/web` BUT NEVER DECLARED.** It resolved only through hoisting,
+and a filtered `pnpm install` pruned it and the suite failed to even load. The fix was to declare the
+dependency, not to reach for `performance.now()`: `INV-TIME-1` bans it outside `@orrery/clock`, and
+`systemClock` is monotonic there, so it is the correct source for a handshake deadline anyway. A
+missing declaration that only breaks on a clean install is the worst kind of missing declaration.
+
+**VITEST PASSED WITH 23 TYPESCRIPT ERRORS.** Vitest transpiles without checking types, so the invented
+`RegistryParam` shape was invisible to `pnpm test` and only `pnpm typecheck` saw it. Running the type
+check before believing a green suite is the only reason this was found before commit.
+
+#### P6-T7 evidence
+- 1458 unit (20 `embedSimulation`, 73 in `apps/web/src/features/sim`), 336 db integration. 8/8 gates,
+  lint 0, typecheck 0, image builds green.
+
+
 - 1421 unit (23 registry, 43 interop), 336 db integration. 8/8 gates, lint 0, typecheck 0, image
   builds, `sim:validate` and `sim:check` green with the registry digest reported.
 

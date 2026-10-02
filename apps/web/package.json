@@ -12,10 +12,12 @@
   },
   "dependencies": {
     "@orrery/auth": "workspace:*",
+    "@orrery/clock": "workspace:*",
     "@orrery/config": "workspace:*",
     "@orrery/contracts": "workspace:*",
     "@orrery/db": "workspace:*",
     "@orrery/interop": "workspace:*",
+    "@orrery/sim-registry": "workspace:*",
     "@orrery/sim-sdk": "workspace:*",
     "next": "15.5.25",
     "react": "19.2.0",
