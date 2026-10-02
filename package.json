@@ -29,6 +29,7 @@
     "sim:build": "node scripts/sim-build.mjs --all",
     "sim:conformance": "node scripts/sim-conformance.mjs",
     "sim:sandbox-escape": "node scripts/sim-sandbox-escape.mjs",
+    "sim:playground": "node scripts/sim-playground.mjs",
     "sim:check": "node scripts/sim-build.mjs --all --check",
     "gate:authz": "node scripts/authz-ownership-gate.mjs",
     "test:integration": "pnpm --filter @orrery/db --filter @orrery/worker test:integration",

@@ -1360,7 +1360,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T7 `embedSimulation` block, seed policies, lazy mount, static fallback, print fallback | **DONE** | `1805898` | `apps/web/src/features/sim/embedSimulation.ts`; 20 tests. A lesson block is a PINNED reference, so a DISABLED version still renders. |
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
-| P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new` — dev playground OUTSTANDING | **IN PROGRESS** | `677f2b2` | Docs, template and scaffolder done; the dev playground with its protocol inspector is NOT built and `pnpm sim:conformance` did not exist until P6-T9. Row narrowed deliberately rather than closed over a missing half. 
+| P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector | **DONE** | *(next commit)* | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
 | P6-T11 24 gold sims | NOT STARTED | | |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
@@ -1725,6 +1725,42 @@ the same digest. An order-dependent digest makes every rebuild look like a chang
 detector that always fires is one people learn to ignore.
 
 #### P6-T8 evidence
+#### P6-T10 detail (complete): the dev playground
+
+**A PLAYGROUND THAT USES THE PRODUCTION SANDBOX AND THE PRODUCTION PROTOCOL, OR IT IS A PLACE BUGS GO TO
+HIDE.** `sandbox="allow-scripts"` and nothing else, `postMessage` to `'*'` because the frame is opaque, and
+the SDK's own `evaluateHandshake` for the verdict. The page also asserts that the `sandbox` attribute it was
+served matches `FRAME_SANDBOX_TOKENS`, and says so loudly if it ever stops matching — a playground quietly
+diverging from production is worse than no playground.
+
+**TWO REAL ORIGINS, BECAUSE A `file://` PAGE CANNOT SHOW A PROTOCOL.** Same-origin would leave `sandbox`,
+CORP and the opaque origin with nothing to enforce, and the playground would report success for arrangements
+that fail in production. So it starts the same two-origin servers the conformance and escape suites use.
+
+**THE INSPECTOR SHOWS WHAT THE CONSOLE CANNOT.** Three things, specifically: both directions interleaved, the
+nonce on every line, and every frame the host REJECTED. The last is the one that matters — a sim with its
+nonce handling wrong needs to *see* the rejection, and a console in the frame's own context never shows it.
+
+**`--once` IS A SMOKE TEST, NOT A DEMO.** Without it the command starts a server and blocks, which is right for
+a human and useless in CI. With it the playground is asserted: the page boots, a real bundle mounts, the
+handshake completes, and frames are recorded in BOTH directions — one sent deliberately, so the check cannot
+pass on a playground that only listens.
+
+**THE FIRST VERSION NEVER LOADED A SIMULATION.** The `src` was empty, so the page booted, the inspector
+rendered, and the smoke test reported "no sim -> host frames" — which reads like a protocol problem and was
+a missing attribute.
+
+**`sim:new` AND `sims/README.md` NOW POINT AT IT.** Both promised a `sim:conformance` that did not exist when
+they were written; the playground is the tool an author reaches for *while* writing, and the conformance suite
+is the one that runs before a merge. Saying which is which is the difference between a useful README and a
+list of commands.
+
+#### P6-T10 evidence
+- `pnpm sim:playground -- --once`: `handshake OK — capabilities {"grading":true,"stepper":true,"scenarios":[]},
+  frames recorded both ways`.
+- 1495 unit, 336 db integration, 9/9 gates, lint 0, typecheck 0, conformance 14/14, escape gate 12/12.
+
+
 #### P6-T6 correction (the host could listen and never speak)
 
 The row was marked DONE on the strength of its CSP work. The host built six frames — `initFrame`,

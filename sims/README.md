@@ -16,6 +16,8 @@ without a per-sim install there is nothing to upgrade it with.
 | `pnpm sim:check` | Build and assert **without writing** | In CI, on a dirty tree |
 | `pnpm sim:validate` | Manifest, schema, rules, determinism, no-I/O, budget | Every commit |
 | `pnpm sim:conformance` | The full matrix in a real browser | Before a sim is merged |
+| `pnpm sim:playground` | Mount one sim on a real second origin, with every frame both ways listed live | While writing one |
+| `pnpm sim:sandbox-escape` | Attempts twelve escapes from inside the frame | In `pnpm gates`; run it if you touch the frame |
 
 `sims/_template` and `sims/_fixtures` are excluded from every one of them: a leading underscore means
 scaffolding or deliberately-broken test input, not a simulation.

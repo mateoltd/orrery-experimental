@@ -257,7 +257,8 @@ const main = () => {
     );
   }
   process.stdout.write(
-    `${c.dim('  Next: pnpm sim:build --all, then pnpm sim:conformance. A new sim is not real until the conformance suite has run it.')}\n`,
+    `${c.dim('  Next: pnpm sim:build --all, then pnpm sim:conformance. A new sim is not real until the conformance suite has run it.')}\n` +
+      `${c.dim('  While you write it: pnpm sim:playground -- --sim <id>  — every frame both ways, live.')}\n`,
   );
 };
 
