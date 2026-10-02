@@ -380,10 +380,12 @@ describe('delivering frames to the frame', () => {
     }
   });
 
-  it('sends `sim:visibility` on a tab change, because a sim left running is a sim nobody asked for', () => {
+  it('on a tab change, PAUSES the sim and CAPTURES the state, because that is the last chance', () => {
     const { container } = render(<SimulationFrame {...baseProps} lazy={false} />);
     const { calls } = watchPosts(container);
     fireLoad(container);
+    // Restored afterwards by `afterEach`'s `cleanup()` and `restoreAllMocks()`; left overridden it
+    // would make every later test in this file believe the tab is hidden.
     Object.defineProperty(document, 'visibilityState', {
       configurable: true,
       get: () => 'hidden',
@@ -391,8 +393,17 @@ describe('delivering frames to the frame', () => {
     act(() => {
       document.dispatchEvent(new Event('visibilitychange'));
     });
-    expect(calls[calls.length - 1]).toEqual([{ type: 'sim:visibility', visible: false }, '*']);
-    expect(calls).toHaveLength(2);
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+    // BOTH frames, in order: pause the timeline AND ask for the state. They are the same event seen
+    // from two directions — a hidden tab is the last moment before a student closes the laptop.
+    // The LAST TWO, because the call list also contains `sim:init`.
+    expect(calls.slice(-2).map((call) => call[0])).toEqual([
+      { type: 'sim:visibility', visible: false },
+      { type: 'sim:requestState', reason: 'blur' },
+    ]);
   });
 
   it('sends `sim:teardown` before unmount finishes, so the sim can stop its rAF loop', () => {

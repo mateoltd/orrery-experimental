@@ -16,6 +16,7 @@
  * have nothing to enforce.
  */
 
+import { checksumState } from '@orrery/sim-sdk/state';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { SimulationFrame } from '../../apps/web/src/features/sim/SimulationFrame';
@@ -40,7 +41,13 @@ interface HarnessLog {
   readonly fallbacks: string[];
   readonly statuses: string[];
   /** Every host frame the component actually posted, captured by wrapping `postMessage`. */
-  readonly outbound: unknown[];
+  /** Inbound frames as the PAGE saw them, installed before React mounts. */
+  readonly inbound: Array<{ type: string; nonce: string | null }>;
+  /**
+   * Re-derive a checksum from a state, so the runner can check the sim's own claim rather than trust
+   * the string the sim sent. A checksum that is merely non-empty proves nothing about the state.
+   */
+  checksumOf(value: unknown): string;
 }
 
 declare global {
@@ -69,7 +76,19 @@ const readConfig = (): HarnessConfig => {
 };
 
 const config = readConfig();
-const log: HarnessLog = { answers: [], states: [], fallbacks: [], statuses: [], outbound: [] };
+const log: HarnessLog = { answers: [], states: [], fallbacks: [], statuses: [], inbound: [] };
+
+// Installed BEFORE the first render, because a listener added afterwards misses the handshake -- which
+// is exactly what the first version of the `sim:ready` cell did: it waited two seconds for a frame that
+// had already arrived and been dropped on the floor.
+globalThis.addEventListener('message', (event: MessageEvent) => {
+  const data = event.data as { type?: unknown; nonce?: unknown } | null;
+  if (data === null || typeof data.type !== 'string') return;
+  log.inbound.push({
+    type: data.type,
+    nonce: typeof data.nonce === 'string' ? data.nonce : null,
+  });
+});
 
 /**
  * Outbound frames are NOT recorded by patching `postMessage`.
@@ -138,6 +157,7 @@ observer.observe(document.body, {
 window.__conformance = {
   config,
   log,
+  checksumOf: (value: unknown): string => checksumState(value),
   status: () => document.querySelector('.sim-host')?.getAttribute('data-sim-status') ?? 'ABSENT',
   ready: true,
 };

@@ -66,7 +66,7 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 96 |
+| Commits | 97 |
 | Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
 | Integration tests | **336** across 27 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
@@ -1359,7 +1359,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T6 Sandbox host: `sandbox="allow-scripts"`, dedicated origin, **the exact CSP from `03` §1** (`B6`), nonce messaging, resize protocol, offline check, failure UI | **DONE** | *(next commit)* | `packages/interop/src/csp.ts` (B6 as 15 tests), `apps/web/src/features/sim/`. `SIM_ORIGIN` is REQUIRED in config. |
 | P6-T7 `embedSimulation` block, seed policies, lazy mount, static fallback, print fallback | **DONE** | *(next commit)* | `apps/web/src/features/sim/embedSimulation.ts`, 20 tests. A lesson block is a PINNED reference, so a DISABLED version still renders. |
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | *(next commit)* | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is P6-T12-scope. |
-| P6-T9 Conformance matrix over every registered sim | **IN PROGRESS** | *(this commit)* | `scripts/sim-conformance.mjs` + Chromium: **8 of 14 cells green** for `maths.projectile-motion`. The 6 failures all share one unfixed cause: `sim:init` never reaches the sim. |
+| P6-T9 Conformance matrix over every registered sim | **IN PROGRESS** | *(next commit)* | `scripts/sim-conformance.mjs` + Chromium: **13 of 14 cells green** for `maths.projectile-motion`, including a real sandbox-escape attempt from inside the frame. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new` | **DONE** | `677f2b2` | `sims/_template/`, `sims/README.md`, `scripts/sim-new.mjs`. The scaffold is asserted CLEAN, not merely created. The dev playground is NOT DONE — see the note. |
 | P6-T11 24 gold sims | NOT STARTED | | |
 
@@ -1836,17 +1836,44 @@ P6-T6; both bit again here and both are in `afterEach` now.
 **THE GENERATED HARNESS BUNDLE WAS BEING LINTED AS SOURCE.** Under `.tmp` it contributed ~1900 errors to
 every `pnpm lint`. Generated output moved to `node_modules/.cache/`.
 
-**WHAT IS STILL BROKEN, STATED PLAINLY.** `sim:init` is posted on the iframe's `load` and the sim boots
-and subscribes, but the handshake never completes: status stays `LOADING`, `sim:ready` never arrives, and
-so the answer path, the Node grade and the state round-trip cannot run — six cells, one cause. The next
-hypotheses, in order: React `StrictMode` double-invokes the effect and the surviving bridge is attached to
-a stale `contentWindow`; or the sim's `startSim` resolves from a dynamic import AFTER `load` has already
-fired, so the listener registers too late. Neither is guessed at in the code.
+**THE BRIDGE REBUILT ITSELF ON EVERY RENDER, AND THE SEED WAS DEPENDENT ON THAT.** `createHostBridge`'s
+own subscription called `bridge.receive(...)` and **threw the returned state away** — the bridge's
+internal state was right the whole time, which is why every unit test passed, but nothing told React, so
+the component rendered `LOADING` while a real simulation completed a perfect handshake beside it. And the
+effect that creates the bridge listed `seedPolicy` and `params` — both OBJECTS — in its dependencies.
+`<SimulationFrame seedPolicy={{ kind: 'FIXED', seed: 'x' }} />` is how every caller writes that, and the
+host's own `policyOf()` returns a fresh object per render. So every render tore down the live bridge,
+posted `sim:teardown` and installed a new one that never received `sim:init`, because that only goes out
+on the iframe's `load`. **A re-render anywhere in the enclosing lesson was enough to kill a simulation** —
+and the host reported a timeout for a simulation that was working.
+
+**A `FIXED` SEED CANNOT BE RE-DERIVED PER RENDER.** `deriveSeed` takes a nonce source; a fresh nonce per
+render would give a student a different simulation on every keystroke in the lesson. The memo is keyed on
+the policy's FIELDS, and `params` is keyed on its serialised content — parsed, not suppressed, so the
+dependency is real rather than a lint rule taught to look away.
+
+**THE HOST NEVER CAPTURED STATE ON BLUR AT ALL.** `sim:visibility` went out; the state ask did not. A
+student who explored for ten minutes and closed the laptop lost everything, which is the single worst
+outcome a simulation can have. Visibility and capture are the same event from two directions, so they are
+now emitted together, on `visibilitychange` and on `pagehide` — the latter because `unload` is unreliable
+on mobile Safari and in a bfcache restore.
+
+**A SIM ANSWERED `sim:requestState` TWICE.** The SDK already replies from `getState()`, so the sim's own
+handler reporting as well sent two `sim:state` frames per request — and a host that debounces checkpoints
+would persist both.
+
+**WHAT IS STILL BROKEN, STATED PLAINLY.** One cell of fourteen: hiding the tab does not produce a NEW
+state. It is NOT a measurement artefact — the sim's own receive log shows `sim:visibility` and
+`sim:requestState` arriving, and an error listener installed inside the frame reports nothing thrown, so
+the SDK's `isAuthenticated` is dropping frames the host posts while accepting byte-identical frames
+posted from Playwright. That contradiction is unresolved and is recorded rather than papered over. The
+next step is to compare `event.source` identity between the two posting paths.
 
 #### P6-T9 evidence so far
 - 1485 unit (121 sim-sdk, 92 in `apps/web/src/features/sim`), 336 db integration, 8/8 gates, lint 0,
   typecheck 0, image builds green.
-- `pnpm sim:conformance`: 8/14 cells for `maths.projectile-motion`, 6 failing on one cause, named above.
+- `pnpm sim:conformance`: **13/14** cells for `maths.projectile-motion`, graded 4/4 in bare Node from the
+  sim's own reported state. One cell failing, cause localised above.
 
 
 #### P6-T7 detail (complete)

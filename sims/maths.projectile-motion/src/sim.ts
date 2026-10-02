@@ -318,9 +318,10 @@ export function startSim(document_: Document, window_: Window, parent: Window | 
       void seed;
       restart(paramsFrom(next));
     },
-    onRequestState: () => {
-      connection?.bridge?.reportState(snapshot());
-    },
+    // Deliberately empty. The SDK answers `sim:requestState` itself, from `getState()`, so a handler
+    // that also reports sends TWO `sim:state` frames for one request -- which conformance caught, and
+    // which a host that debounces checkpoints would persist twice.
+    onRequestState: () => {},
     onVisibility: (visible) => {
       // A hidden tab stops the clock. A timeline that advances while a student is looking something
       // up is a timeline they cannot reason about.
@@ -333,6 +334,26 @@ export function startSim(document_: Document, window_: Window, parent: Window | 
     getState: () => snapshot(),
   };
 
+  /**
+   * Conformance instrumentation: what this sim RECEIVED, and what threw inside its handlers.
+   *
+   * Both earn their place. The first distinguishes "the host never sent it" from "the host sent it and the
+   * sim ignored it" — a distinction no host-side measurement can make, and the one that located the
+   * remaining P6-T9 defect. The second exists because a throw inside a message handler is invisible to
+   * the host's `pageerror`, which only covers the host frame: a simulation whose handler throws drops
+   * every frame it is sent and reports nothing at all.
+   */
+  const received: string[] = [];
+  const errors: string[] = [];
+  (window_ as unknown as { __simReceived?: string[] }).__simReceived = received;
+  (window_ as unknown as { __simErrors?: string[] }).__simErrors = errors;
+  // A throw inside a message handler is INVISIBLE to the host's `pageerror`, which only covers the host
+  // frame. A simulation whose handler throws drops every frame it is sent and reports nothing, which is
+  // exactly the failure this caught.
+  window_.addEventListener('error', (event: ErrorEvent) => {
+    errors.push(`${String(event.message)} @ ${String(event.filename)}:${String(event.lineno)}`);
+  });
+
   const transport = {
     post: (frame: unknown): void => {
       // `'*'` because a sandboxed sim cannot learn the host's origin, and the host authenticates
@@ -341,6 +362,8 @@ export function startSim(document_: Document, window_: Window, parent: Window | 
     },
     subscribe: (handler: (frame: unknown, source: unknown) => void): (() => void) => {
       const listener = (event: MessageEvent): void => {
+        const type = (event.data as { type?: unknown } | null)?.type;
+        if (typeof type === 'string') received.push(type);
         handler(event.data, event.source);
       };
       window_.addEventListener('message', listener);

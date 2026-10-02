@@ -194,15 +194,90 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
 
   const originUsable = targetOrigin !== null;
 
+  /**
+   * The parent's callbacks, held in refs.
+   *
+   * ## WHY THEY ARE NOT IN THE BRIDGE EFFECT'S DEPENDENCY LIST
+   *
+   * Because they were, and it broke every simulation. A parent that passes an inline arrow --
+   * `<SimulationFrame onState={(s) => ...} />`, which is how every caller writes it -- produces a new
+   * function identity on every render. The effect therefore tore down the live bridge, emitted
+   * `sim:teardown` and installed a fresh one on every single re-render, and the fresh bridge never got
+   * `sim:init` because that only goes out on the iframe's `load`. The host sat at `READY` with one
+   * frame accepted and a dead connection, and a re-render anywhere in the enclosing lesson was enough
+   * to do it.
+   *
+   * The ref holds the latest callback, so the bridge is built once per connection and always calls the
+   * current handler. This is the standard shape for "the thing I hand to a long-lived object must stay
+   * fresh, and the object itself must not churn".
+   */
+  const callbacksRef = useRef({ onAnswer, onState, onFallback });
+  callbacksRef.current = { onAnswer, onState, onFallback };
+
   const nonce = useMemo(() => props.nonce ?? mintNonce(), [props.nonce]);
   // Named fields, not the `identity` object, in both the capture and the dependency list. The first
   // version captured the object and depended on three of its properties, which is the shape that makes
   // a memo stale for reasons no reviewer can see: a new object with the same ids recomputes, and a
   // changed id under a stable object does not.
   const { attemptId, userId, assignmentId } = identity;
+  /**
+   * The seed's INPUTS, not the policy object's identity.
+   *
+   * `seedPolicy` is an object, and `<SimulationFrame seedPolicy={{ kind: 'FIXED', seed: 'x' }} />` is how
+   * every caller writes it — the host's own `policyOf()` returns a fresh object per render. Depending on
+   * the identity therefore re-ran the seed memo, and because `seed` is in the bridge effect's dependency
+   * list, every render tore down the live bridge, posted `sim:teardown` and installed a new one that
+   * never received `sim:init`. The simulation died on the first state update and the host sat at `READY`
+   * with a dead connection, reporting a timeout for a simulation that was fine.
+   *
+   * A FIXED seed cannot be re-derived per render anyway — `deriveSeed` takes a nonce source, and a new
+   * nonce per render would give a student a different simulation on every keystroke in the lesson.
+   */
+  const policyKind = seedPolicy.kind;
+  const policySeed = seedPolicy.kind === 'FIXED' ? seedPolicy.seed : '';
+  const policyDerivation = seedPolicy.kind === 'PER_STUDENT' ? seedPolicy.derivation : undefined;
   const seed = useMemo(
-    () => deriveSeed(seedPolicy, { attemptId, userId, assignmentId }, () => mintNonce()),
-    [seedPolicy, attemptId, userId, assignmentId],
+    // The policy REBUILT from its fields rather than closed over. Same values, and it means the memo's
+    // dependency list is genuinely complete instead of suppressed -- which is the difference between a
+    // deliberate decision and a lint rule that learned to look away.
+    () =>
+      deriveSeed(
+        policyKind === 'FIXED'
+          ? { kind: 'FIXED', seed: policySeed }
+          : policyKind === 'PER_VIEW'
+            ? { kind: 'PER_VIEW' }
+            : { kind: 'PER_STUDENT', derivation: policyDerivation ?? 'USER_ID' },
+        { attemptId, userId, assignmentId },
+        () => mintNonce(),
+      ),
+    [policyKind, policySeed, policyDerivation, attemptId, userId, assignmentId],
+  );
+
+  /**
+   * The params, keyed on their CONTENT.
+   *
+   * Same problem as the policy: a lesson block's `params` is a fresh object per render, and depending on
+   * its identity would rebuild the bridge on every render for values that never changed.
+   */
+  const paramsKey = JSON.stringify(params);
+  // Read through a ref, and keyed on the serialised VALUE. The content is what the simulation is
+  // configured by; the identity is an artefact of whoever built the object this render.
+  const policyRef = useRef(seedPolicy);
+  policyRef.current = seedPolicy;
+  /**
+   * `params` with an identity that tracks its CONTENT, built by parsing the serialised value.
+   *
+   * The round trip is deliberate rather than a shortcut, so that the dependency is real: the bridge effect
+   * genuinely reads this object, and the object changes exactly when the student changes a setting. It is
+   * lossless for what a block may carry -- `params` values are `string | number | boolean` per the block
+   * schema, and every one of those survives JSON.
+   *
+   * `JSON.stringify` as a change key is not clever, and being obvious to the next reader is worth more
+   * here than saving a parse that happens once per settings change.
+   */
+  const stableParams = useMemo(
+    () => JSON.parse(paramsKey) as Readonly<Record<string, unknown>>,
+    [paramsKey],
   );
 
   useEffect(() => {
@@ -272,20 +347,32 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
     const frameEl = frameRef.current;
     if (frameEl === null) return undefined;
 
+    const apply = (next: HostState): void => {
+      setState(next);
+      if (next.showFallback && next.status !== 'READY') {
+        callbacksRef.current.onFallback?.(next.status === 'UNREACHABLE' ? 'FIREWALL' : 'UNKNOWN');
+      }
+    };
+
     const bridge = createHostBridge({
       simId,
       simVersion,
       nonce,
       mode,
-      params,
+      // Through the refs, because `paramsKey` and `seed` are what the effect is keyed on -- the CONTENT,
+      // never the identity. Reading the objects directly here is what made the effect re-run per render.
+      params: stableParams,
       seed,
-      seedPolicy,
+      seedPolicy: policyRef.current,
       gradingSupplied: mode === 'graded',
       bundleUrl,
       defaultHeight,
       minHeight,
       now,
       expectedSource: frameEl.contentWindow,
+      // Every inbound frame reports its next state here. Without this the component only ever learns
+      // about `load` and a timeout, and a completed handshake renders as a timeout.
+      onState: apply,
       transport: {
         subscribe(handler) {
           const listener = (event: MessageEvent): void => {
@@ -305,13 +392,6 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
       },
     });
     bridgeRef.current = bridge;
-
-    const apply = (next: HostState): void => {
-      setState(next);
-      if (next.showFallback && next.status !== 'READY') {
-        onFallback?.(next.status === 'UNREACHABLE' ? 'FIREWALL' : 'UNKNOWN');
-      }
-    };
 
     // The handshake timer starts when the frame ELEMENT loads, not here: a bundle that takes nine
     // seconds to download has not spent nine seconds failing to hand-shake.
@@ -363,14 +443,15 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
     simVersion,
     nonce,
     mode,
-    params,
+    stableParams,
     seed,
-    seedPolicy,
+    // NOT `seedPolicy`: it is an object, and depending on its identity rebuilt the bridge on every
+    // render. A genuine policy change is still covered, because `seed` is derived from the policy's
+    // FIELDS above and `seed` is in this list.
     bundleUrl,
     defaultHeight,
     minHeight,
     now,
-    onFallback,
     originUsable,
     probeState,
     probe,
@@ -381,26 +462,49 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
   useEffect(() => {
     if (state.answer !== null && state.answer !== lastAnswerRef.current) {
       lastAnswerRef.current = state.answer;
-      onAnswer?.(state.answer);
+      callbacksRef.current.onAnswer?.(state.answer);
     }
-  }, [state.answer, onAnswer]);
+  }, [state.answer]);
 
   useEffect(() => {
-    if (state.lastState !== null) onState?.(state.lastState);
-  }, [state.lastState, onState]);
+    if (state.lastState !== null) callbacksRef.current.onState?.(state.lastState);
+  }, [state.lastState]);
 
-  // A hidden tab pauses rAF loops inside the sim. Without this frame a student who switches tabs to
-  // look something up comes back to a timeline that ran on without them.
+  // Visibility, and the STATE CAPTURE that goes with it.  (P6-T9)
+  //
+  // ## WHY CAPTURE IS ON THE SAME LIST AS PAUSE
+  //
+  // These are the same event seen from two directions. A hidden tab pauses the sim's rAF loop, and it is
+  // also the last moment before a student closes the laptop — which is exactly when the state has to be
+  // asked for. The first version emitted `sim:visibility` and never asked for state, so a simulation
+  // that had been explored for ten minutes reported nothing on unload and the student's work was gone.
+  //
+  // `pagehide` as well as `visibilitychange`: on iOS Safari and in a bfcache restore, `unload` is
+  // unreliable and the tab simply goes away, so the state request has to be sent on the event that
+  // actually fires.
   useEffect(() => {
     const onVisibility = (): void => {
       // Emitted, not merely computed. A hidden tab pauses the sim's rAF loop, and a host that computes
       // the frame and never sends it leaves every student's timeline running on without them.
       const bridge = bridgeRef.current;
       if (bridge === null) return;
-      bridge.emit(bridge.visibility(document.visibilityState === 'visible'));
+      const visible = document.visibilityState === 'visible';
+      bridge.emit(bridge.visibility(visible));
+      // The state ask is only meaningful on the way OUT, and asking on the way in would capture the
+      // instant before the student looked at it.
+      if (!visible) bridge.emit(bridge.requestState('blur'));
+    };
+    const onPageHide = (): void => {
+      const bridge = bridgeRef.current;
+      if (bridge === null) return;
+      bridge.emit(bridge.requestState('unload'));
     };
     document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
+    globalThis.addEventListener('pagehide', onPageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      globalThis.removeEventListener('pagehide', onPageHide);
+    };
   }, []);
 
   const height = Math.max(minHeight, state.height ?? defaultHeight);
@@ -418,7 +522,18 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
       : state.teacherDetail;
 
   return (
-    <div className="sim-host" ref={containerRef} data-sim-id={simId} data-sim-status={state.status}>
+    <div
+      className="sim-host"
+      ref={containerRef}
+      data-sim-id={simId}
+      data-sim-status={state.status}
+      // The counters are on the element because a support screenshot is the only artefact that survives
+      // an incident: "the frame loaded and the sim said ready" and "the frame loaded and something
+      // impersonated it" look identical in a status attribute.
+      data-sim-frames={String(state.framesAccepted)}
+      data-sim-dropped={String(state.framesDropped)}
+      data-sim-spoofs={String(state.spoofAttempts)}
+    >
       {showFallback ? (
         <div className="sim-host__fallback" role="status">
           <p className="sim-host__message">

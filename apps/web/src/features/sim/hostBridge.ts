@@ -139,6 +139,21 @@ export interface HostInput {
   };
   /** The frame element the host created. Frames from anything else are dropped. */
   readonly expectedSource: unknown;
+  /**
+   * Called with the next state after EVERY inbound frame.
+   *
+   * ## WHY THIS EXISTS, AND WHY IT IS NOT OPTIONAL
+   *
+   * `createHostBridge` subscribes to the transport itself and calls `bridge.receive(...)` — and the
+   * first version THREW THE RESULT AWAY. The bridge's internal state was correct the whole time, which
+   * is why every unit test passed; but nothing ever told React, so the component rendered `LOADING`
+   * forever while a real simulation sat on the other side of the boundary completing a perfect
+   * handshake. Conformance found it: a `sim:ready` arrived in the page, the frame reported zero frames
+   * accepted, and the host claimed a timeout.
+   *
+   * A state machine whose transitions are not OBSERVABLE is a state machine nobody can render.
+   */
+  readonly onState?: (next: HostState) => void;
 }
 
 export interface HostBridge {
@@ -509,7 +524,10 @@ export const createHostBridge = (input: HostInput): HostBridge => {
   // so a lesson with twelve sims left twelve listeners behind, each one holding a closure over a
   // disposed bridge that still answered messages.
   const unsubscribe = input.transport.subscribe((frame, source) => {
-    bridge.receive(frame, source);
+    const next = bridge.receive(frame, source);
+    // Reported here rather than only on `load` and `checkTimeout`, because every protocol event a
+    // simulation sends — ready, answer, state, resize, error — arrives through this one path.
+    input.onState?.(next);
   });
 
   return bridge;

@@ -28,6 +28,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { extname, join, resolve } from 'node:path';
 import process, { hrtime } from 'node:process';
+import { pathToFileURL } from 'node:url';
 import { build as esbuild } from 'esbuild';
 import { chromium } from 'playwright';
 
@@ -179,6 +180,31 @@ const waitForStatus = async (page, wanted, timeout = 15_000) => {
   }
 };
 
+/**
+ * Ask the sim for a state, at the protocol level, and return what it said.
+ *
+ * Used by the grading cell, which needs a real state to grade. NOT used by the blur-capture cell, which
+ * must go through the HOST: posting into the frame ourselves would prove the sim responds, not that the
+ * host asks.
+ */
+const captureState = async (page) => {
+  const nonce = await page.evaluate(
+    () => globalThis.__conformance.log.inbound.find((f) => f.type === 'sim:ready')?.nonce ?? null,
+  );
+  if (nonce === null) return null;
+  await page.evaluate((n) => {
+    const frame = globalThis.document.querySelector('iframe');
+    frame?.contentWindow?.postMessage({ type: 'sim:requestState', nonce: n, reason: 'save' }, '*');
+  }, nonce);
+  const expired = deadline(6000);
+  for (;;) {
+    const states = await page.evaluate(() => globalThis.__conformance.log.states);
+    if (states.length > 0) return states[states.length - 1];
+    if (expired()) return null;
+    await page.waitForTimeout(100);
+  }
+};
+
 const CELLS = [
   {
     name: 'the sandbox attribute carries exactly one token',
@@ -224,34 +250,39 @@ const CELLS = [
     },
   },
   {
-    name: 'sim:init was actually POSTED, with an explicit target origin',
-    why: 'the first host build sent six frames and delivered none of them',
+    name: 'the HOST ACCEPTED frames, dropped none and saw no spoof',
+    why: 'the first host rendered LOADING forever while a perfect handshake arrived beside it',
     run: async ({ page }) => {
-      const outbounds = await page.evaluate(() => globalThis.__conformance.log.outbound);
-      const init = outbounds.find((f) => f?.type === 'sim:init');
-      if (init === undefined) return 'no sim:init was posted';
-      return init.nonce === undefined || init.nonce === '' ? 'sim:init carried no nonce' : null;
+      const counters = await page.evaluate(() => {
+        const host = globalThis.document.querySelector('.sim-host');
+        return {
+          accepted: Number(host?.getAttribute('data-sim-frames') ?? '-1'),
+          dropped: Number(host?.getAttribute('data-sim-dropped') ?? '-1'),
+          spoofs: Number(host?.getAttribute('data-sim-spoofs') ?? '-1'),
+        };
+      });
+      if (counters.accepted < 1) return `accepted ${String(counters.accepted)} frames`;
+      // A spoof count above zero means something in the page is trying to forge a frame, which is a
+      // page-level incident rather than a simulation bug.
+      if (counters.spoofs > 0) return `${String(counters.spoofs)} spoof attempts`;
+      return counters.dropped > 0 ? `dropped ${String(counters.dropped)} frames` : null;
     },
   },
   {
-    name: 'sim:ready came back from the SIM, echoing the nonce',
+    name: 'sim:ready came back from the SIM, ECHOING THE NONCE',
     why: 'a handshake that succeeds without the sim answering proves nothing',
     run: async ({ page }) => {
-      const ready = await page.evaluate(async () => {
-        return new Promise((resolve) => {
-          const listener = (event) => {
-            if (event.data?.type === 'sim:ready') {
-              globalThis.removeEventListener('message', listener);
-              resolve(event.data);
-            }
-          };
-          globalThis.addEventListener('message', listener);
-          setTimeout(() => resolve(null), 2000);
-        });
-      });
-      return ready === null ? 'no sim:ready arrived' : null;
+      // Read from what the PAGE saw, recorded by a listener installed before React mounted. The first
+      // version attached its listener afterwards and then waited two seconds for a frame that had
+      // already arrived.
+      const ready = await page.evaluate(
+        () => globalThis.__conformance.log.inbound.find((f) => f.type === 'sim:ready') ?? null,
+      );
+      if (ready === null) return 'no sim:ready was ever received by the page';
+      return ready.nonce === null || ready.nonce === '' ? 'sim:ready carried no nonce' : null;
     },
   },
+
   {
     name: 'the frame is keyboard REACHABLE and the controls are focusable',
     why: 'a control that only answers a mouse is not a control',
@@ -306,33 +337,81 @@ const CELLS = [
       const answers = await page.evaluate(() => globalThis.__conformance.log.answers);
       const answer = answers[0];
       if (answer === undefined) return 'no answer to grade';
-      const grader = join(ROOT, 'sims/registry', String(entry.bundle.grader));
+      // From the sim's OWN dist, for the same reason the registry's paths are relative to it: reading
+      // the grader out of the registry directory 404s every simulation with a "missing grader".
+      const grader = join(
+        ROOT,
+        'sims',
+        String(entry.id),
+        'dist',
+        String(entry.bundle.grader).replace(/^\.\//, ''),
+      );
       if (!existsSync(grader)) return `grader bundle missing: ${String(entry.bundle.grader)}`;
-      const { default: grade } = await import(`file://${grader}`);
-      const first = await grade(answer, { seed: 'conformance-seed', params: entry.parameters });
-      const second = await grade(answer, { seed: 'conformance-seed', params: entry.parameters });
+      // Through the SDK's `gradeStoredState`, not by calling `grade` off the module: the entry point is
+      // what the worker uses, so exercising it here means conformance grades the same way production
+      // does. Calling `default.grader.grade` directly -- the first attempt -- tested a shape nothing
+      // else in the repository calls.
+      const [{ default: module_ }, { gradeStoredState }] = await Promise.all([
+        import(pathToFileURL(grader).href),
+        import(new URL('../packages/sim-sdk/dist/grader.js', import.meta.url).href),
+      ]);
+      // From the sim's OWN reported state, because the claim under test is "auto-graded from stored
+      // state". Passing `state: null` and calling it a day tested the grader's error path.
+      const captured = await captureState(page);
+      if (captured === null) return 'the sim reported no state to grade from';
+      const input = { state: captured.state, params: entry.parameters, answer };
+      const first = await gradeStoredState(module_.grader, input);
+      const second = await gradeStoredState(module_.grader, input);
       // Determinism in a browser is one claim; determinism in Node is the claim the grader rests on.
       if (JSON.stringify(first) !== JSON.stringify(second)) return 'two Node grades disagreed';
-      return first === undefined || first === null ? 'the grader returned nothing' : null;
+      if (first === undefined || first === null) return 'the grader returned nothing';
+      // A grade with no earned/max pair is not a grade, and a grader that always returns zero would pass
+      // this cell happily.
+      const points =
+        typeof first.points === 'number' ? first.points : (first.earned ?? first.score);
+      const max = typeof first.maxPoints === 'number' ? first.maxPoints : (first.max ?? 100);
+      // A score is reported, not returned as a failure. The first version returned `graded 4/4` and the
+      // runner printed it under FAIL, which is the worst possible way to be wrong: the message reads as
+      // a defect and the operator has to work out that it is not one.
+      if (points === undefined) return 'the grade carried no score';
+      process.stdout.write(
+        `       ${c.dim(`graded ${String(points)}/${String(max)} in bare Node`)}\n`,
+      );
+      return null;
     },
   },
   {
-    name: 'the STATE round-trips with a matching checksum',
-    why: 'a checksum of "" validates every state, including a corrupted one',
+    name: 'the STATE is CAPTURED on blur and carries a real checksum',
+    why: "a ten-minute exploration reported nothing on unload, so the student's work was gone",
     run: async ({ page }) => {
-      const states = await page.evaluate(async () => {
-        const frame = globalThis.document.querySelector('iframe');
-        if (frame?.contentWindow === null || frame === null) return [];
-        frame.contentWindow.postMessage(
-          { type: 'sim:requestState', nonce: 'conformance', reason: 'save' },
-          '*',
-        );
-        await new Promise((done) => setTimeout(done, 800));
-        return globalThis.__conformance.log.states;
+      // The count BEFORE the dispatch, and the cell requires an INCREMENT. The grading cell runs first
+      // and populates the same log, so a cell that only asked "is the log non-empty" passed on another
+      // cell's evidence -- green for the wrong reason, which is the one kind of green worth refusing.
+      const before = await page.evaluate(() => globalThis.__conformance.log.states.length);
+      // Driven through the HOST, not by posting into the frame: a hand-built `sim:requestState` carries
+      // the wrong nonce and is correctly dropped, which is the protocol working rather than failing.
+      await page.evaluate(() => {
+        Object.defineProperty(globalThis.document, 'visibilityState', {
+          configurable: true,
+          get: () => 'hidden',
+        });
+        globalThis.document.dispatchEvent(new Event('visibilitychange'));
       });
-      if (states.length === 0) return 'the sim answered no state request';
-      const { checksum } = states[states.length - 1];
-      return checksum === null || checksum === '' ? 'the state carried no checksum' : null;
+      const expired = deadline(6000);
+      for (;;) {
+        const states = await page.evaluate(() => globalThis.__conformance.log.states);
+        if (states.length > before) {
+          const { checksum, state } = states[states.length - 1];
+          if (checksum === null || checksum === '') return 'the state carried no checksum';
+          // Re-derived in the PAGE from the state itself, so a fabricated checksum cannot pass.
+          return checksum ===
+            (await page.evaluate((value) => globalThis.__conformance.log.checksumOf(value), state))
+            ? null
+            : `the checksum does not match the state it describes (${String(checksum)})`;
+        }
+        if (expired()) return 'hiding the tab produced no NEW state';
+        await page.waitForTimeout(100);
+      }
     },
   },
   {
