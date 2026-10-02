@@ -48,6 +48,14 @@ export interface RegistryEntry {
   readonly licence: string;
   /** Content-hashed, relative to the sim origin. Never an absolute URL. */
   readonly bundle: {
+    /**
+     * The DOCUMENT the iframe's `src` points at. Not the script.
+     *
+     * An iframe `src` performs a navigation, and navigating to a `text/javascript` resource makes the
+     * browser render the source into a `<pre>`. A host that pointed `src` at `browser` got a frame with
+     * a full page of source text in it and no simulation, which conformance found on its first run.
+     */
+    readonly page: string;
     readonly browser: string;
     readonly grader: string;
     readonly style: string | null;
@@ -100,6 +108,7 @@ export function majorOf(version: string): number | null {
 export function entryFromManifest(
   manifest: SimManifest,
   built: {
+    page: string;
     browser: string;
     grader: string;
     style: string | null;
@@ -107,11 +116,15 @@ export function entryFromManifest(
   },
 ): RegistryEntry {
   const hashed = /^\.\/[A-Za-z0-9._-]+\.[0-9a-f]{12}\.js$/u;
-  for (const [role, path] of [
-    ['browser', built.browser],
-    ['grader', built.grader],
+  // The PAGE is checked too, and it has to be a `.html` path. A registry that can carry an absolute
+  // URL is a delivery mechanism, and the catalogue is fetched by every student in every lesson.
+  const hashedPage = /^\.\/[A-Za-z0-9._-]+\.[0-9a-f]{12}\.html$/u;
+  for (const [role, path, pattern] of [
+    ['page', built.page, hashedPage],
+    ['browser', built.browser, hashed],
+    ['grader', built.grader, hashed],
   ] as const) {
-    if (!hashed.test(path)) {
+    if (!pattern.test(path)) {
       throw new Error(
         `UNHASHED_${role.toUpperCase()}_PATH: "${path}" is not a content-hashed relative path. A ` +
           'registry that can carry an absolute URL is a delivery mechanism, and the catalogue is ' +
@@ -137,7 +150,12 @@ export function entryFromManifest(
     lifecycle,
     replacedById: manifest.replacedById ?? null,
     licence: manifest.licence,
-    bundle: { browser: built.browser, grader: built.grader, style: built.style },
+    bundle: {
+      page: built.page,
+      browser: built.browser,
+      grader: built.grader,
+      style: built.style,
+    },
     bytes: built.bytes,
     defaultHeight: manifest.lifecycle.defaultHeight,
     minHeight: manifest.lifecycle.minHeight ?? manifest.lifecycle.defaultHeight,
@@ -366,4 +384,34 @@ export function catalogueIndex(
       defaultHeight: entry.defaultHeight,
     };
   });
+}
+
+/**
+ * The deployed URL for one artefact.
+ *
+ * ## THE REGISTRY'S BUNDLE PATHS ARE RELATIVE TO THE SIM'S OWN DIRECTORY
+ *
+ * `bundle.browser` is `./browser.<hash>.js`, which is meaningless without knowing what it is relative
+ * to. It is relative to the sim's deployment directory — `<simId>/<version>/` — not to the registry.
+ * The conformance suite found this the hard way: it served bundles out of the registry directory and
+ * every simulation 404'd, with an error that looked like a broken bundle rather than a wrong base.
+ *
+ * So the composition lives here, once, rather than being re-derived by the host, the catalogue and the
+ * conformance runner — which is three places to drift.
+ *
+ * @param trailingSlash Whether `origin` ends with a slash. Tolerated rather than assumed, because a
+ *   doubled slash is a 404 that presents as a broken deployment.
+ */
+export function simAssetUrl(
+  origin: string,
+  entry: Pick<RegistryEntry, 'id' | 'version' | 'bundle'>,
+  role: keyof RegistryEntry['bundle'],
+): string {
+  const base = origin.endsWith('/') ? origin.slice(0, -1) : origin;
+  const file = entry.bundle[role];
+  if (file === null) {
+    throw new Error(`${entry.id}@${entry.version} publishes no ${role} artefact`);
+  }
+  const relative = file.replace(/^\.\//, '');
+  return `${base}/${entry.id}/${entry.version}/${relative}`;
 }

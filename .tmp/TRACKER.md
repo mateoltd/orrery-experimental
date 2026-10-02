@@ -66,7 +66,7 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 95 |
+| Commits | 96 |
 | Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
 | Integration tests | **336** across 27 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
@@ -1359,7 +1359,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T6 Sandbox host: `sandbox="allow-scripts"`, dedicated origin, **the exact CSP from `03` §1** (`B6`), nonce messaging, resize protocol, offline check, failure UI | **DONE** | *(next commit)* | `packages/interop/src/csp.ts` (B6 as 15 tests), `apps/web/src/features/sim/`. `SIM_ORIGIN` is REQUIRED in config. |
 | P6-T7 `embedSimulation` block, seed policies, lazy mount, static fallback, print fallback | **DONE** | *(next commit)* | `apps/web/src/features/sim/embedSimulation.ts`, 20 tests. A lesson block is a PINNED reference, so a DISABLED version still renders. |
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | *(next commit)* | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is P6-T12-scope. |
-| P6-T9 Conformance matrix over every registered sim | NOT STARTED | | |
+| P6-T9 Conformance matrix over every registered sim | **IN PROGRESS** | *(this commit)* | `scripts/sim-conformance.mjs` + Chromium: **8 of 14 cells green** for `maths.projectile-motion`. The 6 failures all share one unfixed cause: `sim:init` never reaches the sim. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new` | **DONE** | `677f2b2` | `sims/_template/`, `sims/README.md`, `scripts/sim-new.mjs`. The scaffold is asserted CLEAN, not merely created. The dev playground is NOT DONE — see the note. |
 | P6-T11 24 gold sims | NOT STARTED | | |
 
@@ -1785,6 +1785,68 @@ previous test's element.
 #### P6-T6 correction evidence
 - 1476 unit (91 in `apps/web/src/features/sim`, up from 71), 336 db integration. 8/8 gates, lint 0,
   typecheck 0, image builds green.
+
+
+#### P6-T9 in progress: what a real browser found that 1485 unit tests could not
+
+**THE BROWSER BUNDLE WAS THE WRONG KIND OF JAVASCRIPT.** `sim:build` emitted `format: 'esm'`, so the
+artefact ended in `export{...}`. The frame loads it with `<script src>` and is sandboxed with
+`allow-scripts` and nothing else, so there is no module loader to import it with: it is a syntax error
+in a classic script. The artefact is perfectly valid JavaScript and completely unusable, which is why no
+unit test could see it. The browser build now overrides the format to `iife`.
+
+**AN IFRAME `src` NAVIGATES, AND A NAVIGATED SCRIPT IS RENDERED AS TEXT.** The frame pointed `src` at
+the bundle, so Chromium rendered the source into a `<pre>`. A simulation now ships an HTML **document**
+(`sim.<hash>.html`) that loads the hashed bundle, and the registry carries it as `bundle.page`. The page is
+hashed too, because it references hashed filenames. Getting the content type wrong (`text/plain` on the
+`.html`) reproduces the same failure, which is why the MIME table in the runner says so in a comment.
+
+**`createHostBridge` IN THE SDK HAD ZERO CALLERS.** It is the SIM side of the bridge, and it needs a
+`sim:init` frame to construct itself — the nonce arrives with that frame — so a simulation cannot build
+its own bridge at startup. Every sim would have had to reimplement the same subscribe-then-wait sequence,
+and none had, so **no simulation spoke the protocol at all**: a convincing canvas that could not be graded.
+The SDK now has `connectSim`, which waits, checks the identity, and answers `sim:ready`. It refuses a
+version the host did not ask for — the host's whole reason for pinning is to render the version the
+student's results were computed against.
+
+**`sim:state` POSTED `checksum: ''`.** The field's entire purpose is proving a stored state round-trips,
+and an empty string validates every state including a corrupted one. Now `checksumState(state)`.
+
+**MY OWN P6-T6 HARDENING WAS WRONG AND BROKE EVERY SIMULATION.** I had made `postMessage` take an
+explicit target origin, on the sound argument that `'*'` hands the nonce to whatever ends up in the frame.
+Chromium says otherwise: `sandbox="allow-scripts"` withholds `allow-same-origin`, so the frame's origin is
+opaque — literally `'null'` — and **every explicit target is rejected**:
+> The target origin provided ('https://sims.example') does not match the recipient window's origin ('null').
+
+So `'*'` is not a convenience here, it is the only value the platform accepts for an opaque recipient. The
+concern was real, so it is now answered where it can be: the frame has no origin to steal, a document that
+navigates itself into the frame inherits the sandbox and is opaque too, the host authenticates every
+inbound frame by source AND per-mount nonce, and bundle integrity is a deployment property (CORP, CSP). A
+secure choice that makes simulations impossible is not a secure choice.
+
+**A TEST THAT MEASURED BY PATCHING `postMessage` WAS IMPOSSIBLE, NOT MERELY WRONG.** The harness wrapped
+the frame window's `postMessage` to record host frames. Cross-origin frame windows refuse property
+assignment, so it threw a SecurityError on every iframe and reported "no sim:init was posted" for a host
+that was posting one. The measurement is gone; what is observable is the sim's side — a `sim:ready`
+carrying the host's nonce proves the init was delivered AND that the sim read it.
+
+**TESTING LIBRARY CLEANUP, AND A PROBE CACHE, EACH FOOLED A TEST INTO PASSING.** Already recorded under
+P6-T6; both bit again here and both are in `afterEach` now.
+
+**THE GENERATED HARNESS BUNDLE WAS BEING LINTED AS SOURCE.** Under `.tmp` it contributed ~1900 errors to
+every `pnpm lint`. Generated output moved to `node_modules/.cache/`.
+
+**WHAT IS STILL BROKEN, STATED PLAINLY.** `sim:init` is posted on the iframe's `load` and the sim boots
+and subscribes, but the handshake never completes: status stays `LOADING`, `sim:ready` never arrives, and
+so the answer path, the Node grade and the state round-trip cannot run — six cells, one cause. The next
+hypotheses, in order: React `StrictMode` double-invokes the effect and the surviving bridge is attached to
+a stale `contentWindow`; or the sim's `startSim` resolves from a dynamic import AFTER `load` has already
+fired, so the listener registers too late. Neither is guessed at in the code.
+
+#### P6-T9 evidence so far
+- 1485 unit (121 sim-sdk, 92 in `apps/web/src/features/sim`), 336 db integration, 8/8 gates, lint 0,
+  typecheck 0, image builds green.
+- `pnpm sim:conformance`: 8/14 cells for `maths.projectile-motion`, 6 failing on one cause, named above.
 
 
 #### P6-T7 detail (complete)

@@ -88,16 +88,21 @@ const withRestoredFile = (path: string, contents: string, body: () => void): voi
 };
 
 describe.skipIf(!built)('the dual-target guarantee (P6-T5, INV-SIM-2)', () => {
-  it('emits a browser bundle, a grader bundle and a hashed stylesheet', () => {
+  it('emits a browser bundle, a grader bundle, a hashed stylesheet and the PAGE', () => {
     const entry = readEntry();
-    expect(Object.keys(entry.artefacts).sort()).toEqual(['browser', 'grader', 'style']);
+    // `page` is in the list because the iframe's `src` points at IT. Navigating an iframe to
+    // `text/javascript` renders the bundle's source into a `<pre>`, which conformance found on its
+    // first run: a frame with a 21 KB body and no simulation in it.
+    expect(Object.keys(entry.artefacts).sort()).toEqual(['browser', 'grader', 'page', 'style']);
     for (const [role, value] of Object.entries(entry.artefacts)) {
       expect(existsSync(join(DIST, value.file.replace('./', ''))), `${role}: ${value.file}`).toBe(
         true,
       );
       // The hash is IN the name. Without it the sim origin either serves a stale bundle for a term or
       // sends no caching headers at all.
-      expect(value.file, `${role} is not content-hashed`).toMatch(/\.[0-9a-f]{12}\.(js|css)$/u);
+      expect(value.file, `${role} is not content-hashed`).toMatch(
+        /\.[0-9a-f]{12}\.(js|css|html)$/u,
+      );
       expect(statSync(join(DIST, value.file.replace('./', ''))).size).toBe(value.bytes);
     }
   });

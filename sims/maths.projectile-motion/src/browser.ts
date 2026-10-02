@@ -189,3 +189,52 @@ export function mountControls(container: HTMLElement, stepper: Stepper): void {
 }
 
 export { createStepper, prefersReducedMotion };
+
+/**
+ * Boot the protocol half.  (P6-T9)
+ *
+ * ## WHY THIS LIVES AT THE BOTTOM OF THE RENDER ENTRY
+ *
+ * The manifest names one browser entry, and that entry is `src/browser.ts`. So the boot lives here rather
+ * than in a second entry the build would have to be taught about. It is at the *bottom*, after the
+ * exports, because a module-scope side effect above them would mean importing this file for its exports
+ * mounts a simulation — which is what made it impossible to unit-test the render half.
+ *
+ * ## GUARDED, BECAUSE THIS FILE IS IMPORTED BY TESTS
+ *
+ * `document` is absent under Node. The guard is the only thing between a unit test of the renderer and
+ * an uncaught `ReferenceError`.
+ */
+if (typeof document !== 'undefined' && typeof window !== 'undefined' && window.parent !== window) {
+  const boot = async (): Promise<void> => {
+    try {
+      const { startSim } = await import('./sim.js');
+      startSim(document, window, window.parent);
+    } catch (error) {
+      // A simulation that dies during boot is silent by default: the frame shows an empty page and the
+      // host waits out its handshake timeout with no idea why. Saying so — in the console AND to the
+      // host as a recoverable error — is the difference between a five-minute fix and a day of it.
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(
+        '[sim] failed to start:',
+        message,
+        error instanceof Error ? error.stack : 'no stack',
+      );
+      try {
+        window.parent.postMessage(
+          { type: 'sim:error', code: 'INTERNAL', message, recoverable: true },
+          '*',
+        );
+      } catch {
+        // The host may already be gone. Nothing further to do, and swallowing is right here.
+      }
+    }
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      void boot();
+    });
+  } else {
+    void boot();
+  }
+}

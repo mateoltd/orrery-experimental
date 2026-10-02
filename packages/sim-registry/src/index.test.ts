@@ -95,6 +95,7 @@ const manifestFor = (over: Partial<Record<string, unknown>> = {}): SimManifest =
   simManifestSchema.parse(rawManifest(over));
 
 const built = {
+  page: './sim.0123456789ab.html',
   browser: './browser.f0287dafca92.js',
   grader: './grader.eee091640f4a.js',
   style: './style.dec5ddce6f96.css',
@@ -108,6 +109,7 @@ const entry = (id: string, version: string, over: Partial<RegistryEntry> = {}): 
   replacedById: null,
   licence: 'CC-BY-4.0',
   bundle: {
+    page: './sim.0123456789ab.html',
     browser: './browser.f0287dafca92.js',
     grader: './grader.eee091640f4a.js',
     style: './style.dec5ddce6f96.css',

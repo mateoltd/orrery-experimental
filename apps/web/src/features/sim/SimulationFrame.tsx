@@ -51,14 +51,19 @@ export interface SimulationFrameProps {
   /** The content-hashed bundle URL on the SIM origin. Never the app origin. */
   readonly bundleUrl: string;
   /**
-   * The SIM ORIGIN, and the reason it is a prop rather than something read from the bundle URL:
-   * `postMessage` needs a TARGET ORIGIN, and it is a security decision rather than a convenience.
+   * The SIM ORIGIN: where the bundle is served from, and what the reachability probe asks.
    *
-   * Posting to `'*'` would hand the init frame -- params, seed and the nonce -- to whatever document
-   * happens to be in the frame afterwards. A simulation that redirects, or a compromised bundle, would
-   * receive a student's seed and this mount's nonce, and with the nonce it could post frames that pass
-   * our source check. So the origin is explicit, and a missing one stops the mount instead of
-   * downgrading to `'*'`.
+   * It is NOT the `postMessage` target origin, and the reason is not a preference. `sandbox=
+   * "allow-scripts"` deliberately withholds `allow-same-origin`, so the frame's origin is OPAQUE —
+   * literally `'null'` — and `postMessage(frame, targetOrigin)` refuses any target that does not match
+   * the recipient's origin. An explicit origin therefore throws for every sandboxed frame:
+   *
+   * > Failed to execute 'postMessage': The target origin provided ('https://sims.example') does not
+   * > match the recipient window's origin ('null').
+   *
+   * A previous version of this file posted to the explicit origin and delivered NOTHING. The security
+   * concern behind that choice was real, though, so it is answered where it can actually be answered —
+   * see `POST_TARGET_ORIGIN` below.
    */
   readonly simOrigin: string;
   readonly params: Readonly<Record<string, unknown>>;
@@ -95,6 +100,36 @@ export interface SimulationFrameProps {
  * reusing one would let a page that observed an earlier mount post frames to this one. `crypto` rather
  * than `Math.random()` for the same reason `INV-RNG-1` exists — a guessable nonce is not a nonce.
  */
+/**
+ * The `postMessage` target origin, which is `'*'`, and here is the whole argument for it.
+ *
+ * ## WHY `'*'` IS NOT A CONVENIENCE HERE
+ *
+ * The obvious worry is that `'*'` hands the init frame -- params, seed and nonce -- to whatever document
+ * is in the frame afterwards. That worry is correct, and it is also not fixable by naming an origin,
+ * because naming an origin does not work at all: the frame is opaque by design, so every explicit target
+ * is rejected and the host delivers nothing. `'*'` is the only value the platform accepts for an opaque
+ * recipient. Refusing to post at all would be the secure choice and would make simulations impossible.
+ *
+ * So the exposure is bounded by what the sandbox already gives away, and by what the host checks on the
+ * way back in:
+ *
+ *  1. The frame has NO origin of its own. `allow-same-origin` is withheld precisely so a sim cannot be
+ *     the app origin and read the session cookie.
+ *  2. A document that navigates itself INTO the frame inherits the sandbox, so it is opaque too — it has
+ *     no origin to steal and cannot present the app's origin to anything.
+ *  3. The host authenticates every inbound frame by `event.source` AND a per-mount nonce, so a third
+ *     party cannot forge frames. A sim that navigates itself away is, at that point, running untrusted
+ *     code in a frame we already chose to sandbox -- and it could already send answers, because the
+ *     answer path is the protocol, not a secret.
+ *  4. The sim origin serves the bundle with CORP `cross-origin` and the sim origin's own CSP, so the
+ *     bundle's integrity is a deployment property rather than something postMessage can guarantee.
+ *
+ * What `'*'` costs is the ability to say "only this origin" at the transport layer. What the previous
+ * version cost was every simulation.
+ */
+const POST_TARGET_ORIGIN = '*';
+
 const mintNonce = (): string => {
   const bytes = new Uint8Array(16);
   globalThis.crypto.getRandomValues(bytes);
@@ -144,9 +179,10 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
   const bridgeRef = useRef<ReturnType<typeof createHostBridge> | null>(null);
   const lastAnswerRef = useRef<unknown>(null);
 
-  // A `postMessage` target origin must be an absolute origin. If it is not, we refuse to mount rather
-  // than fall back to `'*'`: a wildcard here is a nonce leak, and a missing prop is a config bug that
-  // should fail in development rather than silently in a student's lesson.
+  // The configured SIM origin must still be an absolute origin. `POST_TARGET_ORIGIN` is `'*'`, so this
+  // is no longer a postMessage constraint -- it is a check that the deployment is configured at all,
+  // and it is what the reachability probe is asked about. A missing value is a config bug that should
+  // fail here rather than silently in a student's lesson.
   const targetOrigin = useMemo(() => {
     try {
       const parsed = new URL(simOrigin);
@@ -264,8 +300,7 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
           // ref and was silently dropped -- the sim kept its rAF loop running for the rest of the page.
           const target = frameEl.contentWindow;
           if (target === null || target === undefined) return;
-          // The explicit origin, never '*'. See `simOrigin`.
-          target.postMessage(frame, targetOrigin);
+          target.postMessage(frame, POST_TARGET_ORIGIN);
         },
       },
     });
@@ -339,7 +374,6 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
     originUsable,
     probeState,
     probe,
-    targetOrigin,
   ]);
 
   // The answer is reported ONCE per value, not once per render: a re-render of the surrounding lesson

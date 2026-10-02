@@ -324,7 +324,7 @@ describe('delivering frames to the frame', () => {
     expect(calls).toHaveLength(1);
     const first = calls[0] as [unknown, string];
     const [frame, target] = first;
-    expect(target).toBe('https://sims.example');
+    expect(target).toBe('*');
     expect(frame).toMatchObject({
       type: 'sim:init',
       protocol: 1,
@@ -337,14 +337,28 @@ describe('delivering frames to the frame', () => {
     });
   });
 
-  it('posts to the EXPLICIT origin and never to "*", because a wildcard leaks the nonce', () => {
+  it("posts to '*', because an explicit origin is REFUSED for an opaque sandboxed frame", () => {
     const { container } = render(<SimulationFrame {...baseProps} lazy={false} />);
     const { calls } = watchPosts(container);
     fireLoad(container);
-    // A simulation that redirects would receive a student's seed and this mount's nonce, and with the
-    // nonce it could post frames that pass our source check.
-    expect(calls.every((call) => call[1] !== '*')).toBe(true);
-    expect(calls.every((call) => call[1] === 'https://sims.example')).toBe(true);
+    // Verified in Chromium by the conformance suite, not asserted here on faith:
+    //   Failed to execute 'postMessage': The target origin provided ('https://sims.example') does not
+    //   match the recipient window's origin ('null').
+    // `sandbox="allow-scripts"` withholds `allow-same-origin`, so the frame's origin is 'null' and every
+    // explicit target is rejected. The previous version posted to the explicit origin and delivered
+    // nothing at all.
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((call) => call[1] === '*')).toBe(true);
+  });
+
+  it('still refuses to MOUNT with an unusable origin, because the probe needs one', () => {
+    for (const simOrigin of ['', 'sims.example', '/relative', 'https://sims.example/sub']) {
+      const { container, unmount } = render(
+        <SimulationFrame {...baseProps} simOrigin={simOrigin} lazy={false} />,
+      );
+      expect(container.querySelector('iframe')).toBeNull();
+      unmount();
+    }
   });
 
   it('REFUSES to mount when the origin is unusable, rather than downgrading to "*"', () => {
@@ -377,10 +391,7 @@ describe('delivering frames to the frame', () => {
     act(() => {
       document.dispatchEvent(new Event('visibilitychange'));
     });
-    expect(calls[calls.length - 1]).toEqual([
-      { type: 'sim:visibility', visible: false },
-      'https://sims.example',
-    ]);
+    expect(calls[calls.length - 1]).toEqual([{ type: 'sim:visibility', visible: false }, '*']);
     expect(calls).toHaveLength(2);
   });
 
@@ -389,7 +400,7 @@ describe('delivering frames to the frame', () => {
     const { calls } = watchPosts(container);
     fireLoad(container);
     unmount();
-    expect(calls[calls.length - 1]).toEqual([{ type: 'sim:teardown' }, 'https://sims.example']);
+    expect(calls[calls.length - 1]).toEqual([{ type: 'sim:teardown' }, '*']);
   });
 
   it('does NOT send a second `sim:init` when the frame fires load twice', () => {

@@ -33,6 +33,7 @@ import {
   type StateRequestReason,
   type TelemetryName,
 } from './protocol.js';
+import { checksumState } from './state.js';
 
 export interface Transport {
   /** Send a frame to the host. In a browser this is `parent.postMessage(frame, '*')`. */
@@ -146,17 +147,23 @@ export function createHostBridge(init: BridgeInit): HostBridge {
       case 'sim:command':
         handlers.onCommand?.(frame.name, frame.args ?? {});
         return;
-      case 'sim:requestState':
+      case 'sim:requestState': {
         handlers.onRequestState?.(frame.reason);
         // Answered immediately and unconditionally: the host asked, and a sim that decides for
         // itself when to volunteer a snapshot loses the student's work on `blur` and `unload`.
+        const state = handlers.getState();
         transport.post({
           type: 'sim:state',
           nonce,
-          state: handlers.getState(),
-          checksum: '',
+          state,
+          // A REAL checksum. The first version sent `''`, which makes the field decorative: the host
+          // stores the state, hands it back on `sim:init`, and a checksum of empty string validates
+          // every state including a corrupted one. The whole point is that a round trip is provably a
+          // round trip rather than merely a plausible one.
+          checksum: checksumState(state),
         } as SimFrame);
         return;
+      }
       case 'sim:visibility':
         handlers.onVisibility?.(frame.visible);
         return;
@@ -343,3 +350,127 @@ export function createResizeCoalescer<T>(
 }
 
 export type { GradingInstruction, SimMode };
+
+/**
+ * Connect a simulation to its host.  (P6-T9)
+ *
+ * ## WHY THIS EXISTS, GIVEN `createHostBridge` ALREADY DOES
+ *
+ * `createHostBridge` needs the `sim:init` frame to exist before it can be called — the nonce arrives
+ * with that frame and every outbound frame echoes it. So a simulation cannot construct its own bridge
+ * at startup; it has to *wait* for one. That waiting was left to each simulation to write, and the
+ * consequence was concrete: `createHostBridge` had zero callers in the repository, so no simulation
+ * spoke the protocol at all, and a simulation rendered a convincing canvas that could not be graded.
+ *
+ * Every gold sim would otherwise reimplement the same subscribe-then-wait-then-construct sequence,
+ * and each one would get the ordering subtly wrong in its own way.
+ *
+ * ## THE IDENTITY IS CHECKED BEFORE `ready()`
+ *
+ * A host that asks for `maths.projectile-motion@1.0.0` and receives an answer from
+ * `maths.projectile-motion@2.0.0` gets a version-mismatched frame, and the host's whole reason for
+ * pinning is to render the version the student's results were computed against. Failing here, loudly,
+ * is better than a handshake that succeeds and grades against the wrong physics.
+ */
+export interface ConnectSimInput {
+  readonly transport: Transport;
+  readonly handlers: BridgeHandlers;
+  readonly expectedSimId: string;
+  readonly expectedVersion: string;
+  readonly capabilities: SimCapabilities;
+  /** Advertised to the host as the sim's exports. Never a function list the host will call. */
+  readonly exports?: readonly string[];
+  readonly expectedSource?: unknown;
+}
+
+export interface SimConnection {
+  /**
+   * The bridge, or `null` until `sim:init` arrives. Callers that need to render before the handshake
+   * uses this; everything else should use `whenStarted`.
+   */
+  readonly bridge: HostBridge | null;
+  readonly started: boolean;
+  /** Resolves once the handshake completes, and never rejects: the counters carry the failure. */
+  whenStarted(): Promise<HostBridge>;
+  /** Why the connection did not start, when it did not. */
+  readonly failure: string | null;
+  dispose(): void;
+}
+
+export function connectSim(input: ConnectSimInput): SimConnection {
+  let bridge: HostBridge | null = null;
+  let failure: string | null = null;
+  let resolveStart: ((value: HostBridge) => void) | null = null;
+  const started = new Promise<HostBridge>((resolve) => {
+    resolveStart = resolve;
+  });
+  // A connection that never starts must not leave a caller awaiting forever: the handshake timeout
+  // belongs to the host, but a sim-side `await` with no timeout is how a lesson hangs on a page load.
+  let disposed = false;
+
+  const fail = (message: string): void => {
+    if (failure !== null) return;
+    failure = message;
+  };
+
+  const unsubscribe = input.transport.subscribe((raw) => {
+    if (disposed) return;
+    if (bridge !== null) {
+      // The bridge subscribes for itself, so there is nothing to forward to. Returning keeps this
+      // listener's single job narrow: wait for `sim:init`, then get out of the way.
+      return;
+    }
+    const frame = raw as HostFrame;
+    if (frame?.type !== 'sim:init') {
+      // Not an error yet: a frame can legitimately arrive before the init that authorises it, and
+      // reporting every one would bury the real cause in noise.
+      return;
+    }
+    if (frame.simId !== input.expectedSimId || frame.simVersion !== input.expectedVersion) {
+      fail(
+        `the host asked for ${input.expectedSimId}@${input.expectedVersion} but this bundle is ` +
+          `${String(frame.simId)}@${String(frame.simVersion)}`,
+      );
+      return;
+    }
+    if (typeof frame.nonce !== 'string' || frame.nonce.length === 0) {
+      // Without a nonce nothing outbound can be authenticated, so a bridge here would produce frames
+      // the host is obliged to drop.
+      fail('sim:init arrived without a nonce, so no frame from this sim could be authenticated');
+      return;
+    }
+    bridge = createHostBridge({
+      transport: input.transport,
+      handlers: input.handlers,
+      init: frame,
+      ...(input.expectedSource === undefined ? {} : { expectedSource: input.expectedSource }),
+    });
+    bridge.ready({
+      simId: input.expectedSimId,
+      simVersion: input.expectedVersion,
+      capabilities: input.capabilities,
+      exports: input.exports ?? [],
+    });
+    resolveStart?.(bridge);
+  });
+
+  return {
+    get bridge() {
+      return bridge;
+    },
+    get started() {
+      return bridge !== null;
+    },
+    get failure() {
+      return failure;
+    },
+    whenStarted: () => started,
+    dispose(): void {
+      if (disposed) return;
+      disposed = true;
+      unsubscribe();
+      bridge?.dispose();
+      bridge = null;
+    },
+  };
+}

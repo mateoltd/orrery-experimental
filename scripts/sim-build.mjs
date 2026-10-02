@@ -140,6 +140,39 @@ const discover = (args) => {
 const hashOf = (bytes) => createHash('sha256').update(bytes).digest('hex').slice(0, 12);
 
 /**
+ * The simulation document.
+ *
+ * No inline script, no inline style, and no `srcdoc`: every byte of behaviour comes from the hashed
+ * bundle, so the page is a loader rather than a place where a sim author can smuggle something the
+ * build never inspected.
+ */
+const simPage = ({ browser, style, title }) => `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(title)}</title>${
+      style === null
+        ? ''
+        : `
+    <link rel="stylesheet" href="./${escapeHtml(style)}" />`
+    }
+  </head>
+  <body>
+    <div id="sim-root"></div>
+    <script src="./${escapeHtml(browser)}"></script>
+  </body>
+</html>
+`;
+
+const escapeHtml = (value) =>
+  String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+/**
  * Which inputs does a metafile say this bundle IMPORTS?
  *
  * `metafile.outputs[*].imports` is the authoritative list: it is what esbuild resolved, so a specifier
@@ -243,6 +276,17 @@ const buildSim = async (manifestPath, options) => {
     ...shared,
     entryPoints: [browserEntry],
     platform: 'browser',
+    /**
+     * A CLASSIC script, overriding the shared `esm`. The frame loads this with `<script src>` and is
+     * sandboxed with `allow-scripts` and nothing else, so there is no module loader to import it with:
+     * `export{...}` is a syntax error in a classic script, so Chromium renders the SOURCE in a `<pre>`
+     * and the simulation silently never runs.
+     *
+     * Conformance caught this on the first run — a frame with a 21 KB body and no elements in it. No
+     * amount of unit testing finds it, because the artefact is perfectly valid JavaScript; it is
+     * simply the wrong KIND of JavaScript for the tag that loads it.
+     */
+    format: 'iife',
     target: ['es2022'],
     minify: true,
     outfile: join(outDir, 'browser.js'),
@@ -321,6 +365,40 @@ const buildSim = async (manifestPath, options) => {
     });
   }
 
+  /**
+   * The PAGE, which is what the iframe's `src` actually points at.
+   *
+   * ## WHY A SIM IS NOT A SCRIPT URL
+   *
+   * An iframe `src` performs a NAVIGATION. Navigating to a `text/javascript` resource makes the browser
+   * render the source into a `<pre>`, and the simulation silently never runs — a frame with a 21 KB body
+   * and no elements in it, which is exactly what conformance saw on its first run.
+   *
+   * So the sim origin serves a document, and the document loads the hashed bundle. The page is hashed
+   * as well, because it references the hashed filenames: a stable `index.html` would embed a stale
+   * bundle name after a rebuild, and the sim origin sends long-lived cache headers.
+   *
+   * It is a minimal document on purpose. Everything else the app needs — CSP, CORP, sandbox — is set by
+   * the host page's iframe element and the sim origin's response headers, not by markup the sim author
+   * controls.
+   */
+  const pageName = 'sim.html';
+  const pageBytes = Buffer.from(
+    simPage({
+      browser: artefacts.find((a) => a.role === 'browser')?.file ?? '',
+      style: artefacts.find((a) => a.role === 'style')?.file ?? null,
+      title: manifest.title,
+    }),
+  );
+  const pageHashed = `${pageName.replace('.html', '')}.${hashOf(pageBytes)}.html`;
+  if (!options.check) writeFileSync(join(outDir, pageHashed), pageBytes);
+  artefacts.push({
+    role: 'page',
+    file: pageHashed,
+    bytes: pageBytes.length,
+    path: join(outDir, pageHashed),
+  });
+
   const total = artefacts.reduce((sum, a) => sum + a.bytes, 0);
   if (total > manifest.budget.maxBytes) {
     problems.push({
@@ -375,6 +453,9 @@ const writeRegistry = async (results, options) => {
     const { simManifestSchema } = await loadContractsManifest();
     const manifest = simManifestSchema.parse(result.manifest);
     const entry = registryModule.entryFromManifest(manifest, {
+      // `page` FIRST: it is what the iframe's `src` points at, and getting it wrong renders the
+      // bundle's source into a `<pre>` instead of running it.
+      page: `./${result.artefacts.find((a) => a.role === 'page')?.file ?? ''}`,
       browser: `./${result.artefacts.find((a) => a.role === 'browser')?.file ?? ''}`,
       grader: `./${result.artefacts.find((a) => a.role === 'grader')?.file ?? ''}`,
       style: result.artefacts.some((a) => a.role === 'style')

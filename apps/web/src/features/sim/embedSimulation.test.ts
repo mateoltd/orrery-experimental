@@ -70,7 +70,12 @@ const entry = (over: Partial<RegistryEntry> = {}): RegistryEntry => ({
   lifecycle: 'ACTIVE',
   replacedById: null,
   licence: 'CC-BY-4.0',
-  bundle: { browser: './browser.aaaa11112222.js', grader: './grader.bbbb33334444.js', style: null },
+  bundle: {
+    page: './sim.cccc55556666.html',
+    browser: './browser.aaaa11112222.js',
+    grader: './grader.bbbb33334444.js',
+    style: null,
+  },
   bytes: { browser: 11_773, grader: 6_018, total: 17_791 },
   defaultHeight: 420,
   minHeight: 240,
