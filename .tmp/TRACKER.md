@@ -66,9 +66,9 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 67 |
-| Unit tests | **1111** (db 37 with 14 new publish-gate tests, contracts 350, auth 436, web 158) |
-| Integration tests | **296** across 21 db files + 6 worker outbox, real Postgres |
+| Commits | 69 |
+| Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
+| Integration tests | **302** across 22 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
 | Invariants registered | 29 (8 active) |
@@ -663,8 +663,8 @@ has a dozen slightly different answers.
 | P5-T7 `poolHealth`: M vs N, distinct, expected overlap | **DONE** | `96af48c` | `packages/contracts/src/pool-health/`. **I wrote a wrong formula, justified it as an improvement, and brute force proved the plan right.** |
 | P5-T8 Blueprint + worst-case coverage | **DONE** | `ca0f0b1` | `packages/contracts/src/blueprint/`. Exact, not sampled (P-18). |
 | P5-T9 `AssessmentSpec` slots + `variantMap` resolution | **DONE** | `65db2b4` | `packages/db/src/slots.ts`. One draw, one place, per-slot forked streams. | |
-| P5-T10 Publish snapshots every drawable question | NOT STARTED | | |
-| P5-T11 "Too similar" guard | NOT STARTED | | |
+| P5-T10 Version publish snapshots every drawable question | **DONE** | *(next commit)* | `packages/db/src/version-snapshot.ts`. INV-BANK-3. |
+| P5-T11 "Too similar" guard | **DONE** | *(next commit)* | Stem trigram + answer key + numeric, with operators PRESERVED. |
 | P5-T13 Interop skeleton, `ExternalBinding` | NOT STARTED | | |
 | P5-T14 `can()` matrix for the new P5 types | **DONE** | `8e7d953` | Three types added with full rules. **The tests found a bank readable by its own students.** |
 | P5-T15 Author the seed banks | NOT STARTED | | D-37: nothing in 183 tasks authored a single question. |
@@ -732,6 +732,46 @@ attempts run to their own deadline and remain submittable. There is no way to ca
 a mode that also cancels somebody's exam. A withdrawn assignment also cannot be re-published,
 because a withdrawal is a statement to students and silently undoing it is worse than doing
 nothing.
+
+#### P5-T10/T11 detail (complete)
+
+**INV-BANK-3 IS A CLAIM ABOUT CONTENT, SO THE TEST EDITS THE ORIGINAL AND READS THE COPY.**
+"Question content is snapshotted into the version at publish time. A question edited later affects
+future versions only." Asserting that a copy ROW exists passes for an implementation that copied
+nothing, so the test snapshots, changes the live item's prompt and answer three weeks later, and
+asserts the snapshot is byte-identical — and separately asserts the live row really did change, so
+the test cannot be passing against a frozen database.
+
+**`isSnapshot` EXISTS SO "HOW MANY ITEMS IN THIS BANK" IS NOT WRONG, AND B2 SAID SO.** Snapshot
+rows carry a non-null `bankId`, so a naive count double-counts every snapshot. The test asserts
+the raw count goes 3 → 6 while the authored count stays 3 — the exact shape of the bug B2's note
+warns about, and a note that would have been read once and then needed again the first time
+somebody wrote that query.
+
+**ONLY DRAWABLE QUESTIONS ARE COPIED, NOT THE WHOLE BANK.** Copying the bank is O(bank) work for
+a 3-item assessment, and it makes every published version a superset of the bank — so a question
+later removed from every pool survives in versions that never needed it.
+
+**THE OPERATORS HAD TO BE PRESERVED, AND IT TOOK THREE ATTEMPTS.** The "too similar" guard
+normalises numbers to `#`. The first version mapped every non-alphanumeric character to a space,
+so "What is 3 + 4?" and "What is 4 × 3?" both became `what is # #` — identical — and those are
+different questions with different answers. The second attempt mapped every operator to `~`, which
+was wrong for exactly the same reason one step later. The third PRESERVES them, because a
+placeholder has to be distinguishable per VALUE and `+`, `×`, `÷` already are.
+
+**TRIGRAM SIMILARITY HAS A REAL NON-ZERO FLOOR, AND THE TEST NOW NAMES IT.** "alpha beta" and
+"gamma delta" score 0.045 rather than 0, because they share exactly one trigram: `'ta '`, out of
+`be**ta**` and `de**ta**`. The first version's comment claimed the score for unrelated strings was
+zero; the test now asserts `1/22` and checks that shared trigram exists, because a threshold that
+sits too near a floor of accidental two-character overlaps flags everything.
+
+**A NUMBER IN AN ANSWER IS NOT A DUPLICATE.** Two items both answering 42, with unrelated
+prompts, are not similar — the most common number in a maths bank would otherwise be flagged
+everywhere. The numeric dimension only fires together with a close prompt.
+
+#### P5-T10/T11 evidence
+- 1125 unit (14 new similarity/normalisation tests), 302 db integration (6 new). 8/8 gates,
+  lint 0, typecheck 0, image builds.
 
 #### P5-T12 detail (complete)
 
@@ -1083,8 +1123,8 @@ pnpm run build          # must pass before typecheck; tsbuildinfo can go stale
 pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
-pnpm run test           # 1111 unit
-pnpm run test:integration   # 296 db + 6 worker, needs DATABASE_URL
+pnpm run test           # 1125 unit
+pnpm run test:integration   # 302 db + 6 worker, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
 
