@@ -66,7 +66,7 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 89 |
+| Commits | 91 |
 | Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
 | Integration tests | **336** across 27 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
@@ -1356,7 +1356,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T3 `@orrery/sim-sdk`: zero runtime deps, host bridge, state serialisation, param binding, `reportAnswer`, a11y helpers, seeded RNG | **DONE** | `6ca118b` | `packages/sim-sdk/`. The grader entry point is a MODULE, not a convention: `tsconfig.grader.json` typechecks it with no `dom` lib. |
 | P6-T4 Build pipeline: esbuild → hashed, cache-busted ESM + CSS | **DONE** | `51d1066` | `scripts/sim-build.mjs`. Hashed filenames, a logical→hashed registry entry, `--check` for CI. |
 | P6-T5 Dual-target enforcement: `./browser` + pure `./grader` in Node, zero Node builtins (`B14`) | **DONE** | `51d1066` | 13 tests. The BUILT grader is imported in a bare Node process, 3 runs, byte-identical. |
-| P6-T6 Sandbox host: `sandbox="allow-scripts"`, dedicated origin, **the exact CSP from `03` §1** (`B6`), nonce messaging, resize protocol, offline check, failure UI | NOT STARTED | | |
+| P6-T6 Sandbox host: `sandbox="allow-scripts"`, dedicated origin, **the exact CSP from `03` §1** (`B6`), nonce messaging, resize protocol, offline check, failure UI | **DONE** | *(next commit)* | `packages/interop/src/csp.ts` (B6 as 15 tests), `apps/web/src/features/sim/`. `SIM_ORIGIN` is REQUIRED in config. |
 | P6-T7 `embedSimulation` block: manifest-driven param editor, seed policies, lazy mount, static fallback, print fallback, state capture | NOT STARTED | | |
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index, catalogue page | NOT STARTED | | |
 | P6-T9 Conformance matrix over every registered sim | NOT STARTED | | |
@@ -1621,6 +1621,71 @@ deliberately left until after T6 rather than stubbed, and this row says so rathe
 DONE and hoping.
 
 #### P6-T10 evidence
+#### P6-T6 detail (complete)
+
+**B6'S FOUR CORRECTIONS ARE FOUR SEPARATE TESTS, BECAUSE ALL FOUR FAIL THE SAME WAY.** An empty box.
+`default-src 'none'` blocked the sim's own stylesheet; `script-src 'self'` does not match an OPAQUE
+origin per CSP3, so the BUNDLE was blocked; there was no `img-src`/`font-src`; and
+`Cross-Origin-Resource-Policy: same-origin` on the SIM origin makes the frame unloadable. A single
+`expect(policy).toContain(...)` over the whole string would have passed for the wrong reason, which is
+how the `default-src` error survived a draft in the first place.
+
+**THE POLICY IS A FUNCTION OF TWO ORIGINS, NEVER A PASTED STRING.** A pasted policy still says
+`app.example` after someone points `APP_URL` at staging — and a CSP naming the wrong host blocks the
+product while appearing to be configured.
+
+**`SIM_ORIGIN` IS REQUIRED AND MUST NOT SHARE A HOST WITH `APP_URL`.** Optional would default to
+`APP_URL`, which is the one configuration where the whole `INV-SIM-1` argument does not hold, and it
+would hold silently. The `new URL(...)` in the check is wrapped: a `superRefine` that throws turns a
+validation failure into an unhandled exception, and "rejects a malformed URL" became "Invalid URL" as a
+crash.
+
+**THE HANDSHAKE REFUSAL WAS BACKWARDS, AND IT WOULD HAVE BLOCKED EVERY LESSON EMBED.** The first rule
+refused any mount whose sim claimed `grading` while the host supplied no instructions — refusing every
+lesson embed of a simulation a student may later be examined on. The real defect is the mirror image: a
+GRADED mount whose sim cannot grade is un-submittable, and the student finds out at the deadline.
+
+**THE NONCE IS CHECKED BEFORE THE FRAME TYPE IS EVEN READ.** The test makes `type` a getter that
+records being touched, because an unauthenticated frame's contents are attacker input and reasoning
+about them is the thing to avoid.
+
+**A FRAME FROM THE WRONG SOURCE IS A SPOOF, AND COUNTED SEPARATELY FROM A DROP.** A sim can create its
+own iframe and a nested frame has a different `event.source`; the nonce is not secret to a frame that
+legitimately holds it. Conflating the two numbers makes both useless in a support conversation.
+
+**THE HANDSHAKE CLOCK NEVER FIRED, AND THE TEST PASSED ANYWAY.** The first `checkTimeout` compared
+`now()` against an arithmetic expression built out of `defaultHeight`, which is not a timestamp. The
+test asserted only on the returned state, never on whether a timeout was POSSIBLE — so it could not
+fail. There is now a test that walks 9 999 ms asserting it does not fire, then that it does.
+
+**THE TIMEOUT TEST'S ARITHMETIC CONTRADICTED ITS OWN COMMENT.** It set the clock to 9 000 *before*
+calling `onFrameEvent('load')`, so the load happened at t=9000 and the "ten second" timeout at
+t=10001 was one second away.
+
+**`flushResize` COLLAPSED EVERY SIM TO ITS MINIMUM HEIGHT ON UNMOUNT.** It flushed by sending a
+synthetic `{width: 0, height: 0}`. The coalescer now has a `flush()` that delivers the PENDING
+measurement and nothing when there is none.
+
+**THE COUNTERS IN STATE WERE STALE.** They were stamped on inside the `sim:ready` branch only, so an
+incident ten frames later reported the numbers from ten frames earlier. Every frame refreshes them
+now, which is the whole point of having them.
+
+**A `PER_STUDENT` SEED IS HASHED, BECAUSE AN ATTEMPT ID IS NOT A SECRET AND ADJACENT IDS PRODUCE
+ADJACENT DRAWS.** A raw attempt id in a sim's PRNG is predictable to anyone holding a gradebook. And a
+MISSING identity throws rather than falling back: a fallback seed is one shared paper for the whole
+cohort, which is the failure nobody notices until the results come in. The compiler caught a
+camelCase/`ATTEMPT_ID` mismatch here, which is the point of the explicit mapping.
+
+**THE jsdom TESTS CANNOT PROVE THE SANDBOX, AND SAY SO.** jsdom implements no iframes, no
+cross-origin isolation and no CSP. These tests prove what is a property of OUR output — one sandbox
+token, never `srcdoc`, the alternative text in the DOM before any script runs — and the real sandbox
+assertion is P6-T9's job, in a browser, as a separate suite.
+
+#### P6-T6 evidence
+- 1398 unit (43 interop CSP, 54 web sim), 336 db integration. 8/8 gates, lint 0, typecheck 0,
+  image builds, `sim:validate` and `sim:build` green.
+
+
 - 1337 unit (16 new scaffold/template tests, 112 in the SDK), 336 db integration. 8/8 gates, lint 0,
   typecheck 0, image builds, `sim:validate` and `sim:build` green.
 

@@ -26,6 +26,7 @@ const good = {
   EMAIL_FROM: 'Orrery <no-reply@example.invalid>',
   AUTH_SECRET: 'x'.repeat(48),
   APP_URL: 'http://localhost:3000',
+  SIM_ORIGIN: 'http://localhost:3001',
   OTEL_EXPORTER_OTLP_ENDPOINT: 'http://localhost:4318',
   DEFAULT_LOCALE: 'en-GB',
   SUPPORT_EMAIL: 'support@example.invalid',
@@ -92,6 +93,37 @@ describe('parseEnv — refuses rather than defaulting', () => {
     expect(r.ok).toBe(false);
   });
 
+  it('requires SIM_ORIGIN, because defaulting it to APP_URL defeats the whole sandbox argument', () => {
+    // A missing value would otherwise be the one configuration where INV-SIM-1 does not hold, and it
+    // would hold silently.
+    const r = parseEnv(omit(good, 'SIM_ORIGIN'));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.issues.join(' ')).toContain('SIM_ORIGIN');
+  });
+
+  it('refuses a SIM_ORIGIN that shares a host with APP_URL', () => {
+    const r = parseEnv({
+      ...good,
+      SIM_ORIGIN: 'https://app.example',
+      APP_URL: 'https://app.example',
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.issues.join(' ')).toMatch(/must not share a host/u);
+  });
+
+  it('refuses a localhost SIM_ORIGIN in production, naming the right variable', () => {
+    // The message names whichever variable is actually localhost, because "APP_URL must not be
+    // localhost" sent an author hunting the wrong line.
+    const r = parseEnv({
+      ...good,
+      NODE_ENV: 'production',
+      APP_URL: 'https://orrery.test',
+      SIM_ORIGIN: 'http://localhost:3001',
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.issues.join(' ')).toContain('SIM_ORIGIN');
+  });
+
   it('requires SMTP_URL when the provider is smtp', () => {
     const r = parseEnv(omit(good, 'SMTP_URL'));
     expect(r.ok).toBe(false);
@@ -143,6 +175,7 @@ describe('production is stricter than development', () => {
       ...good,
       NODE_ENV: 'production',
       APP_URL: 'https://orrery.test',
+      SIM_ORIGIN: 'https://sims.orrery.test',
       S3_ENDPOINT: 'https://s3.eu-west-1.amazonaws.com',
     });
     expect(r.ok).toBe(true);

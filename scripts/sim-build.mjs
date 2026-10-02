@@ -349,8 +349,10 @@ const main = async () => {
   }
 
   let failed = 0;
+  // Sequential on purpose. Each sim writes into its own `dist/`, so the builds are independent -- and
+  // running them in parallel would make a failure report arrive in whatever order it finished, which is
+  // the worst possible ordering for a log a person is reading.
   for (const manifestPath of manifests) {
-    // eslint-disable-next-line no-await-in-loop
     const result = await buildSim(manifestPath, args);
     if (result.problems.length === 0) {
       const files = Object.values(result.artefacts ?? {})

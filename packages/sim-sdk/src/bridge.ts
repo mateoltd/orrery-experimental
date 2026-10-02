@@ -273,22 +273,44 @@ export function verifyReady(
 
 export { RESIZE_DEBOUNCE_MS };
 
+export interface ResizeCoalescer<T> {
+  (value: T): void;
+  /**
+   * Deliver whatever is PENDING, now. Delivers nothing when nothing is pending.
+   *
+   * The host needs this on unmount: a resize the sim sent in its final moments is still a real
+   * measurement, and dropping it leaves the frame at whatever height it had before the last one.
+   *
+   * The first version of the host's flush called the coalescer with a synthetic `{width: 0, height: 0}`
+   * instead, which set the frame's height to the manifest's MINIMUM — so unmounting any sim collapsed
+   * it. The method exists so that mistake is not available.
+   */
+  flush(): void;
+}
+
 /**
  * Coalesce `sim:resize` frames into at most one call per window.
  *
+ * ## LEADING EDGE FIRST, THEN THE SETTLE
+ *
+ * The first resize delivers IMMEDIATELY and the rest collapse into one trailing delivery. Trailing-only
+ * would add `windowMs` of blank frame to every sim on every page load, which is the one moment a student
+ * is definitely watching. Leading-only would leave the frame at the size it had when the animation
+ * started, which is how a canvas ends up clipped at the bottom.
+ *
  * Debounced on the HOST as well as the sim, because either alone leaves a jittery layout: a sim that
- * forgets will flood, and a host that assumes every sim debounces will be flooded by the ones that
- * do not.
+ * forgets will flood, and a host that assumes every sim debounces will be flooded by the ones that do
+ * not.
  */
 export function createResizeCoalescer<T>(
   windowMs: number,
   deliver: (value: T) => void,
   now: () => number = () => 0,
-): (value: T) => void {
+): ResizeCoalescer<T> {
   let pending: T | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let lastAt = Number.NEGATIVE_INFINITY;
-  return (value: T): void => {
+  const coalesce = (value: T): void => {
     const at = now();
     if (at - lastAt >= windowMs && timer === null) {
       lastAt = at;
@@ -306,6 +328,18 @@ export function createResizeCoalescer<T>(
       }, windowMs);
     }
   };
+  const flush = (): void => {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    if (pending === null) return;
+    lastAt = now();
+    const next = pending;
+    pending = null;
+    deliver(next);
+  };
+  return Object.assign(coalesce, { flush });
 }
 
 export type { GradingInstruction, SimMode };

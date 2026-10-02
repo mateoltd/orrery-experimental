@@ -18,6 +18,10 @@
       "types": "./dist/codec.d.ts",
       "default": "./dist/codec.js"
     },
+    "./csp": {
+      "types": "./dist/csp.d.ts",
+      "default": "./dist/csp.js"
+    },
     "./digest": {
       "types": "./dist/digest.d.ts",
       "default": "./dist/digest.js"

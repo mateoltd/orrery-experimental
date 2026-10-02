@@ -503,8 +503,9 @@ const main = async () => {
   }
 
   let failed = 0;
+  // Sequential on purpose: each sim's problems are reported in a stable order, which is what makes two
+  // runs of the same tree comparable line by line.
   for (const manifestPath of manifests) {
-    // eslint-disable-next-line no-await-in-loop
     const result = await validateOne(manifestPath, { ...contracts, jsonSchema }, args);
     if (result.problems.length === 0) {
       const bytes =

@@ -216,11 +216,23 @@ describe('the handshake', () => {
     if (!verdict.ok) expect(verdict.code).toBe('HANDSHAKE_FAILED');
   });
 
-  it('refuses a sim that grades when the host supplied no grading instruction', () => {
-    // Otherwise the student sees a gradable-looking surface and submits an answer nothing can score.
-    const verdict = evaluateHandshake(ready(), expected({ gradingSupplied: false }));
+  it('refuses a GRADED mount whose sim cannot grade, which is the un-submittable case', () => {
+    // The defect: a student sits a graded exam with a sim that produces an answer nothing can score,
+    // and finds out at the deadline.
+    const verdict = evaluateHandshake(
+      ready({ capabilities: { ...caps(), grading: false } }),
+      expected({ gradingSupplied: true }),
+    );
     expect(verdict.ok).toBe(false);
-    if (!verdict.ok) expect(verdict.message).toMatch(/no grading instruction/);
+    if (!verdict.ok) expect(verdict.message).toMatch(/no grading capability/);
+  });
+
+  it('does NOT refuse a LESSON mount whose sim CAN grade', () => {
+    // The first version had this exactly backwards, refusing every lesson embed of a simulation a
+    // student may later be examined on. A sim being more capable than the mount requires is not a
+    // problem: the host simply never asks.
+    const verdict = evaluateHandshake(ready(), expected({ gradingSupplied: false }));
+    expect(verdict.ok).toBe(true);
   });
 
   it('accepts a sim with NO state capability, because a lesson sim need not have one', () => {

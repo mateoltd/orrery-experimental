@@ -68,6 +68,15 @@ const schema = z
         message: 'AUTH_SECRET still holds its placeholder value',
       }),
     APP_URL: url('APP_URL'),
+    /**
+     * The dedicated static origin simulation bundles are served from.  (P6-T6)
+     *
+     * It exists because "the sandbox is real rather than advisory" depends on it: with the bundle on
+     * the app origin, a sim's bugs reach our cookies even through a cross-origin frame. Required, not
+     * optional, because a missing value would otherwise default to `APP_URL` — which is the one
+     * configuration where the whole `INV-SIM-1` argument does not hold, and it would hold silently.
+     */
+    SIM_ORIGIN: url('SIM_ORIGIN'),
 
     // ── observability ────────────────────────────────────────────────────────────
     OTEL_EXPORTER_OTLP_ENDPOINT: url('OTEL_EXPORTER_OTLP_ENDPOINT'),
@@ -93,14 +102,37 @@ const schema = z
         message: 'RESEND_API_KEY is required when EMAIL_PROVIDER=resend',
       });
     }
+    // The sim origin must be a DIFFERENT origin from the app. Same-origin (or same host, different
+    // scheme, which the browser treats as a distinct origin but a firewall often does not) means a sim
+    // bundle can reach the app's own response headers and any cookie scope that leaked into it.
+    // `new URL` THROWS on a malformed string, and a `superRefine` that throws turns a validation failure
+    // into an unhandled exception: the first version of this check did exactly that, and
+    // "rejects a malformed URL" became "Invalid URL" as an exception rather than an issue. Compare
+    // hosts only when BOTH parse, and let the field-level `url()` rules report the malformed ones.
+    const hostOf = (value: string): string | null => {
+      try {
+        return new URL(value).host;
+      } catch {
+        return null;
+      }
+    };
+    const appHost = hostOf(v.APP_URL);
+    const simHost = hostOf(v.SIM_ORIGIN);
+    if (appHost !== null && simHost !== null && appHost === simHost) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['SIM_ORIGIN'],
+        message: `SIM_ORIGIN must not share a host with APP_URL (both are ${appHost})`,
+      });
+    }
     if (v.NODE_ENV === 'production') {
       // A placeholder in production is the single most common cause of "it worked in
       // staging" — so it is refused here rather than discovered during an exam.
-      if (v.APP_URL.includes('localhost')) {
+      if (v.APP_URL.includes('localhost') || v.SIM_ORIGIN.includes('localhost')) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ['APP_URL'],
-          message: 'APP_URL must not be localhost in production',
+          path: [v.APP_URL.includes('localhost') ? 'APP_URL' : 'SIM_ORIGIN'],
+          message: `${v.APP_URL.includes('localhost') ? 'APP_URL' : 'SIM_ORIGIN'} must not be localhost in production`,
         });
       }
       if (v.S3_ENDPOINT.includes('localhost')) {

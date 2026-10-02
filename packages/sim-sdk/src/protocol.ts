@@ -434,12 +434,13 @@ export function evaluateHandshake(
   if (caps === undefined || typeof caps !== 'object') {
     return { ok: false, code: 'HANDSHAKE_FAILED', message: 'sim:ready carried no capabilities' };
   }
-  if (caps.grading && !expected.gradingSupplied) {
+  if (expected.gradingSupplied && !caps.grading) {
     return {
       ok: false,
       code: 'UNSUPPORTED_CAPABILITY',
       message:
-        'the sim grades but the host supplied no grading instruction, so no answer could be scored',
+        'this mount expects a graded answer but the sim reports no grading capability, so an answer ' +
+        'could be produced that nothing knows how to score',
     };
   }
   // `caps.state === false` is NOT a refusal. A sim with no state is still a valid lesson; the host
