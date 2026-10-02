@@ -1352,15 +1352,15 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | Task | Status | Commit | Note |
 |---|---|---|---|
 | P6-T1 `sim-host@1` spec: frames, handshake, capability negotiation, versioning, error taxonomy, timeouts | **DONE** | `8685ed0` | `packages/sim-sdk/`. The protocol is TYPES, not a table: 7 host frames, 8 sim frames, 10 error codes, and a handshake that returns a decision. |
-| P6-T2 `sim.manifest.schema.json` + Zod mirror + `sim:validate` CLI | **DONE** | *(next commit)* | `schemas/sim.manifest.schema.json`, `@orrery/contracts/sim-manifest`, `scripts/sim-validate.mjs`. Seven committed fixtures, six of them deliberately broken. |
-| P6-T3 `@orrery/sim-sdk`: zero runtime deps, host bridge, state serialisation, param binding, `reportAnswer`, a11y helpers, seeded RNG | **DONE** | *(next commit)* | `packages/sim-sdk/`. The grader entry point is a MODULE, not a convention: `tsconfig.grader.json` typechecks it with no `dom` lib. |
-| P6-T4 Build pipeline: esbuild → hashed, cache-busted ESM + CSS | **DONE** | *(next commit)* | `scripts/sim-build.mjs`. Hashed filenames, a logical→hashed registry entry, `--check` for CI. |
-| P6-T5 Dual-target enforcement: `./browser` + pure `./grader` in Node, zero Node builtins (`B14`) | **DONE** | *(next commit)* | 13 tests. The BUILT grader is imported in a bare Node process, 3 runs, byte-identical. |
+| P6-T2 `sim.manifest.schema.json` + Zod mirror + `sim:validate` CLI | **DONE** | `2882308` | `schemas/sim.manifest.schema.json`, `@orrery/contracts/sim-manifest`, `scripts/sim-validate.mjs`. Seven committed fixtures, six of them deliberately broken. |
+| P6-T3 `@orrery/sim-sdk`: zero runtime deps, host bridge, state serialisation, param binding, `reportAnswer`, a11y helpers, seeded RNG | **DONE** | `6ca118b` | `packages/sim-sdk/`. The grader entry point is a MODULE, not a convention: `tsconfig.grader.json` typechecks it with no `dom` lib. |
+| P6-T4 Build pipeline: esbuild → hashed, cache-busted ESM + CSS | **DONE** | `51d1066` | `scripts/sim-build.mjs`. Hashed filenames, a logical→hashed registry entry, `--check` for CI. |
+| P6-T5 Dual-target enforcement: `./browser` + pure `./grader` in Node, zero Node builtins (`B14`) | **DONE** | `51d1066` | 13 tests. The BUILT grader is imported in a bare Node process, 3 runs, byte-identical. |
 | P6-T6 Sandbox host: `sandbox="allow-scripts"`, dedicated origin, **the exact CSP from `03` §1** (`B6`), nonce messaging, resize protocol, offline check, failure UI | NOT STARTED | | |
 | P6-T7 `embedSimulation` block: manifest-driven param editor, seed policies, lazy mount, static fallback, print fallback, state capture | NOT STARTED | | |
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index, catalogue page | NOT STARTED | | |
 | P6-T9 Conformance matrix over every registered sim | NOT STARTED | | |
-| P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new` | **DONE** | *(next commit)* | `sims/_template/`, `sims/README.md`, `scripts/sim-new.mjs`. The scaffold is asserted CLEAN, not merely created. The dev playground is NOT DONE — see the note. |
+| P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new` | **DONE** | `677f2b2` | `sims/_template/`, `sims/README.md`, `scripts/sim-new.mjs`. The scaffold is asserted CLEAN, not merely created. The dev playground is NOT DONE — see the note. |
 | P6-T11 24 gold sims | NOT STARTED | | |
 
 
