@@ -1,0 +1,69 @@
+{
+  "id": "SUBJECT.slug",
+  "version": "0.1.0",
+  "title": "SUBJECT Title",
+  "summary": "ONE SENTENCE: what the student does, in plain words, with no jargon.",
+  "authors": ["Your Name"],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["maths"],
+  "tags": [],
+  "ageRange": [13, 18],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "WHAT A SCREEN READER USER HEARS WHEN THE SIM IS READY. One or two sentences.",
+    "reducedMotion": true,
+    "textAlternative": "THE NUMBERS QUOTED HERE MUST MATCH WHAT THE SIM SHOWS. Changing a slider changes this sentence."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 420,
+    "minHeight": 240,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "reset"
+      }
+    ],
+    "expect": {}
+  },
+  "grading": {
+    "strategy": "TOLERANCE",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0.5,
+      "relative": 0.02
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "REPLACE: what a teacher reads. {answer.value} against {expected.value}."
+  }
+}

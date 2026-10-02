@@ -66,7 +66,7 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 87 |
+| Commits | 89 |
 | Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
 | Integration tests | **336** across 27 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
@@ -1360,7 +1360,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T7 `embedSimulation` block: manifest-driven param editor, seed policies, lazy mount, static fallback, print fallback, state capture | NOT STARTED | | |
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index, catalogue page | NOT STARTED | | |
 | P6-T9 Conformance matrix over every registered sim | NOT STARTED | | |
-| P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector | NOT STARTED | | |
+| P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new` | **DONE** | *(next commit)* | `sims/_template/`, `sims/README.md`, `scripts/sim-new.mjs`. The scaffold is asserted CLEAN, not merely created. The dev playground is NOT DONE — see the note. |
 | P6-T11 24 gold sims | NOT STARTED | | |
 
 
@@ -1575,6 +1575,56 @@ so the test grades a range within 0.5 m and expects full marks. A sim platform w
 physics wrong would not be noticed by any amount of conformance plumbing.
 
 #### P6-T4/T5 evidence
+#### P6-T10 detail (complete, except the playground)
+
+**A SCAFFOLDER THAT COPIES `SUBJECT.slug` AND EXITS IS A TRAP.** The author finds out the `id` was
+never substituted when `sim:validate` refuses it an hour later. So every placeholder is substituted in
+every file that mentions one, and a test walks the new tree asserting no `SUBJECT` survives anywhere —
+manifest, both `src/` entry points, the spec card and the test file.
+
+**THE TEMPLATE'S OWN BUG WAS THE FINDING.** `_template/sim.manifest.json` declared
+`capabilities.grading: true` with no `grading` block, so every scaffolded sim failed validation on the
+template's inconsistency before the author had typed anything. That is the failure a scaffolder exists
+to prevent, so the test asserts the scaffold is CLEAN — not merely that files appeared — separating
+real problems from the two that mean "not built yet".
+
+**ANSI COLOUR DEFEATED BOTH OUTPUT FILTERS, AND ONE OF THEM WAS A CHECK THAT COULD NOT FAIL.**
+`sim:new` reads the validator's output raw, and the validator colours its problem lines, so a
+`/^#?\//` filter matched NOTHING — and `sim-new` reported a genuinely malformed scaffold as clean. The
+test asserted the same thing and passed for the same reason. Both now strip ANSI, and the test asserts
+the two "not built yet" complaints ARE present, because a filter matching nothing makes every
+assertion pass for the wrong reason.
+
+**TWO TEST FILES SHARED `sims/` AND RACED.** `build.test.ts` called `--all` while `scaffold.test.ts`
+created and deleted directories under it, so the build exited 2 — the internal-error path — with no
+build error in the output at all. The build tests now name their sim explicitly, which removes the
+race and is better practice anyway.
+
+**THE TEMPLATE'S GRADER IMPORTS `@orrery/sim-sdk/grader`, NOT THE BARREL.** The barrel pulls in
+`a11y.ts`, which is DOM, so importing it in a grader file is exactly the mistake
+`tsconfig.grader.json` exists to catch — and the template is the first thing an author reads.
+
+**THE CARD IS TWELVE HEADINGS AND THE TEST CHECKS ALL TWELVE.** "An agent can be handed this card and
+a template and produce a reviewable simulation" is what makes six parallel author lanes tractable
+rather than a hope. The two sentences that stop a card being a form — *if we cannot write it, we do not
+build the sim* and *a sim targeting no misconception is a toy* — are asserted present.
+
+**`sim:new` REFUSES AN ID THAT CAN NEVER BE PUBLISHED, BEFORE WRITING ANYTHING.** The subject must be
+one with a tree behind it (`gate:subjects`), so `maths.projectile_motion` is rejected rather than
+producing a directory that can never be registered.
+
+#### P6-T10 NOT DONE: the dev playground
+
+`pnpm sim:dev` — hot reload plus a protocol inspector — is **not** built. It needs the sandbox host
+(P6-T6) to exist, because an inspector that cannot watch a real handshake is a log viewer. It is
+deliberately left until after T6 rather than stubbed, and this row says so rather than marking the task
+DONE and hoping.
+
+#### P6-T10 evidence
+- 1337 unit (16 new scaffold/template tests, 112 in the SDK), 336 db integration. 8/8 gates, lint 0,
+  typecheck 0, image builds, `sim:validate` and `sim:build` green.
+
+
 - 1321 unit (13 new build/dual-target, 96 total in the SDK), 336 db integration. 8/8 gates, lint 0,
   typecheck 0, image builds.
 - `pnpm sim:validate` and `pnpm sim:build` both green against `maths.projectile-motion`, and all six

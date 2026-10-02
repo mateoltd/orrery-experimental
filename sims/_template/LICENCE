@@ -1,0 +1,10 @@
+CC-BY-4.0
+
+Copyright (c) Your Name.
+
+This simulation is licensed under the Creative Commons Attribution 4.0 International
+licence. See https://creativecommons.org/licenses/by/4.0/
+
+REPLACE: if this is derived from someone else's work, say so in `provenance` as
+`INSPIRED_BY:<reference>` or `PORTED`. That field is respected and recorded, not laundered:
+a sim that quietly reuses another's physics is a licensing problem discovered by a lawyer.

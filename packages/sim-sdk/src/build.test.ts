@@ -53,11 +53,25 @@ const artefact = (role: string): string =>
   join(DIST, readEntry().artefacts[role]?.file.replace('./', '') ?? '');
 const artefactSource = (role: string): string => readFileSync(artefact(role), 'utf8');
 
+/**
+ * Build ONE sim, by manifest.
+ *
+ * Explicitly not `--all`, because `sims/` is shared with `scaffold.test.ts`, which creates and removes
+ * directories in it while this file runs. `--all` then races a deletion and exits 2 — which is the
+ * script's internal-error path, so the symptom was a build test failing with no build error in the
+ * output at all. Naming the sim removes the race entirely.
+ */
+const SIM_MANIFEST = 'sims/maths.projectile-motion/sim.manifest.json';
+
 const runBuild = (args: string[] = []): { status: number; out: string } => {
-  const result = spawnSync(process.execPath, [join(repo, 'scripts/sim-build.mjs'), ...args], {
-    cwd: repo,
-    encoding: 'utf8',
-  });
+  const result = spawnSync(
+    process.execPath,
+    [
+      join(repo, 'scripts/sim-build.mjs'),
+      ...(args.length > 0 ? args : ['--manifest', SIM_MANIFEST]),
+    ],
+    { cwd: repo, encoding: 'utf8' },
+  );
   return { status: result.status ?? -1, out: `${result.stdout ?? ''}${result.stderr ?? ''}` };
 };
 
@@ -242,7 +256,11 @@ describe.skipIf(!built)('the build itself (P6-T4)', () => {
   });
 
   it('excludes the underscore directories, so scaffolding and fixtures cannot enter a build', () => {
+    // `--all` is the only way to test DISCOVERY, and it is therefore the one call that can race the
+    // scaffold suite's clean-up. The assertion is about the output, so a concurrent deletion makes the
+    // status non-zero without invalidating it.
     const result = runBuild(['--all']);
     expect(result.out).not.toMatch(/_fixtures|_template/u);
+    expect(result.out).toMatch(/maths\.projectile-motion/u);
   });
 });
