@@ -66,9 +66,9 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 71 |
+| Commits | 73 |
 | Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
-| Integration tests | **309** across 23 db files + 6 worker outbox, real Postgres |
+| Integration tests | **316** across 24 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
 | Invariants registered | 29 (8 active) |
@@ -656,7 +656,7 @@ has a dozen slightly different answers.
 |---|---|---|---|
 | P5-T1 `Assignment` with a pinned `resourceVersionId`, window, attempts, weight, late penalty, policy override | **DONE** | `598cfb2` | `packages/contracts/src/policy/` + `packages/db/src/assignments.ts`. The pin is STRUCTURAL: `resourceId` is derived from the version, and there is no parameter for "the current version". |
 | P5-T2 `AssignmentStudentOverride` | **DONE** | `ee74d2e` | `assignment-overrides.ts`. A mid-exam grant is an **additive row**, never a rewrite of `deadlineAt` (C14). |
-| P5-T3 Assignment builder, preview as student | NOT STARTED | | |
+| P5-T3 Assignment builder, preview as student | **DONE** | *(next commit)* | `packages/db/src/builder.ts`. The preview runs the SAME resolution path as an attempt. |
 | P5-T4 Student "to do": available / upcoming / completed / expired | **DONE** | *(next commit)* | `packages/db/src/todo.ts`. An ATTEMPT beats the window, always. |
 | P5-T5 Pinning invariant enforcement: (a) lint rule, (b) slot-level mutation test | **DONE** | `ede383a` | (a) the gate exists (ADR-0025). (b) the slot-level paper is **mutation-verified** per ADR-0027. |
 | P5-T6 QuestionBank CRUD, sharing, move/duplicate | **DONE** | `ca0f0b1` | `packages/db/src/question-banks.ts`. Banks are PRIVATE or classroom-shared, never public. |
@@ -732,6 +732,39 @@ attempts run to their own deadline and remain submittable. There is no way to ca
 a mode that also cancels somebody's exam. A withdrawn assignment also cannot be re-published,
 because a withdrawal is a statement to students and silently undoing it is worse than doing
 nothing.
+
+#### P5-T3 detail (complete)
+
+**THE PREVIEW USES THE EXACT RESOLUTION PATH, OR IT IS A LIAR.** The failure mode here is specific
+and easy: a preview that composes its own description of the slots, resolves them with its own
+draw, and formats its own policy. It looks right, it is subtly different from what the student
+receives, and the difference is discovered at 09:00 by a student. So `previewAsStudent` calls
+`resolveSlots` and `resolveForStudent` — the same two functions an attempt uses — and the only
+difference between a preview and the real thing is the DATABASE ROWS. The test resolves the same
+slots by hand and compares, byte for byte.
+
+**A PREVIEW IS NOT AN ATTEMPT, AND THE TEST SAYS SO.** It creates no attempt, writes no
+`variantMap`, and consumes no `attemptNumber`. A preview that consumed attempts would be a way to
+burn a student's allowance by LOOKING AT THE WORK, which is the kind of harm nobody thinks about
+because it costs nobody anything.
+
+**NO ANSWER KEY APPEARS ANYWHERE IN A PREVIEW, AND THE TYPE IS WHY.** `INV-Q-1` says keys never
+leave the server, and the usual implementation is a careful projection. The preview's `select`
+omits `modelAnswer` and its return type has no field a key could go in, so the guarantee is
+structural. A future field called `items` holding whole question rows would have to be re-audited;
+this one cannot hold them. The test serialises the whole preview and asserts the secret is absent.
+
+**THE PREVIEW VALIDATES BY RESOLVING, SO AN UNSATIABLE EXAM THROWS BEFORE IT RENDERS.** A draw
+count the pool cannot fill makes `resolveSlots` refuse, and there is nothing worth previewing. The
+alternative — render a partial paper and attach a warning — is a picture of an exam nobody can
+sit, and authors act on pictures.
+
+**A TEST THAT AWAITS A PROMISE AND THEN ASSERTS `rejects` PASSES AGAINST A REJECTION IT NEVER
+SAW.** The first version of the gate test did exactly that, because the value had already been
+awaited before the assertion. It is now written as the promise the first time it is checked.
+
+#### P5-T3 evidence
+- 316 db integration (7 new). 8/8 gates, lint 0, typecheck 0, image builds.
 
 #### P5-T4 detail (complete)
 
@@ -1155,7 +1188,7 @@ pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
 pnpm run test           # 1125 unit
-pnpm run test:integration   # 309 db + 6 worker, needs DATABASE_URL
+pnpm run test:integration   # 316 db + 6 worker, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
 

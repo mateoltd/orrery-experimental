@@ -109,6 +109,10 @@
     "./todo": {
       "types": "./dist/todo.d.ts",
       "default": "./dist/todo.js"
+    },
+    "./builder": {
+      "types": "./dist/builder.d.ts",
+      "default": "./dist/builder.js"
     }
   },
   "scripts": {
