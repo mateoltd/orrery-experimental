@@ -1,0 +1,113 @@
+{
+  "id": "maths.projectile-motion",
+  "version": "1.0.0",
+  "title": "Projectile motion",
+  "summary": "Explore how launch speed and angle change the range and flight time of a thrown ball.",
+  "authors": ["Orrery"],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["maths"],
+  "tags": ["kinematics", "vectors", "quadratics"],
+  "ageRange": [13, 18],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A side view of a thrown ball, with the ground, its path and a range marker.",
+    "reducedMotion": true,
+    "textAlternative": "At 25 m/s and 45 degrees the ball lands about 64 m away after 3.6 seconds."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "speed": {
+        "type": "number",
+        "label": "Launch speed",
+        "unit": "m/s",
+        "minimum": 5,
+        "maximum": 60,
+        "default": 25
+      },
+      "angle": {
+        "type": "number",
+        "label": "Launch angle",
+        "unit": "degrees",
+        "minimum": 5,
+        "maximum": 85,
+        "default": 45
+      },
+      "gravity": {
+        "type": "number",
+        "label": "Gravity",
+        "unit": "m/s2",
+        "minimum": 1.6,
+        "maximum": 24.8,
+        "default": 9.81
+      }
+    },
+    "required": ["speed", "angle", "gravity"]
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": true,
+    "scenarios": ["no-air"]
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "grading": {
+    "strategy": "TOLERANCE",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0.5,
+      "relative": 0.02
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "Range is {answer.range} m; correct is {expected.range} m."
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 420,
+    "minHeight": 240,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "speed": 25,
+          "angle": 45,
+          "gravity": 9.81
+        }
+      },
+      {
+        "command": "command",
+        "args": {
+          "name": "step"
+        }
+      }
+    ],
+    "expect": {
+      "answer": {
+        "range": {
+          "min": 55,
+          "max": 65
+        }
+      },
+      "grade": 4
+    }
+  }
+}

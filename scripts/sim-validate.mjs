@@ -250,6 +250,22 @@ export const analyseGraderSource = (source) => {
   return found;
 };
 
+/**
+ * The build's logical-name to hashed-name map, or `null` when the sim has not been built.
+ *
+ * Read defensively: a missing or half-written `registry-entry.json` means the sim is not built, and a
+ * validator that crashes on that has turned a normal state into a red gate.
+ */
+const readRegistryEntry = (dir) => {
+  const path = join(dir, 'dist', 'registry-entry.json');
+  if (!existsSync(path)) return null;
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'));
+  } catch {
+    return null;
+  }
+};
+
 /** Byte size of a built bundle, or `null` when it has not been built. */
 const bundleBytes = (dir, relativeEntry) => {
   const path = join(dir, relativeEntry.replace(/^\.\//, ''));
@@ -379,31 +395,56 @@ const validateOne = async (manifestPath, contracts, options) => {
   problems.push(...checkManifestRules(manifest));
 
   // Rule 1: both files exist.
-  for (const field of ['entry', 'grader']) {
-    const rel = manifest[field];
-    const path = join(dir, rel.replace(/^\.\//, ''));
-    if (!existsSync(path)) {
+  //
+  // `entry` and `grader` in the manifest are LOGICAL names; the build emits content-HASHED artefacts
+  // (`browser.4f2a1c9b0e3d.js`). A manifest can therefore be perfectly correct while the declared path
+  // does not exist on disk, so the registry entry -- which maps the logical name to the hashed one -- is
+  // consulted too, and BOTH candidates are named in the failure so the author is not left wondering
+  // which path the gate wanted.
+  //
+  // The two tools disagreed about this until a real bundled sim existed to disagree about: the first
+  // version looked only for the declared path, so every correctly-built sim failed validation.
+  const registry = readRegistryEntry(dir);
+  for (const field of ['entry', 'grader', 'styles']) {
+    const declared = manifest[field];
+    if (declared === undefined) continue;
+    const role = field === 'entry' ? 'browser' : field;
+    const built = registry?.artefacts?.[role]?.file;
+    // The registry entry's paths are relative to `dist/`, the manifest's to the sim directory. The first
+    // version resolved both against the sim directory, so a correctly-built sim reported its own
+    // artefact as missing -- and the message named a file that genuinely existed.
+    const found =
+      existsSync(join(dir, String(declared).replace(/^\.\//, ''))) ||
+      (built !== undefined && existsSync(join(dir, 'dist', String(built).replace(/^\.\//, ''))));
+    if (!found) {
       problems.push({
         pointer: `#/${field}`,
         code: 'HANDSHAKE_FAILED',
-        message: `${field} points at ${rel}, which does not exist`,
-      });
-    }
-  }
-  if (manifest.styles) {
-    const styles = join(dir, manifest.styles.replace(/^\.\//, ''));
-    if (!existsSync(styles)) {
-      problems.push({
-        pointer: '#/styles',
-        code: 'HANDSHAKE_FAILED',
-        message: `styles points at ${manifest.styles}, which does not exist`,
+        message:
+          `${field} is ${declared} and no such file exists` +
+          (built === undefined
+            ? ', and there is no built artefact either'
+            : `, nor the built ${built}`) +
+          '. Run `pnpm sim:build` if this sim is bundled.',
       });
     }
   }
 
-  // Rules 3 and 4: determinism and no I/O in the grader.
-  const graderPath = join(dir, manifest.grader.replace(/^\.\//, ''));
-  if (existsSync(graderPath)) {
+  // Rules 3 and 4: determinism and no I/O in the grader -- run against the BUILT artefact when there is
+  // one, because that is what the worker will import. Checking the source instead would let a
+  // transform introduce something the shipped bundle contains.
+  //
+  // Three candidates, in order: the built artefact, a source entry point, the declared path (which is
+  // how the unbundled `_fixtures` sims are shaped).
+  const graderCandidates = [
+    registry?.artefacts?.grader?.file === undefined
+      ? null
+      : join(dir, 'dist', registry.artefacts.grader.file.replace(/^\.\//, '')),
+    join(dir, 'src', 'grader.ts'),
+    join(dir, manifest.grader.replace(/^\.\//, '')),
+  ].filter((candidate) => candidate !== null);
+  const graderPath = graderCandidates.find((candidate) => existsSync(candidate)) ?? '';
+  if (graderPath !== '') {
     for (const hit of analyseGraderSource(readFileSync(graderPath, 'utf8'))) {
       problems.push({
         pointer: '#/grader',
@@ -417,7 +458,14 @@ const validateOne = async (manifestPath, contracts, options) => {
   // Rule 5: size within budget, and no 15% regression.
   let size = null;
   if (existsSync(graderPath)) {
-    size = checkSizeRegression(dir, manifest.grader);
+    // The BUILT artefact, not the source file. `sim:build` owns the budget, because it is the only
+    // thing that knows what the bytes will be; the validator's job here is to refuse a manifest whose
+    // budget is already exceeded by what was actually built.
+    const builtGrader = registry?.artefacts?.grader?.file;
+    size =
+      builtGrader === undefined
+        ? checkSizeRegression(dir, manifest.grader)
+        : { bytes: bundleBytes(dir, builtGrader), baseline: null, growth: 0 };
   }
   if (size !== null && size.bytes !== null && size.bytes > manifest.budget.maxBytes) {
     problems.push({

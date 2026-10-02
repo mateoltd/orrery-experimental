@@ -73,7 +73,14 @@ describe.skipIf(!built)('sim:validate, end to end', () => {
     // validates perfectly and points at nothing.
     const { status, out } = run('missing-grader');
     expect(status).toBe(1);
-    expect(out).toMatch(/grader points at \.\/grader\.js, which does not exist/);
+    expect(out).toMatch(/#\/grader/);
+    expect(out).toMatch(/grader is \.\/grader\.js and no such file exists/);
+    // And it says what to do, and names the OTHER candidate it looked for. A manifest's `grader` is a
+    // LOGICAL name and the build emits a content-hashed artefact, so the gate checks both and reports
+    // both — otherwise a correctly-built sim reads as broken and the author goes looking for a file
+    // that was never missing.
+    expect(out).toMatch(/there is no built artefact either/);
+    expect(out).toMatch(/pnpm sim:build/);
   });
 
   it('catches a bundle over its declared budget', () => {

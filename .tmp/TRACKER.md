@@ -66,7 +66,7 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 85 |
+| Commits | 87 |
 | Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
 | Integration tests | **336** across 27 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
@@ -1354,8 +1354,8 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T1 `sim-host@1` spec: frames, handshake, capability negotiation, versioning, error taxonomy, timeouts | **DONE** | `8685ed0` | `packages/sim-sdk/`. The protocol is TYPES, not a table: 7 host frames, 8 sim frames, 10 error codes, and a handshake that returns a decision. |
 | P6-T2 `sim.manifest.schema.json` + Zod mirror + `sim:validate` CLI | **DONE** | *(next commit)* | `schemas/sim.manifest.schema.json`, `@orrery/contracts/sim-manifest`, `scripts/sim-validate.mjs`. Seven committed fixtures, six of them deliberately broken. |
 | P6-T3 `@orrery/sim-sdk`: zero runtime deps, host bridge, state serialisation, param binding, `reportAnswer`, a11y helpers, seeded RNG | **DONE** | *(next commit)* | `packages/sim-sdk/`. The grader entry point is a MODULE, not a convention: `tsconfig.grader.json` typechecks it with no `dom` lib. |
-| P6-T4 Build pipeline: esbuild → hashed, cache-busted ESM + CSS | NOT STARTED | | |
-| P6-T5 Dual-target enforcement: `./browser` + pure `./grader` in Node, zero Node builtins (`B14`) | NOT STARTED | | |
+| P6-T4 Build pipeline: esbuild → hashed, cache-busted ESM + CSS | **DONE** | *(next commit)* | `scripts/sim-build.mjs`. Hashed filenames, a logical→hashed registry entry, `--check` for CI. |
+| P6-T5 Dual-target enforcement: `./browser` + pure `./grader` in Node, zero Node builtins (`B14`) | **DONE** | *(next commit)* | 13 tests. The BUILT grader is imported in a bare Node process, 3 runs, byte-identical. |
 | P6-T6 Sandbox host: `sandbox="allow-scripts"`, dedicated origin, **the exact CSP from `03` §1** (`B6`), nonce messaging, resize protocol, offline check, failure UI | NOT STARTED | | |
 | P6-T7 `embedSimulation` block: manifest-driven param editor, seed policies, lazy mount, static fallback, print fallback, state capture | NOT STARTED | | |
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index, catalogue page | NOT STARTED | | |
@@ -1525,6 +1525,62 @@ params through `RenderContext`, not as a type parameter. A type parameter nobody
 thing to keep in step.
 
 #### P6-T3 evidence
+#### P6-T4 / P6-T5 detail (complete)
+
+**THE METAFILE IS THE GATE, AND IT IS STRONGER THAN TEXT SCANNING.** `B14` needs a proof that a grader
+bundle imports zero Node builtins. A regex over the output cannot tell an import from the same word in
+a string or a comment — and the SDK's `PROHIBITED_APIS` is a list of strings containing `window.open`,
+so a naive scan flags it. esbuild's metafile lists what a module actually resolved, so the build reads
+that and the tests read the emitted bytes as a second mechanism that fails if the first is ever
+removed.
+
+**`platform: 'neutral'` FOR THE GRADER, NOT `'node'`.** This is the subtle line. Building for `node`
+makes esbuild inject helpers referencing `node:fs` and `node:path`, so the metafile reports builtins
+the AUTHOR never wrote — and a gate checking that list would either fail a correct grader or, much
+worse, be relaxed until it passed. `'neutral'` keeps the bundle to what the sim actually imports.
+
+**`emit()` WAS DECLARED AND NEVER CALLED FOR THE JAVASCRIPT.** The first build ran every metafile
+assertion against bundles it then never wrote, listed only the stylesheet in the registry entry, and
+printed `BUILD … 1/1 simulations`. A build that reports success while producing no bundle is worse
+than one that fails.
+
+**`sims/` IS NOT A WORKSPACE, SO THE SDK IS RESOLVED BY ALIAS — AND THAT IS THE DEPENDENCY POLICY.**
+There is no per-sim `npm install` to upgrade, so `@orrery/sim-sdk` and `@orrery/rng` are aliased to
+SOURCE and nothing else resolves. `RN-07` — a decade-old bundled jQuery becoming a strategic
+liability — enforced by resolution rather than by review. And aliased to source rather than `dist`:
+a sim built against a stale `dist` would pass conformance and then differ in production.
+
+**THE FIRST VERSION OF THE HASH TEST APPENDED A COMMENT AND THE HASH DID NOT MOVE.** esbuild's
+minifier strips it, so the behaviour was RIGHT and the test's premise was wrong. Then a second
+attempt changed `MAX_FLIGHT_SECONDS`, which is tree-shaken because the grader never reads it — also
+right. Both are now separate tests asserting what they actually are: a comment and a tree-shaken
+constant do NOT move the hash, because the hash addresses the ARTEFACT, not the repository. A comment
+a maintainer adds must not invalidate every student's cached bundle.
+
+**`sim:validate` AND `sim:build` DISAGREED ABOUT WHAT `entry` MEANS, AND ONLY A REAL SIM REVEALED IT.**
+The manifest declares LOGICAL names (`./browser.js`); the build emits content-HASHED artefacts
+(`browser.f0287dafca92.js`). The validator looked only for the declared path, so every correctly-built
+sim failed validation — and the failure message named a file that genuinely existed. The validator now
+consults `registry-entry.json`, and a failure names BOTH candidates. Its determinism and static checks
+also run against the BUILT artefact now, because that is what the worker will import.
+
+**THE STYLESHEET IS HASHED TOO.** A sim whose CSS is cached under a fixed name ships last term's
+colours with this term's JavaScript, which looks like a rendering bug and is a cache bug.
+
+**`--check` BUILDS AND ASSERTS WITHOUT WRITING.** A `--check` that wrote files would be a check nobody
+can run on a dirty tree. The test asserts the directory listing is byte-identical before and after.
+
+**THE PHYSICS IS RIGHT, WHICH THE TEST ASSERTS AS ARITHMETIC.** R = v² sin(2θ)/g = 625/9.81 = 63.71 m,
+so the test grades a range within 0.5 m and expects full marks. A sim platform whose first sim gets the
+physics wrong would not be noticed by any amount of conformance plumbing.
+
+#### P6-T4/T5 evidence
+- 1321 unit (13 new build/dual-target, 96 total in the SDK), 336 db integration. 8/8 gates, lint 0,
+  typecheck 0, image builds.
+- `pnpm sim:validate` and `pnpm sim:build` both green against `maths.projectile-motion`, and all six
+  deliberately-broken fixtures still fail for their own reasons.
+
+
 - 1308 unit (83 new in the SDK), 336 db integration. 8/8 gates, lint 0, typecheck 0, image builds.
 - `tsconfig.grader.json` (DOM-free, no Node types) is part of `pnpm run typecheck`.
 

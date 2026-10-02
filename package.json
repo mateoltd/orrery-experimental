@@ -25,6 +25,8 @@
     "gate:schema": "node scripts/schema-gate.mjs",
     "gates": "pnpm run gate:schema && pnpm run gate:board && pnpm run gate:invariants && pnpm run gate:pinning && pnpm run gate:bundle && pnpm run gate:authz && pnpm run gate:migrate && pnpm run gate:subjects",
     "sim:validate": "node scripts/sim-validate.mjs --all",
+    "sim:build": "node scripts/sim-build.mjs --all",
+    "sim:check": "node scripts/sim-build.mjs --all --check",
     "gate:authz": "node scripts/authz-ownership-gate.mjs",
     "test:integration": "pnpm --filter @orrery/db --filter @orrery/worker test:integration",
     "gate:migrate": "node scripts/migration-corpus-gate.mjs",
@@ -46,6 +48,7 @@
     "prisma": "^6",
     "turbo": "^2.0.0",
     "typescript": "^5.9.0",
+    "esbuild": "0.28.2",
     "typescript-eslint": "8.67.0",
     "vitest": "^3.0.0",
     "zod": "4.4.3"

@@ -1,0 +1,381 @@
+#!/usr/bin/env node
+/**
+ * `pnpm sim:build` — the simulation build pipeline.  (P6-T4, P6-T5)
+ *
+ * ## TWO BUNDLES, ONE SOURCE TREE, AND THE SECOND ONE IS THE POINT
+ *
+ * - `browser.js` — the render layer, for the sandboxed frame on the sim origin.
+ * - `grader.js` — the pure half, for Node.
+ *
+ * `INV-SIM-2` says every simulation must be auto-gradable by a server with no browser involved. A
+ * build that emits only the browser bundle cannot deliver that, and a build that emits the grader as
+ * a second copy of the same file will drift. So both come from one `src/` and share the same
+ * `simulate()` and `grade()`, and this script FAILS if they cannot be told apart in a bad way.
+ *
+ * ## THE METAFILE ASSERTIONS ARE THE GATE (`B14`)
+ *
+ * A grader bundle that imports `node:child_process` can `process.exit()` the grading worker
+ * mid-cohort, OOM it, or poison the module cache for every later grade. So after every build:
+ *
+ *  1. `grader.js` imports **zero** Node builtins — checked against esbuild's metafile, not a regex
+ *     over the output. A metafile knows what a module actually *imports*, which a text search cannot
+ *     distinguish from a name in a string or a comment.
+ *  2. `grader.js` imports nothing outside `@orrery/sim-sdk` and the sim's own `src/`.
+ *  3. Both bundles fit `budget.maxBytes`.
+ *
+ * ## EVERY FILENAME IS CONTENT-HASHED
+ *
+ * `browser.4f2a1c9b0e3d.js` rather than `browser.js`, because the sim origin sends long-lived
+ * immutable caching headers. Without the hash, a fixed filename means either a stale bundle for a
+ * term or no caching at all.
+ *
+ * ## `--check` BUILDS AND COMPARES WITHOUT WRITING
+ *
+ * The CI shape: prove the tree builds and meets its budgets without mutating it. A `--check` that
+ * wrote files would be a check nobody can run on a dirty tree.
+ *
+ * Usage:
+ *   node scripts/sim-build.mjs --all
+ *   node scripts/sim-build.mjs maths.projectile-motion
+ *   node scripts/sim-build.mjs --all --check
+ *   node scripts/sim-build.mjs --manifest sims/_fixtures/valid/sim.manifest.json
+ */
+
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const SIMS_DIR = join(root, 'sims');
+const ESC = String.fromCharCode(27);
+const c = {
+  red: (s) => `${ESC}[31m${s}${ESC}[0m`,
+  green: (s) => `${ESC}[32m${s}${ESC}[0m`,
+  yellow: (s) => `${ESC}[33m${s}${ESC}[0m`,
+  dim: (s) => `${ESC}[2m${s}${ESC}[0m`,
+};
+
+/** Node builtins a grader may not import. `B14`, enforced against the metafile. */
+const NODE_BUILTIN = /^node:/;
+
+const fail = (message) => {
+  process.stderr.write(`${c.red('FAIL')} ${message}\n`);
+};
+
+const parseArgs = (argv) => {
+  const out = { all: false, check: false, manifests: [], names: [] };
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === '--all') out.all = true;
+    else if (arg === '--check') out.check = true;
+    else if (arg === '--manifest') {
+      const next = argv[i + 1];
+      if (next === undefined) {
+        fail('--manifest needs a path');
+        process.exit(2);
+      }
+      out.manifests.push(next);
+      i += 1;
+    } else if (arg.startsWith('-')) {
+      fail(`unknown flag ${arg}`);
+      process.exit(2);
+    } else out.names.push(arg);
+  }
+  return out;
+};
+
+const discover = (args) => {
+  if (args.manifests.length > 0) {
+    return args.manifests.map((p) => {
+      const abs = resolve(process.cwd(), p);
+      if (!existsSync(abs)) {
+        fail(`no such manifest: ${p}`);
+        process.exit(2);
+      }
+      return abs;
+    });
+  }
+  // A leading underscore means SCAFFOLDING: `_template` is what `sim:new` copies and `_fixtures` is
+  // deliberately broken input for the validator's tests. Both must stay out of a real build.
+  const names =
+    args.all || args.names.length === 0
+      ? existsSync(SIMS_DIR)
+        ? readdirSync(SIMS_DIR, { withFileTypes: true })
+            .filter((e) => e.isDirectory() && !e.name.startsWith('_'))
+            .map((e) => e.name)
+        : []
+      : args.names;
+  const found = [];
+  for (const name of names) {
+    const manifest = join(SIMS_DIR, name, 'sim.manifest.json');
+    if (existsSync(manifest)) found.push(manifest);
+    else {
+      fail(`no sim.manifest.json in ${c.dim(relative(root, join(SIMS_DIR, name)))}`);
+      process.exitCode = 1;
+    }
+  }
+  return found;
+};
+
+/** The 12 hex characters that go in a filename. Enough to make a collision a non-event. */
+const hashOf = (bytes) => createHash('sha256').update(bytes).digest('hex').slice(0, 12);
+
+/**
+ * Which inputs does a metafile say this bundle IMPORTS?
+ *
+ * `metafile.outputs[*].imports` is the authoritative list: it is what esbuild resolved, so a specifier
+ * in a comment or a string is absent from it. Text-scanning the output would flag both.
+ */
+const importsOf = (metafile, outputPath) => {
+  for (const output of Object.values(metafile.outputs)) {
+    if (outputPath !== undefined && !outputPath.endsWith(output.path)) continue;
+    return (output.imports ?? []).map((i) => ({
+      path: i.path,
+      kind: i.kind,
+      external: i.external,
+    }));
+  }
+  return [];
+};
+
+const inputsOf = (metafile) => Object.keys(metafile.inputs);
+
+/**
+ * Build one sim.
+ *
+ * ## THE BROWSER ENTRY IS `src/browser.ts` AND THE GRADER ENTRY IS `src/grader.ts`
+ *
+ * Both are resolved relative to the sim directory, so a sim's build cannot reach outside it — the same
+ * rule the manifest enforces on `entry` and `grader` with a regex.
+ *
+ * ## `platform: 'neutral'` FOR THE GRADER, NOT `'node'`
+ *
+ * This is the subtle one. Building the grader for `platform: 'node'` makes esbuild inject helpers
+ * that reference `node:fs` and `node:path`, so the metafile reports Node builtins that the AUTHOR
+ * never wrote, and a gate checking that list would either fail a correct grader or — much worse — be
+ * relaxed until it passed. `'neutral'` keeps the bundle to what the sim actually imports, which is
+ * the thing the gate is supposed to be about.
+ */
+const buildSim = async (manifestPath, options) => {
+  const dir = dirname(manifestPath);
+  const id = relative(root, dir);
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  const problems = [];
+
+  const browserEntry = join(dir, 'src/browser.ts');
+  const graderEntry = join(dir, 'src/grader.ts');
+  for (const [role, entry] of [
+    ['browser', browserEntry],
+    ['grader', graderEntry],
+  ]) {
+    if (!existsSync(entry)) {
+      problems.push({
+        pointer: `#/${role}`,
+        message: `${role} entry ${c.dim(relative(root, entry))} does not exist`,
+      });
+    }
+  }
+  if (problems.length > 0) return { id, problems, bytes: 0 };
+
+  const outDir = join(dir, 'dist');
+  // esbuild runs with `write: false` so the OUTPUT can be hashed before it is named, which means
+  // esbuild never creates the directory. Removing the old tree and then writing is also what makes
+  // the emitted set exactly the current one: a stale artefact from a previous version cannot survive
+  // to be served by a manifest that no longer mentions it.
+  if (!options.check) {
+    if (existsSync(outDir)) rmSync(outDir, { recursive: true, force: true });
+    mkdirSync(outDir, { recursive: true });
+  }
+
+  const shared = {
+    bundle: true,
+    format: 'esm',
+    write: false,
+    metafile: true,
+    logLevel: 'silent',
+    absWorkingDir: root,
+    /**
+     * `sims/` is deliberately NOT a workspace (`pnpm-workspace.yaml`), so there is nothing to resolve
+     * `@orrery/sim-sdk` against and no per-sim `npm install` to upgrade. These aliases are the whole
+     * dependency policy: a sim can reach the SDK and the SDK's own workspace dependencies, and
+     * NOTHING else, because nothing else resolves.
+     *
+     * That is `RN-07` enforced by resolution rather than by review — the decade-old bundled jQuery
+     * becomes impossible instead of merely discouraged. Note the aliases point at SOURCE, not `dist`:
+     * a sim that built against a stale `dist` would pass conformance and then differ in production.
+     */
+    alias: {
+      '@orrery/sim-sdk/grader': join(root, 'packages/sim-sdk/src/grader.ts'),
+      '@orrery/sim-sdk/protocol': join(root, 'packages/sim-sdk/src/protocol.ts'),
+      '@orrery/sim-sdk/params': join(root, 'packages/sim-sdk/src/params.ts'),
+      '@orrery/sim-sdk/state': join(root, 'packages/sim-sdk/src/state.ts'),
+      '@orrery/sim-sdk/grading': join(root, 'packages/sim-sdk/src/grading.ts'),
+      '@orrery/sim-sdk': join(root, 'packages/sim-sdk/src/index.ts'),
+      '@orrery/rng': join(root, 'packages/rng/src/index.ts'),
+    },
+    // A sim may depend only on the SDK. Anything else is a per-sim dependency, which `RN-07` says we
+    // do not ship: a decade-old bundled jQuery becomes a strategic liability and there is no per-sim
+    // install to upgrade it.
+    external: [],
+    define: { 'process.env.NODE_ENV': '"production"' },
+  };
+
+  const browser = await build({
+    ...shared,
+    entryPoints: [browserEntry],
+    platform: 'browser',
+    target: ['es2022'],
+    minify: true,
+    outfile: join(outDir, 'browser.js'),
+  });
+  const grader = await build({
+    ...shared,
+    entryPoints: [graderEntry],
+    // `neutral`, not `node` -- see the doc comment. This is the single most important line in the file.
+    platform: 'neutral',
+    target: ['es2022'],
+    minify: true,
+    outfile: join(outDir, 'grader.js'),
+  });
+
+  // ── B14: the grader imports zero Node builtins.
+  const graderImports = importsOf(grader.metafile);
+  for (const entry of graderImports) {
+    if (NODE_BUILTIN.test(entry.path) || NODE_BUILTIN.test(entry.external ?? '')) {
+      problems.push({
+        pointer: '#/grader',
+        message:
+          `grader.js imports the Node builtin ${c.dim(entry.path)} (${entry.kind}). ` +
+          'A grader runs in a worker: one `process.exit()` or an OOM from a student-triggered grade ' +
+          'would take the grading worker down mid-cohort. `B14`.',
+      });
+    }
+  }
+
+  // ── and nothing outside the SDK or the sim's own source.
+  const graderInputs = inputsOf(grader.metafile);
+  for (const input of graderInputs) {
+    if (input.startsWith('node_modules/@orrery/') || input.includes('node_modules/@orrery/'))
+      continue;
+    if (input.startsWith('node_modules/')) {
+      problems.push({
+        pointer: '#/grader',
+        message:
+          `grader.js pulls in ${c.dim(input)}. A sim may depend only on @orrery/sim-sdk: ` +
+          '`RN-07` is a decade-old bundled jQuery becoming a strategic liability, and there is no ' +
+          'per-sim install to upgrade it.',
+      });
+    }
+  }
+
+  const artefacts = [];
+  const emit = (bytes, role) => {
+    const name = `${role}.${hashOf(bytes)}.js`;
+    const path = join(outDir, name);
+    if (!options.check) writeFileSync(path, bytes);
+    artefacts.push({ role, file: name, bytes: bytes.length, path });
+    return path;
+  };
+
+  const browserBytes = Buffer.from(browser.outputFiles[0].contents);
+  const graderBytes = Buffer.from(grader.outputFiles[0].contents);
+  // Both bundles are emitted. The first version declared `emit` and then never called it for the
+  // JavaScript -- so the metafile assertions ran on bundles that were never written, the registry
+  // entry listed only the stylesheet, and the build reported success. A build that reports success
+  // while producing no bundle is worse than one that fails.
+  emit(browserBytes, 'browser');
+  emit(graderBytes, 'grader');
+
+  // The stylesheet is hashed too. A sim whose CSS is cached under a fixed name ships last term's
+  // colours with this term's JavaScript, which looks like a rendering bug and is a cache bug.
+  let styleBytes = null;
+  const styleSource = manifest.styles ? join(dir, manifest.styles.replace(/^\.\//, '')) : null;
+  if (styleSource !== null && existsSync(styleSource)) {
+    styleBytes = Buffer.from(readFileSync(styleSource));
+    const name = `style.${hashOf(styleBytes)}.css`;
+    if (!options.check) writeFileSync(join(outDir, name), styleBytes);
+    artefacts.push({
+      role: 'style',
+      file: name,
+      bytes: styleBytes.length,
+      path: join(outDir, name),
+    });
+  }
+
+  const total = artefacts.reduce((sum, a) => sum + a.bytes, 0);
+  if (total > manifest.budget.maxBytes) {
+    problems.push({
+      pointer: '#/budget/maxBytes',
+      message:
+        `${id} builds to ${String(total)} bytes against a budget of ${String(manifest.budget.maxBytes)}. ` +
+        '`plans/10` §9: 350 KB typical, 1.2 MB hard ceiling, and a student on school wifi has to be ' +
+        'able to start the exam.',
+    });
+  }
+
+  const entry = {
+    id: manifest.id,
+    version: manifest.version,
+    protocol: manifest.protocol,
+    built: true,
+    artefacts: Object.fromEntries(
+      artefacts.map((a) => [a.role, { file: `./${a.file}`, bytes: a.bytes }]),
+    ),
+    totalBytes: total,
+    graderBytes: graderBytes.length,
+    browserBytes: browserBytes.length,
+  };
+  if (!options.check) {
+    writeFileSync(
+      join(outDir, 'registry-entry.json'),
+      `${JSON.stringify(entry, null, 2)}\n`,
+      'utf8',
+    );
+  }
+
+  return { id, problems, bytes: total, entry, artefacts };
+};
+
+const main = async () => {
+  const args = parseArgs(process.argv.slice(2));
+  const manifests = discover(args);
+  if (manifests.length === 0) {
+    process.stdout.write(
+      `${c.yellow('no simulations found')} in ${c.dim(relative(root, SIMS_DIR))}\n`,
+    );
+    return;
+  }
+
+  let failed = 0;
+  for (const manifestPath of manifests) {
+    // eslint-disable-next-line no-await-in-loop
+    const result = await buildSim(manifestPath, args);
+    if (result.problems.length === 0) {
+      const files = Object.values(result.artefacts ?? {})
+        .map((a) => `${a.role} ${a.file} ${c.dim(`${String(a.bytes)}B`)}`)
+        .join('  ');
+      process.stdout.write(`${c.green(args.check ? 'CHECK' : 'BUILD')} ${result.id}  ${files}\n`);
+    } else {
+      failed += 1;
+      process.stdout.write(`${c.red('FAIL')} ${result.id}\n`);
+      for (const problem of result.problems) {
+        process.stdout.write(`       ${c.dim(problem.pointer)} ${problem.message}\n`);
+      }
+    }
+  }
+
+  const passed = manifests.length - failed;
+  const verb = args.check ? 'sim:check' : 'sim:build';
+  process.stdout.write(
+    `\n${failed === 0 ? c.green(`${verb} passed`) : c.red(`${verb} failed`)} — ${String(passed)}/${String(manifests.length)} simulations\n`,
+  );
+  if (failed > 0) process.exitCode = 1;
+};
+
+main().catch((error) => {
+  // A crash is a FAILURE. A build gate that crashes open is worse than no gate at all.
+  fail(String(error?.stack ?? error));
+  process.exit(2);
+});
