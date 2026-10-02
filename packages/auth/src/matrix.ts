@@ -28,6 +28,7 @@ import {
   type Decision,
   type DenyCode,
   type ImplementedResourceType,
+  type Obligation,
   RESOURCE_LIFECYCLE_STATUSES,
   RESOURCE_VISIBILITIES,
   type Role,
@@ -441,6 +442,21 @@ const inSharedClassroom = (i: RuleInput): boolean => {
  * identities, so a rule that wanted to look this up would have to ask the caller, and the caller
  * is where a missing field becomes a wrong answer.
  */
+/**
+ * "Are you the owner of this subject?" — the rule body for a subject whose `ownerId` the caller
+ * has already resolved to whoever really owns it.  (P5-T14, P5-T6)
+ *
+ * A pool belongs to a bank, so a pool's effective owner is its bank's owner and the caller passes
+ * that id as the subject's `ownerId`. `isOwner` then answers it, and the comparison lives in the
+ * kernel where the authz-ownership gate can see it — which is the whole point. The gate caught
+ * `pool.ownerId !== input.actor.id` in a service and was right: that is an authorisation
+ * decision written a second time, and the second copy is the one that drifts.
+ */
+const classroomOwner =
+  (obligations: readonly Obligation[] = ['audit']) =>
+  (i: RuleInput): Decision =>
+    isOwner(i) ? grant([...obligations]) : deny('notOwner');
+
 const ownsBank = (i: RuleInput): boolean => {
   const bankId = i.subject.sharedResourceIds?.[0];
   return bankId !== undefined && i.context?.ownedResourceIds?.has(bankId) === true;
@@ -1078,17 +1094,22 @@ const questionBankRules: Record<Action, Rule> = {
  */
 const questionPoolRules: Record<Action, Rule> = {
   ...notAvailable,
-  create: (i) => (ownsBank(i) ? grant(['audit']) : deny('notOwner')),
+  // `owner` is the BANK's owner, which is the pool's effective owner: a pool is part of a bank
+  // and has no ownership of its own. The service passes the bank's `ownerId` as the subject's
+  // `ownerId` precisely so that this comparison happens HERE rather than in the service — the
+  // authz-ownership gate caught `pool.ownerId !== input.actor.id` in the service, and it was
+  // right, because that expression is an authorisation decision written twice.
+  create: classroomOwner(),
   // The same staff requirement as the bank, for the same reason: a pool's items are the
   // questions, so "the class this pool is shared with" is the class about to be examined.
   read: (i) =>
     ownsBank(i) || (inSharedClassroom(i) && holdsAnyRoleInScope(i, CLASSROOM_TEACHERS))
       ? grant([])
       : deny('notVisible'),
-  update: (i) => (ownsBank(i) ? grant(['audit']) : deny('notOwner')),
+  update: classroomOwner(),
   // A pool with items in it is not deletable by the matrix alone; the service refuses, because
   // the items are questions and deleting a pool must never delete them.
-  delete: (i) => (ownsBank(i) ? grant(['audit', 'reasonRequired']) : deny('notOwner')),
+  delete: classroomOwner(['audit', 'reasonRequired']),
   publish: () => deny('roleForbidden'),
   assign: () => deny('roleForbidden'),
   start: () => deny('roleForbidden'),

@@ -97,6 +97,10 @@
     "./slots": {
       "types": "./dist/slots.d.ts",
       "default": "./dist/slots.js"
+    },
+    "./question-banks": {
+      "types": "./dist/question-banks.d.ts",
+      "default": "./dist/question-banks.js"
     }
   },
   "scripts": {

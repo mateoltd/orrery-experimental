@@ -286,6 +286,37 @@ export async function classroomCanInput(
 }
 
 /**
+ * Authorise a question that has NO classroom scope — a question bank, a blueprint, an item.  (P5-T6)
+ *
+ * ## Why this is a separate function and not a sentinel classroom id
+ *
+ * `permit` loads the classroom, so passing a constant that is not a real classroom returns 404
+ * and no bank can ever be created. That is the unsatisfiable-obligation bug in a new shape: the
+ * matrix rule is perfectly satisfiable ("a teacher may create a bank"), the CHECKER cannot ask it.
+ *
+ * The first version invented `00000000-...` as a scope and got `no such classroom` for every
+ * bank, which is a confusing error for something that has nothing to do with classrooms.
+ *
+ * So the unscoped question gets its own function, and there is one place to look for how it
+ * answers. It still delegates to `can()` — the kernel is the only thing that decides — it simply
+ * does not pretend to have a scope.
+ *
+ * ## A 404 HERE IS A BUG IN THE CALLER, not a legitimate answer
+ *
+ * There is nothing to be "not found" about: the subject id is not looked up, because these
+ * rules are about the ACTOR's standing, not about a row's existence. The caller checks existence
+ * itself, with the query it already ran.
+ */
+export async function canGlobal(input: {
+  readonly action: Parameters<typeof can>[0]['action'];
+  readonly actor: Actor;
+  readonly subject: Parameters<typeof can>[0]['subject'];
+}): Promise<{ allowed: true } | { allowed: false; reason: string }> {
+  const decision = can({ action: input.action, actor: input.actor, subject: input.subject });
+  return decision.allowed ? { allowed: true } : { allowed: false, reason: decision.reason };
+}
+
+/**
  * Authorise, and return the gate's own findings on success.
  *
  * `ownerId` and `archived` come back on the happy path because the caller needs them anyway,

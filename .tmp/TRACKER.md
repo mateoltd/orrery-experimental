@@ -66,9 +66,9 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 64 |
-| Unit tests | **1087** (contracts 340, db 23, auth 436, web 158) |
-| Integration tests | **285** across 20 db files + 6 worker outbox, real Postgres |
+| Commits | 66 |
+| Unit tests | **1097** (contracts 350, auth 436, db 23, web 158) |
+| Integration tests | **296** across 21 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
 | Invariants registered | 29 (8 active) |
@@ -659,9 +659,9 @@ has a dozen slightly different answers.
 | P5-T3 Assignment builder, preview as student | NOT STARTED | | |
 | P5-T4 Student "to do" | NOT STARTED | | |
 | P5-T5 Pinning invariant enforcement: (a) lint rule, (b) slot-level mutation test | **DONE** | `ede383a` | (a) the gate exists (ADR-0025). (b) the slot-level paper is **mutation-verified** per ADR-0027. |
-| P5-T6 QuestionBank CRUD | NOT STARTED | | |
+| P5-T6 QuestionBank CRUD, sharing, move/duplicate | **DONE** | *(next commit)* | `packages/db/src/question-banks.ts`. Banks are PRIVATE or classroom-shared, never public. |
 | P5-T7 `poolHealth`: M vs N, distinct, expected overlap | **DONE** | `96af48c` | `packages/contracts/src/pool-health/`. **I wrote a wrong formula, justified it as an improvement, and brute force proved the plan right.** |
-| P5-T8 Blueprint + worst-case coverage | NOT STARTED | | |
+| P5-T8 Blueprint + worst-case coverage | **DONE** | *(next commit)* | `packages/contracts/src/blueprint/`. Exact, not sampled (P-18). |
 | P5-T9 `AssessmentSpec` slots + `variantMap` resolution | **DONE** | `65db2b4` | `packages/db/src/slots.ts`. One draw, one place, per-slot forked streams. | |
 | P5-T10 Publish snapshots every drawable question | NOT STARTED | | |
 | P5-T11 "Too similar" guard | NOT STARTED | | |
@@ -732,6 +732,63 @@ attempts run to their own deadline and remain submittable. There is no way to ca
 a mode that also cancels somebody's exam. A withdrawn assignment also cannot be re-published,
 because a withdrawal is a statement to students and silently undoing it is worse than doing
 nothing.
+
+#### P5-T6/T8 detail (complete)
+
+**P-18 ASKED FOR EXACT WORST CASE, AND THE PROBLEM HAS A CLOSED FORM, WHICH IS WHY NOTHING HERE
+SAMPLES.** A sampled minimum is an UPPER bound on the true minimum — sampling can only ever miss
+the bad draw — so a sampled check that passes tells you the blueprint held for the draws you tried,
+and a moderator reading "worst case" as a guarantee has been misled by your sampling.
+
+The closed form: a cell needs `k` items with a given `(topic, responseProcess)`; `p` of the pool's
+`M` match; a draw of `N` can be forced to contain as FEW as `max(0, N − (M − p))` matching items,
+because you take every non-matching item first. So "some draw violates C" is a subtraction per
+cell, exact for all N-subsets at once. The test enumerates every N-subset for small pools and
+compares, because a test asserting the formula would pass against a formula derived the same way.
+
+**AND THE UNPOPULAR CONSEQUENCE, WHICH THE MODULE REPORTS RATHER THAN ROUNDING AWAY:** for any cell
+with `k > 0` and a pool with `N < M`, **some draw fails it, always**. The three ways out are all
+real and none is the maths's decision: pool the cells separately so a draw cannot pick the wrong
+topic; publish and accept probabilistic coverage; or set `N = M`, which is a fixed paper wearing
+a pool's schema.
+
+**THE FLOOR IS PER POOL, NOT ACROSS THE ASSESSMENT.** The first version counted matching items
+across every pool and compared that to each pool's own `M`, so it told a short pool it could
+supply items it does not hold — the wrong direction again, and the same direction as P-18's
+sampling error.
+
+**A POOL CANNOT DRAW FROM ANOTHER BANK, BECAUSE SHARING IS A CLASSROOM LIST.** Sharing bank A
+with a classroom and then letting a pool in A draw bank B's questions makes the sharing list a
+fiction. The service counts how many of the requested questions are in the bank and refuses with
+how many are missing.
+
+**DELETING A POOL KEEPS THE QUESTIONS, AND THE TEST SAYS SO.** The cascade is pool → join rows;
+`Question` belongs to the bank. A term's authored questions must survive a pool being tidied up.
+The module comment first *worried* about this, which is how a worry becomes a check that never
+finds anything — so it is a test instead.
+
+**`canGlobal` EXISTS BECAUSE `permit` IS CLASSROOM-SCOPED, AND A SENTINEL ID WAS A NEW SHAPE OF
+THE UNSATISFIABLE-OBLIGATION BUG.** Creating a bank is "may this teacher create a bank", which is
+perfectly satisfiable — but `permit` loads a classroom, so passing a constant returned 404 and NO
+BANK COULD EVER BE CREATED. The sentinel `00000000-...` made the failure say "no such classroom"
+about a request with nothing to do with classrooms. The unscoped question gets its own named
+function, and it still delegates to `can()`, because the kernel is the only thing that decides.
+
+**THE AUTHZ GATE CAUGHT SIX OF MY OWN OWNERSHIP COMPARISONS, AND WAS RIGHT SIX TIMES.**
+`bank.ownerId !== input.actor.id` is an authorisation decision written a second time, and the
+second copy is the one that drifts. Every one is now a `canGlobal` call: the service loads the row
+to know it EXISTS, and asks the kernel who may change it. A pool has no ownership of its own, so
+its subject carries the BANK's owner id — which is what makes `isOwner` the right comparison.
+
+**A BANK CANNOT BE PUBLIC, AND THE TYPE SAYS SO WHILE THE RUNTIME SAYS SO TOO.** The first
+version typed `visibility` as `'PRIVATE' | 'UNLISTED'` and then checked for `'PUBLIC'`, which the
+compiler correctly reported as unreachable. Both halves were wrong: the check was dead, and the
+guarantee rested on callers being typed rather than on the code. A value from a request body is
+not typed by this interface, so the type must ADMIT the bad value and the runtime must refuse it.
+
+#### P5-T6/T8 evidence
+- 1097 unit (10 new blueprint tests), 296 db integration (11 new). 8/8 gates, lint 0,
+  typecheck 0, image builds.
 
 #### P5-T7 detail (complete)
 
@@ -992,8 +1049,8 @@ pnpm run build          # must pass before typecheck; tsbuildinfo can go stale
 pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
-pnpm run test           # 1087 unit
-pnpm run test:integration   # 285 db + 6 worker, needs DATABASE_URL
+pnpm run test           # 1097 unit
+pnpm run test:integration   # 296 db + 6 worker, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
 

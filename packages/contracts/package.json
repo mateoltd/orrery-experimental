@@ -91,6 +91,10 @@
     "./pool-health": {
       "types": "./dist/pool-health/index.d.ts",
       "default": "./dist/pool-health/index.js"
+    },
+    "./blueprint": {
+      "types": "./dist/blueprint/index.d.ts",
+      "default": "./dist/blueprint/index.js"
     }
   },
   "scripts": {
