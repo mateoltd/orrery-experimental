@@ -89,8 +89,7 @@
         "command": "setParams",
         "args": {
           "speed": 25,
-          "angle": 45,
-          "gravity": 9.81
+          "angle": 45
         }
       },
       {
@@ -100,14 +99,6 @@
         }
       }
     ],
-    "expect": {
-      "answer": {
-        "range": {
-          "min": 55,
-          "max": 65
-        }
-      },
-      "grade": 4
-    }
+    "expect": {}
   }
 }

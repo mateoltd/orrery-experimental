@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims | NOT STARTED | | |
+| P6-T11 24 gold sims (re-costed ≈240h: 24 × 10h, the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | *(next commit)* | 1 of 24 built (`maths.projectile-motion`). The declared `conformance.script` is now honoured, which is the machinery 24 sims need; it caught two defects on its first run. OPEN QUESTION: `plans/10` gives a scripted host no way to ask a sim for its answer. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -1759,6 +1759,43 @@ list of commands.
 - `pnpm sim:playground -- --once`: `handshake OK — capabilities {"grading":true,"stepper":true,"scenarios":[]},
   frames recorded both ways`.
 - 1495 unit, 336 db integration, 9/9 gates, lint 0, typecheck 0, conformance 14/14, escape gate 12/12.
+
+
+#### P6-T11 groundwork: the declared conformance script, and two defects it caught
+
+**A DECLARED CHECK NOBODY RUNS IS NOT A CHECK.** Every `sim.manifest.json` carries `conformance.script` and
+`conformance.expect` — the author's own statement of how to drive their simulation and what it should
+answer — and the runner ignored both. A sim could declare `expect.grade: 4` and ship with nothing ever
+comparing it. The same shape as P5-T9's `emit` that was never called: a promise in a field. The runner now
+drives each sim's declared script over the real protocol and checks `expect`, including
+`expect.stateChecksumPrefix` against a state the sim actually reported.
+
+**IT CAUGHT `s.step is not a function` ON THE FIRST RUN.** The simulation's step BUTTON and its `step`
+COMMAND both called `stepper.step(...)`, and the SDK's `Stepper` has no `step` — movement is
+`dispatch({ type: 'step', direction })`. So pressing "Step forward one frame" threw in a student's face,
+and 1,495 unit tests had not noticed, because none of them clicked that button in a browser.
+
+**IT CAUGHT A MANIFEST PASSING A PARAMETER THAT DOES NOT EXIST.** `setParams` declared `gravity`, which is
+not a parameter, so the SDK's trust boundary dropped it — silently, and correctly. The SDK was right and the
+manifest was wrong.
+
+**`expect.answer` CANNOT BE SATISFIED BY ANY DECLARED SCRIPT, AND THAT IS A SPEC GAP.** `plans/10` fixes
+the host command vocabulary to `reset | play | pause | step | loadScenario | focus | setTheme`, and none of
+those asks a simulation for its answer: an answer is submitted through the simulation's own control, which
+is right for a lesson and unreachable for a script. The first implementation compared expectations with
+`JSON.stringify(want) === JSON.stringify(got)`, so the projectile sim's declared
+`expect.answer.range = {min: 55, max: 65}` could never match anything and the cell failed for a reason that
+had nothing to do with the simulation. Ranges are now supported, because a physics answer is not a scalar
+and declaring it exactly would mean re-tuning a manifest every time gravity changed.
+
+The projectile manifest's `expect` is therefore now EMPTY, deliberately, and `sim.spec.md` says why.
+**P6-T11 must close this: twenty-four gold sims each need a way to be asked for their answer, or every one
+of them carries an expectation field that cannot be satisfied, teaching authors to write checks that never
+run.** Recorded as an open spec question rather than fixed by inventing a frame the plan does not have.
+
+#### P6-T11 evidence so far
+- `pnpm sim:conformance`: **15/15 cells** (the declared-script cell is the new one).
+- 1495 unit, 336 db integration, 9/9 gates, lint 0, typecheck 0, escape gate 12/12, playground smoke green.
 
 
 #### P6-T6 correction (the host could listen and never speak)

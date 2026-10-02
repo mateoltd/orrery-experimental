@@ -101,7 +101,183 @@ const captureState = async (page) => {
   }
 };
 
+/**
+ * Grade an answer in bare Node, through the SDK entry point the worker uses.
+ *
+ * Shared by the matrix cell and the manifest's `expect.grade`, so the declared grade and the graded grade
+ * come from the same call rather than from two implementations that can drift.
+ */
+const gradeInNode = async (entry, answer, state = null) => {
+  // From the sim's OWN dist, because the registry's bundle paths are relative to that directory.
+  const grader = join(
+    ROOT,
+    'sims',
+    String(entry.id),
+    'dist',
+    String(entry.bundle.grader).replace(/^\.\//, ''),
+  );
+  if (!existsSync(grader)) return null;
+  const [{ default: half }, { gradeStoredState }] = await Promise.all([
+    import(pathToFileURL(grader).href),
+    import(new URL('../packages/sim-sdk/dist/grader.js', import.meta.url).href),
+  ]);
+  try {
+    return await gradeStoredState(half.grader, {
+      state,
+      params: entry.parameters,
+      answer,
+    });
+  } catch {
+    // A state the grader refuses is a legitimate outcome, not a crash: the cell that cares about
+    // grading from stored state passes its own.
+    return null;
+  }
+};
+
+/**
+ * The manifest's OWN conformance script, executed before the fixed matrix.
+ *
+ * ## A DECLARED CHECK NOBODY RUNS IS NOT A CHECK
+ *
+ * Every `sim.manifest.json` carries `conformance.script` and `conformance.expect` — the author's own
+ * statement of how to drive their simulation and what it should answer. The runner ignored both, so a sim
+ * could declare `expect.grade: 4` and ship without anything ever comparing it. That is the same shape as
+ * P5-T9's `emit` that was never called: a promise in a field.
+ *
+ * Now the script is driven over the real protocol and `expect` is checked. This is also what makes the
+ * field useful at scale — twenty-four gold sims cannot each rely on a human reading a manifest to work out
+ * whether the thing behaves.
+ */
+const runManifestScript = async (page, entry, manifest) => {
+  const steps = manifest?.conformance?.script ?? [];
+  if (steps.length === 0) return { ok: true, note: 'no script declared' };
+
+  const before = await page.evaluate(() => globalThis.__conformance.log.answers.length);
+  for (const step of steps) {
+    await page.evaluate(async (s) => {
+      const frame = globalThis.document.querySelector('iframe');
+      const target = frame?.contentWindow;
+      const nonce = globalThis.__conformance.log.inbound.find((f) => f.type === 'sim:ready')?.nonce;
+      if (target === null || target === undefined || nonce === undefined) return;
+      const args = s.args ?? {};
+      const outbounds = [];
+      switch (s.command) {
+        case 'reset':
+          target.postMessage({ type: 'sim:command', name: 'reset', args, nonce }, '*');
+          break;
+        case 'command':
+          target.postMessage(
+            { type: 'sim:command', name: String(args.name ?? ''), args, nonce },
+            '*',
+          );
+          break;
+        case 'setParams':
+          target.postMessage({ type: 'sim:setParams', params: args.params ?? args, nonce }, '*');
+          break;
+        case 'requestState':
+          target.postMessage({ type: 'sim:requestState', reason: 'save', nonce }, '*');
+          break;
+        case 'wait':
+          await new Promise((done) => setTimeout(done, Number(args.ms ?? 200)));
+          break;
+        default:
+          outbounds.push(s.command);
+      }
+    }, step);
+    await page.waitForTimeout(120);
+  }
+
+  // A script that drives the sim but leaves no answer is a script that found nothing.
+  const answers = await page.evaluate((n) => globalThis.__conformance.log.answers.slice(n), before);
+  const expect = manifest?.conformance?.expect ?? {};
+  const tolerance = Number(manifest?.grading?.tolerance?.absolute ?? 0);
+
+  /**
+   * Compare one expected value against what the sim produced.
+   *
+   * A RANGE is the common case and the first version did not have one: it did `JSON.stringify(want) ===
+   * JSON.stringify(got)`, so the projectile sim's declared `expect.answer.range = {min: 55, max: 65}` could
+   * never match anything and the cell failed for a reason that had nothing to do with the simulation.
+   *
+   * A physics answer is not a scalar. Declaring it as an exact number would mean re-tuning the manifest
+   * every time gravity changed; declaring a range says what the author actually means, which is "about
+   * sixty metres".
+   */
+  const matches = (want, got) => {
+    if (typeof want === 'number' && typeof got === 'number') {
+      return Math.abs(want - got) <= tolerance;
+    }
+    if (want !== null && typeof want === 'object' && ('min' in want || 'max' in want)) {
+      if (typeof got !== 'number' || !Number.isFinite(got)) return false;
+      const low = want.min ?? Number.NEGATIVE_INFINITY;
+      const high = want.max ?? Number.POSITIVE_INFINITY;
+      return got >= low && got <= high;
+    }
+    return JSON.stringify(want) === JSON.stringify(got);
+  };
+
+  if (expect.answer !== undefined) {
+    if (answers.length === 0) {
+      return { ok: false, note: 'the script produced no answer, but expect.answer was declared' };
+    }
+    for (const [key, want] of Object.entries(expect.answer)) {
+      const got = answers[0]?.[key];
+      if (!matches(want, got)) {
+        return {
+          ok: false,
+          note: `expect.answer.${key} was ${JSON.stringify(want)}, the sim answered ${JSON.stringify(got)}`,
+        };
+      }
+    }
+  }
+
+  // `expect.grade` is the author's claim about the POINTS, so it is checked against the grade the
+  // grader actually returns. A sim that grades 0 while claiming 4 would otherwise pass.
+  if (typeof expect.grade === 'number' && answers[0] !== undefined) {
+    // From the sim's OWN state, because the claim under test is "graded from stored state" -- grading a
+    // `null` state exercises the grader's refusal path, which is a different thing entirely.
+    const stored = await captureState(page);
+    const graded = await gradeInNode(entry, answers[0], stored?.state ?? null);
+    if (graded === null) return { ok: false, note: 'the grader returned nothing in bare Node' };
+    const points =
+      typeof graded.points === 'number' ? graded.points : (graded.earned ?? graded.score);
+    if (typeof points === 'number' && Math.abs(points - expect.grade) > tolerance) {
+      return {
+        ok: false,
+        note: `expect.grade was ${String(expect.grade)}, the grader awarded ${String(points)}`,
+      };
+    }
+  }
+
+  if (expect.stateChecksumPrefix !== undefined) {
+    const states = await page.evaluate(() => globalThis.__conformance.log.states);
+    const last = states[states.length - 1];
+    if (last?.checksum === null || last?.checksum === undefined) {
+      return {
+        ok: false,
+        note: 'expect.stateChecksumPrefix was declared but no state was reported',
+      };
+    }
+    if (!String(last.checksum).startsWith(expect.stateChecksumPrefix)) {
+      return {
+        ok: false,
+        note: `the state checksum ${String(last.checksum)} does not start with ${expect.stateChecksumPrefix}`,
+      };
+    }
+  }
+
+  return { ok: true, note: `${String(steps.length)} declared steps run` };
+};
+
 const CELLS = [
+  {
+    name: "the manifest's OWN conformance script runs and its `expect` holds",
+    why: 'a declared check nobody runs is not a check',
+    run: async ({ page, entry, manifest }) => {
+      const outcome = await runManifestScript(page, entry, manifest);
+      return outcome.ok ? null : outcome.note;
+    },
+  },
   {
     name: 'the sandbox attribute carries exactly one token',
     why: 'allow-same-origin would hand the sim our DOM and the session cookie',
@@ -243,36 +419,17 @@ const CELLS = [
         String(entry.bundle.grader).replace(/^\.\//, ''),
       );
       if (!existsSync(grader)) return `grader bundle missing: ${String(entry.bundle.grader)}`;
-      // Through the SDK's `gradeStoredState`, not by calling `grade` off the module: the entry point is
-      // what the worker uses, so exercising it here means conformance grades the same way production
-      // does. Calling `default.grader.grade` directly -- the first attempt -- tested a shape nothing
-      // else in the repository calls.
-      const [{ default: module_ }, { gradeStoredState }] = await Promise.all([
-        import(pathToFileURL(grader).href),
-        import(new URL('../packages/sim-sdk/dist/grader.js', import.meta.url).href),
-      ]);
-      // From the sim's OWN reported state, because the claim under test is "auto-graded from stored
-      // state". Passing `state: null` and calling it a day tested the grader's error path.
       const captured = await captureState(page);
       if (captured === null) return 'the sim reported no state to grade from';
-      const input = { state: captured.state, params: entry.parameters, answer };
-      const first = await gradeStoredState(module_.grader, input);
-      const second = await gradeStoredState(module_.grader, input);
+      const first = await gradeInNode(entry, answer, captured.state);
+      const second = await gradeInNode(entry, answer, captured.state);
+      if (first === null || second === null) return 'the grader returned nothing in bare Node';
       // Determinism in a browser is one claim; determinism in Node is the claim the grader rests on.
       if (JSON.stringify(first) !== JSON.stringify(second)) return 'two Node grades disagreed';
-      if (first === undefined || first === null) return 'the grader returned nothing';
-      // A grade with no earned/max pair is not a grade, and a grader that always returns zero would pass
-      // this cell happily.
       const points =
         typeof first.points === 'number' ? first.points : (first.earned ?? first.score);
-      const max = typeof first.maxPoints === 'number' ? first.maxPoints : (first.max ?? 100);
-      // A score is reported, not returned as a failure. The first version returned `graded 4/4` and the
-      // runner printed it under FAIL, which is the worst possible way to be wrong: the message reads as
-      // a defect and the operator has to work out that it is not one.
       if (points === undefined) return 'the grade carried no score';
-      process.stdout.write(
-        `       ${c.dim(`graded ${String(points)}/${String(max)} in bare Node`)}\n`,
-      );
+      process.stdout.write(`       ${c.dim(`graded ${String(points)} in bare Node`)}\n`);
       return null;
     },
   },
@@ -367,6 +524,13 @@ const run = async () => {
   }
   const registry = JSON.parse(await readFile(REGISTRY, 'utf8'));
   const entries = registry.entries;
+  // The manifests, because each sim DECLARES its own conformance script and expectations and the runner
+  // has to honour them rather than apply one matrix to everything.
+  const manifests = new Map();
+  for (const entry of entries) {
+    const path = join(ROOT, 'sims', String(entry.id), 'sim.manifest.json');
+    if (existsSync(path)) manifests.set(String(entry.id), JSON.parse(await readFile(path, 'utf8')));
+  }
   process.stdout.write(`${c.dim('bundling the conformance harness…\n')}`);
   await buildHarness();
 
@@ -381,6 +545,12 @@ const run = async () => {
     const page = await browser.newPage();
     const consoleErrors = [];
     page.on('pageerror', (error) => consoleErrors.push(String(error)));
+    // Frame errors too. `pageerror` covers the top document only, so a throw inside the SIM -- which is
+    // where a broken `sim:setParams` or an unknown command lands -- was invisible, and the cell reported
+    // "no uncaught errors" for a simulation that had thrown on every frame it was sent.
+    page.on('console', (message) => {
+      if (message.type() === 'error') consoleErrors.push(`console: ${message.text()}`);
+    });
     // The config rides in the URL rather than in an init script: an init script that writes the config
     // on `DOMContentLoaded` races the harness bundle, which reads it at module scope. One source, read
     // once, at a known time.
@@ -404,7 +574,12 @@ const run = async () => {
     for (const cell of CELLS) {
       let failure = null;
       try {
-        failure = await cell.run({ page, simOrigin: sim.origin, entry });
+        failure = await cell.run({
+          page,
+          simOrigin: sim.origin,
+          entry,
+          manifest: manifests.get(String(entry.id)),
+        });
       } catch (error) {
         failure = `threw: ${error instanceof Error ? error.message : String(error)}`;
       }

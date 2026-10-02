@@ -235,11 +235,11 @@ export function startSim(document_: Document, window_: Window, parent: Window | 
     announce(status, status.textContent ?? '');
   });
   step.addEventListener('click', () => {
-    stepper.step(1);
+    stepper.dispatch({ type: 'step', direction: 1 });
     refresh();
   });
   scrub.addEventListener('input', () => {
-    stepper.seek(Number(scrub.value));
+    stepper.dispatch({ type: 'scrubTo', t: Number(scrub.value) });
     refresh();
   });
   // Declared before the handlers so the click handler below can close over it. A `let` rather than a
@@ -304,7 +304,7 @@ export function startSim(document_: Document, window_: Window, parent: Window | 
         return;
       }
       if (name === 'step') {
-        stepper.step(Number(args.step ?? 1));
+        stepper.dispatch({ type: 'step', direction: args.direction === -1 ? -1 : 1 });
         refresh();
         return;
       }
