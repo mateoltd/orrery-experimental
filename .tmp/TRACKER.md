@@ -1356,12 +1356,13 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T3 `@orrery/sim-sdk`: zero runtime deps, host bridge, state serialisation, param binding, `reportAnswer`, a11y helpers, seeded RNG | **DONE** | `6ca118b` | `packages/sim-sdk/`. The grader entry point is a MODULE, not a convention: `tsconfig.grader.json` typechecks it with no `dom` lib. |
 | P6-T4 Build pipeline: esbuild → hashed, cache-busted ESM + CSS | **DONE** | `51d1066` | `scripts/sim-build.mjs`. Hashed filenames, a logical→hashed registry entry, `--check` for CI. |
 | P6-T5 Dual-target enforcement: `./browser` + pure `./grader` in Node, zero Node builtins (`B14`) | **DONE** | `51d1066` | 13 tests. The BUILT grader is imported in a bare Node process, 3 runs, byte-identical. |
-| P6-T6 Sandbox host: `sandbox="allow-scripts"`, dedicated origin, **the exact CSP from `03` §1** (`B6`), nonce messaging, resize protocol, offline check, failure UI | **DONE** | *(next commit)* | `packages/interop/src/csp.ts` (B6 as 15 tests), `apps/web/src/features/sim/`. `SIM_ORIGIN` is REQUIRED in config. |
-| P6-T7 `embedSimulation` block, seed policies, lazy mount, static fallback, print fallback | **DONE** | *(next commit)* | `apps/web/src/features/sim/embedSimulation.ts`, 20 tests. A lesson block is a PINNED reference, so a DISABLED version still renders. |
-| P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | *(next commit)* | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is P6-T12-scope. |
-| P6-T9 Conformance matrix over every registered sim | **DONE** | *(next commit)* | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells** for `maths.projectile-motion`, sandbox escape attempted from inside the frame, grade 4/4 in bare Node. |
-| P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new` | **DONE** | `677f2b2` | `sims/_template/`, `sims/README.md`, `scripts/sim-new.mjs`. The scaffold is asserted CLEAN, not merely created. The dev playground is NOT DONE — see the note. |
+| P6-T6 Sandbox host: `sandbox="allow-scripts"`, dedicated origin, **the exact CSP from `03` §1** (`B6`), nonce messaging, resize protocol, offline check, failure UI | **DONE** | `c6ee692` | `apps/web/src/features/sim/{SimulationFrame,hostBridge}.tsx`; DELIVERS frames, reachability probe, state capture on blur. 92 tests. |
+| P6-T7 `embedSimulation` block, seed policies, lazy mount, static fallback, print fallback | **DONE** | `1805898` | `apps/web/src/features/sim/embedSimulation.ts`; 20 tests. A lesson block is a PINNED reference, so a DISABLED version still renders. |
+| P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
+| P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
+| P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new` | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new` — **dev playground OUTSTANDING** | **IN PROGRESS** | `677f2b2` | Docs, template and scaffolder done; the dev playground with its protocol inspector is NOT built and `pnpm sim:conformance` did not exist until P6-T9. Row narrowed deliberately rather than closed over a missing half. 
 | P6-T11 24 gold sims | NOT STARTED | | |
+| P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
 
@@ -1787,110 +1788,79 @@ previous test's element.
   typecheck 0, image builds green.
 
 
-#### P6-T9 in progress: what a real browser found that 1485 unit tests could not
-
-**THE BROWSER BUNDLE WAS THE WRONG KIND OF JAVASCRIPT.** `sim:build` emitted `format: 'esm'`, so the
-artefact ended in `export{...}`. The frame loads it with `<script src>` and is sandboxed with
-`allow-scripts` and nothing else, so there is no module loader to import it with: it is a syntax error
-in a classic script. The artefact is perfectly valid JavaScript and completely unusable, which is why no
-unit test could see it. The browser build now overrides the format to `iife`.
-
-**AN IFRAME `src` NAVIGATES, AND A NAVIGATED SCRIPT IS RENDERED AS TEXT.** The frame pointed `src` at
-the bundle, so Chromium rendered the source into a `<pre>`. A simulation now ships an HTML **document**
-(`sim.<hash>.html`) that loads the hashed bundle, and the registry carries it as `bundle.page`. The page is
-hashed too, because it references hashed filenames. Getting the content type wrong (`text/plain` on the
-`.html`) reproduces the same failure, which is why the MIME table in the runner says so in a comment.
-
-**`createHostBridge` IN THE SDK HAD ZERO CALLERS.** It is the SIM side of the bridge, and it needs a
-`sim:init` frame to construct itself — the nonce arrives with that frame — so a simulation cannot build
-its own bridge at startup. Every sim would have had to reimplement the same subscribe-then-wait sequence,
-and none had, so **no simulation spoke the protocol at all**: a convincing canvas that could not be graded.
-The SDK now has `connectSim`, which waits, checks the identity, and answers `sim:ready`. It refuses a
-version the host did not ask for — the host's whole reason for pinning is to render the version the
-student's results were computed against.
-
-**`sim:state` POSTED `checksum: ''`.** The field's entire purpose is proving a stored state round-trips,
-and an empty string validates every state including a corrupted one. Now `checksumState(state)`.
-
-**MY OWN P6-T6 HARDENING WAS WRONG AND BROKE EVERY SIMULATION.** I had made `postMessage` take an
-explicit target origin, on the sound argument that `'*'` hands the nonce to whatever ends up in the frame.
-Chromium says otherwise: `sandbox="allow-scripts"` withholds `allow-same-origin`, so the frame's origin is
-opaque — literally `'null'` — and **every explicit target is rejected**:
-> The target origin provided ('https://sims.example') does not match the recipient window's origin ('null').
-
-So `'*'` is not a convenience here, it is the only value the platform accepts for an opaque recipient. The
-concern was real, so it is now answered where it can be: the frame has no origin to steal, a document that
-navigates itself into the frame inherits the sandbox and is opaque too, the host authenticates every
-inbound frame by source AND per-mount nonce, and bundle integrity is a deployment property (CORP, CSP). A
-secure choice that makes simulations impossible is not a secure choice.
-
-**A TEST THAT MEASURED BY PATCHING `postMessage` WAS IMPOSSIBLE, NOT MERELY WRONG.** The harness wrapped
-the frame window's `postMessage` to record host frames. Cross-origin frame windows refuse property
-assignment, so it threw a SecurityError on every iframe and reported "no sim:init was posted" for a host
-that was posting one. The measurement is gone; what is observable is the sim's side — a `sim:ready`
-carrying the host's nonce proves the init was delivered AND that the sim read it.
-
-**TESTING LIBRARY CLEANUP, AND A PROBE CACHE, EACH FOOLED A TEST INTO PASSING.** Already recorded under
-P6-T6; both bit again here and both are in `afterEach` now.
-
-**THE GENERATED HARNESS BUNDLE WAS BEING LINTED AS SOURCE.** Under `.tmp` it contributed ~1900 errors to
-every `pnpm lint`. Generated output moved to `node_modules/.cache/`.
-
-**THE BRIDGE REBUILT ITSELF ON EVERY RENDER, AND THE SEED WAS DEPENDENT ON THAT.** `createHostBridge`'s
-own subscription called `bridge.receive(...)` and **threw the returned state away** — the bridge's
-internal state was right the whole time, which is why every unit test passed, but nothing told React, so
-the component rendered `LOADING` while a real simulation completed a perfect handshake beside it. And the
-effect that creates the bridge listed `seedPolicy` and `params` — both OBJECTS — in its dependencies.
-`<SimulationFrame seedPolicy={{ kind: 'FIXED', seed: 'x' }} />` is how every caller writes that, and the
-host's own `policyOf()` returns a fresh object per render. So every render tore down the live bridge,
-posted `sim:teardown` and installed a new one that never received `sim:init`, because that only goes out
-on the iframe's `load`. **A re-render anywhere in the enclosing lesson was enough to kill a simulation** —
-and the host reported a timeout for a simulation that was working.
-
-**A `FIXED` SEED CANNOT BE RE-DERIVED PER RENDER.** `deriveSeed` takes a nonce source; a fresh nonce per
-render would give a student a different simulation on every keystroke in the lesson. The memo is keyed on
-the policy's FIELDS, and `params` is keyed on its serialised content — parsed, not suppressed, so the
-dependency is real rather than a lint rule taught to look away.
-
-**THE HOST NEVER CAPTURED STATE ON BLUR AT ALL.** `sim:visibility` went out; the state ask did not. A
-student who explored for ten minutes and closed the laptop lost everything, which is the single worst
-outcome a simulation can have. Visibility and capture are the same event from two directions, so they are
-now emitted together, on `visibilitychange` and on `pagehide` — the latter because `unload` is unreliable
-on mobile Safari and in a bfcache restore.
-
-**A SIM ANSWERED `sim:requestState` TWICE.** The SDK already replies from `getState()`, so the sim's own
-handler reporting as well sent two `sim:state` frames per request — and a host that debounces checkpoints
-would persist both.
+#### P6-T9 detail (complete): five frames delivered and thrown away
 
 **EVERY HOST FRAME EXCEPT `sim:init` WAS BUILT WITHOUT A NONCE.** The sim's `isAuthenticated` is
 `source === expected && candidate === nonce`, so `sim:visibility`, `sim:command`, `sim:setParams`,
-`sim:requestState` and `sim:teardown` were **delivered and thrown away**: pause, step, reset, state
-capture and teardown were all no-ops. Only the handshake worked, because `connectSim` does not
-authenticate the frame that authorises it — so a fully green unit suite accompanied a simulation that
-ignored its host completely. The nonce is now stamped in `emit`, where no builder can forget it, and a
-table-driven test asserts it on all six frames.
+`sim:requestState` and `sim:teardown` were **delivered and thrown away**: pause, step, reset, state capture
+and teardown were all no-ops. Only the handshake worked, because `connectSim` does not authenticate the frame
+that authorises it — so a fully green unit suite accompanied a simulation that ignored its host completely.
+Eleven of fourteen cells were red for this one reason. The nonce is now stamped in `emit`, where no builder
+can forget it, with a table-driven test asserting it on all six frames.
 
-**THE HOST THREW AWAY THE CHECKSUM THAT CAME WITH A STATE.** `sim:state` carries `checksum` beside
-`state`; the host stored only the state. So it held a document it could not verify, and `restoreState` on
-a later mount had nothing to compare against — a checksum only the sender ever reads is decoration. The
-host now keeps it beside the state, because the state is the simulation's document and the checksum is
-the protocol's claim about it.
+**THE HOST THREW AWAY THE CHECKSUM THAT CAME WITH A STATE.** `sim:state` carries `checksum` beside `state`;
+the host stored only the state, so it held a document it could not verify and `restoreState` on a later mount
+had nothing to compare against. It is now kept beside the state — the state is the simulation's document, the
+checksum is the protocol's claim about it.
 
-**THE SIM EMBEDDED ITS OWN CHECKSUM INSIDE THE STATE.** Computed over `{ params, t }`, while the frame's
-is computed over the whole state by the SDK. Two answers to one question, disagreeing by construction,
-and a host that verified one against the other would conclude the state was corrupt. The state is now
-just the state.
+**THE SIM EMBEDDED A SECOND, DIFFERENT CHECKSUM INSIDE THE STATE.** Over `{ params, t }`, while the frame's
+is computed over the whole state by the SDK. Two answers to one question, disagreeing by construction.
 
-**WHAT THIS COST, STATED PLAINLY.** Eleven cells of the matrix were red because five of the protocol's
-frames were being discarded at the far end of a connection whose handshake completed perfectly. Every
-unit test in the repository passed throughout. A simulation platform is not a protocol on paper; the
-only thing that found this was running the thing.
+**THE BRIDGE REBUILT ITSELF ON EVERY RENDER, AND THREW AWAY EVERY STATE IT WAS TOLD ABOUT.**
+`createHostBridge`'s own subscription discarded the `HostState` that `receive()` returned, so the bridge's
+state was right and React never heard about it. Separately, `seedPolicy` and `params` — both OBJECTS — were
+in the bridge effect's dependencies, and `<SimulationFrame seedPolicy={{...}} />` is how every caller writes
+that. Every render tore down the live bridge and installed one that never received `sim:init`. A re-render
+anywhere in the enclosing lesson killed a simulation. Both are now keyed on the policy's FIELDS and `params`'
+serialised content — parsed, not suppressed, so the dependency is real.
 
-#### P6-T9 evidence so far
-- 1495 unit (121 sim-sdk, 257 in `apps/web`), 336 db integration, 8/8 gates, lint 0,
+**THE HOST NEVER CAPTURED STATE ON BLUR AT ALL.** A student who explored for ten minutes and closed the
+laptop lost everything.
+
+#### P6-T9 evidence
+- 1495 unit, 336 db integration, 9/9 gates, lint 0, typecheck 0.
+- `pnpm sim:conformance`: **14/14** cells, grade 4/4 in bare Node from the sim's own reported state, with
+  the checksum re-derived in the page rather than trusted from the sim.
+
+#### P6-T13 detail (complete): a gate that can fail
+
+**THE ESCAPES ARE ATTEMPTED FROM INSIDE THE FRAME, NOT INFERRED FROM AN ATTRIBUTE.** A hostile simulation
+does not read the sandbox attribute; it calls `parent.document` and sees what happens. Twelve attempts — host
+DOM, cookie jar, host-origin localStorage, top navigation, popup, form POST, download, modal, clipboard,
+CORS read of a host endpoint, `window.top`, and its own origin — each executed by code in the frame, with the
+RESULT as the verdict.
+
+**THE GATE SERVED A STALE HARNESS AND REPORTED 12/12 AGAINST A DELIBERATELY WEAKENED SANDBOX.** This is the
+finding that matters. The gate used whatever bundle `sim:conformance` had left in the cache, so run on its
+own — as a CI gate runs — it tested a stale artefact. The negative control exposed it:
+`allow-scripts allow-same-origin allow-forms allow-popups allow-modals` still produced "12/12 escapes blocked".
+**A gate that silently tests a stale artefact is worse than no gate, because it is believed.** Both suites now
+build the harness from source every run.
+
+**WITH THE FIXED GATE, THE WEAKENED SANDBOX PRODUCES SIX REAL ESCAPES** — `LEAKED:session=host-secret-value`,
+`WROTE-STORAGE`, `OPENED-POPUP`, a form POST that actually left the browser, a download that actually began,
+and a dialog that actually opened. Recorded as the negative control: the gate detects what it claims to.
+
+**AN OPAQUE ORIGIN IS THE SANDBOX WORKING, NOT A BREACH.** The frame's origin is `null` precisely because
+`allow-same-origin` is withheld, and the first predicate omitted it — reporting the sandbox's single most
+important success as a failure.
+
+**THREE PROBES MEASURED THE WRONG THING.** `form.submit()`, `a.click()` and `typeof alert === 'function'` all
+report success whether or not the sandbox stopped anything. Those three are observed at the PAGE now, and the
+observation is authoritative in BOTH directions: nothing leaving the browser means the sandbox stopped it.
+
+**TWELVE CONFIDENT `BLOCKED` RESULTS FOR TWELVE EXPRESSIONS THAT NEVER RAN.** The probes already invoked
+themselves and the runner wrapped them again. Two self-checks now make that impossible to mistake for success:
+the frame must be a genuinely different origin, and at least one attempt must be observed BLOCKED — otherwise
+the gate reports INVALID rather than passed.
+
+#### P6-T13 evidence
+- `pnpm gates`: **9 checks green**, the last being `sandbox escape gate passed — 12/12 escapes blocked`.
+- The two-origin servers are shared by both browser suites, so a path mistake can be made once.
+
+
+- 1476 unit (91 in `apps/web/src/features/sim`, up from 71), 336 db integration. 8/8 gates, lint 0,
   typecheck 0, image builds green.
-- `pnpm sim:conformance`: **14/14** cells for `maths.projectile-motion`, graded 4/4 in bare Node from the
-  sim's own reported state, checksum re-derived in the page rather than trusted from the sim.
 
 
 #### P6-T7 detail (complete)
