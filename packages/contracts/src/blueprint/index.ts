@@ -103,7 +103,7 @@ export interface SlotFacts {
    * two pools was told a short pool could produce items it does not contain — the wrong direction
    * again, and the same direction as the sampling error P-18 warns about.
    */
-  readonly poolItems?: readonly ItemFacts[];
+  readonly poolItems?: readonly ItemFacts[] | null;
 }
 
 export interface BlueprintCheckInput {

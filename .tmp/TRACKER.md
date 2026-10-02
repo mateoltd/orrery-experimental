@@ -66,8 +66,8 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 66 |
-| Unit tests | **1097** (contracts 350, auth 436, db 23, web 158) |
+| Commits | 67 |
+| Unit tests | **1111** (db 37 with 14 new publish-gate tests, contracts 350, auth 436, web 158) |
 | Integration tests | **296** across 21 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
@@ -659,16 +659,16 @@ has a dozen slightly different answers.
 | P5-T3 Assignment builder, preview as student | NOT STARTED | | |
 | P5-T4 Student "to do" | NOT STARTED | | |
 | P5-T5 Pinning invariant enforcement: (a) lint rule, (b) slot-level mutation test | **DONE** | `ede383a` | (a) the gate exists (ADR-0025). (b) the slot-level paper is **mutation-verified** per ADR-0027. |
-| P5-T6 QuestionBank CRUD, sharing, move/duplicate | **DONE** | *(next commit)* | `packages/db/src/question-banks.ts`. Banks are PRIVATE or classroom-shared, never public. |
+| P5-T6 QuestionBank CRUD, sharing, move/duplicate | **DONE** | `ca0f0b1` | `packages/db/src/question-banks.ts`. Banks are PRIVATE or classroom-shared, never public. |
 | P5-T7 `poolHealth`: M vs N, distinct, expected overlap | **DONE** | `96af48c` | `packages/contracts/src/pool-health/`. **I wrote a wrong formula, justified it as an improvement, and brute force proved the plan right.** |
-| P5-T8 Blueprint + worst-case coverage | **DONE** | *(next commit)* | `packages/contracts/src/blueprint/`. Exact, not sampled (P-18). |
+| P5-T8 Blueprint + worst-case coverage | **DONE** | `ca0f0b1` | `packages/contracts/src/blueprint/`. Exact, not sampled (P-18). |
 | P5-T9 `AssessmentSpec` slots + `variantMap` resolution | **DONE** | `65db2b4` | `packages/db/src/slots.ts`. One draw, one place, per-slot forked streams. | |
 | P5-T10 Publish snapshots every drawable question | NOT STARTED | | |
 | P5-T11 "Too similar" guard | NOT STARTED | | |
 | P5-T13 Interop skeleton, `ExternalBinding` | NOT STARTED | | |
 | P5-T14 `can()` matrix for the new P5 types | **DONE** | `8e7d953` | Three types added with full rules. **The tests found a bank readable by its own students.** |
 | P5-T15 Author the seed banks | NOT STARTED | | D-37: nothing in 183 tasks authored a single question. |
-| P5-T12 Publish gates: pool, blueprint, metadata, `INV-SLOT-1` | NOT STARTED | | |
+| P5-T12 Publish gates: pool, blueprint, metadata, `INV-SLOT-1` | **DONE** | *(next commit)* | `packages/db/src/publish-gates.ts`. **Reports every problem, not the first.** |
 
 #### P5-T1 detail (complete)
 
@@ -732,6 +732,40 @@ attempts run to their own deadline and remain submittable. There is no way to ca
 a mode that also cancels somebody's exam. A withdrawn assignment also cannot be re-published,
 because a withdrawal is a statement to students and silently undoing it is worse than doing
 nothing.
+
+#### P5-T12 detail (complete)
+
+**`INV-SLOT-1` IS THE COMPLEMENT TO ADR-0025, AND NEITHER IS ENOUGH ALONE.** The path ban stops
+`currentVersionId` being READ on an assessment surface; `INV-SLOT-1` stops the WRONG QUESTION BEING
+STORED. One is a source-level rule and the other is a data-level fact, and a stored wrong question
+means a student marked against something nobody taught — a grade that is still recorded, still
+counts, and is still wrong. The gate needs the version being published FOR, because a question id
+alone cannot say whether it belongs here.
+
+**EVERY PROBLEM IS REPORTED, NOT THE FIRST ONE.** The first version returned on the first
+blocking problem, which a teacher experiences as "fix this, submit, be told about the next" — four
+round trips to fix four typos. There is a test that asserts three different problem codes come back
+from one call.
+
+**A POOL THAT CANNOT FILL A PAPER SAYS HOW MANY ITEMS TO ADD.** "Add 6 more item(s)" is the
+actionable half; "pool too small" is a report. Same reasoning as `validateForPublish` in P2-T10: a
+checklist with fixes, not a wall of red. And it is never clamped, because clamping silently
+produces a paper with fewer questions than the blueprint promised.
+
+**THE GATES RETURN PROBLEMS; THEY DO NOT THROW.** A throw is right for a bug and wrong for a
+teacher's incomplete draft — the authoring UI would show a stack trace instead of the three
+things to fix. Every problem carries a code, a severity, a `where` and a `fix`, and there is a test
+asserting the `where` is never empty, because a checklist item you cannot locate is not one.
+
+**A WARNING IS NOT A BLOCK, AND THE TEST FOR THAT USES A TOLERANCE.** The blueprint holds in most
+draws but not every one; that is a decision a teacher can make with the number in front of them,
+and blocking it would be the gate overreaching. The test sets a tolerance of 99 and asserts the
+module reports NOTHING rather than inventing a second code — because "satisfied within your stated
+tolerance" and "satisfied exactly" are the same statement here.
+
+#### P5-T12 evidence
+- 1111 unit (14 new publish-gate tests), 296 db integration. 8/8 gates, lint 0, typecheck 0,
+  image builds.
 
 #### P5-T6/T8 detail (complete)
 
@@ -1049,7 +1083,7 @@ pnpm run build          # must pass before typecheck; tsbuildinfo can go stale
 pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
-pnpm run test           # 1097 unit
+pnpm run test           # 1111 unit
 pnpm run test:integration   # 296 db + 6 worker, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
