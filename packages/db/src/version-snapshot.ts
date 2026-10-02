@@ -182,6 +182,13 @@ export async function snapshotOf(
 
 export type SimilarityDimension = 'stem' | 'answerKey' | 'numericAnswer';
 
+/** Reported in this order when two dimensions tie, because a readable stem beats a key set. */
+const DIMENSION_ORDER: Record<SimilarityDimension, number> = {
+  stem: 0,
+  answerKey: 1,
+  numericAnswer: 2,
+};
+
 export interface SimilarityHit {
   readonly dimension: SimilarityDimension;
   readonly otherQuestionId: string;
@@ -331,14 +338,14 @@ export function findSimilar(
 
     const otherPrompt = normaliseStem(promptOf(other.spec));
     const stemScore = trigramSimilarity(candidatePrompt, otherPrompt);
-    if (candidatePrompt !== '' && otherPrompt !== '' && stemScore >= threshold) {
+    const promptsComparable = candidatePrompt !== '' && otherPrompt !== '';
+    if (promptsComparable && stemScore >= threshold) {
       hits.push({
         dimension: 'stem',
         otherQuestionId: other.id,
         score: stemScore,
         because: `the two prompts read alike once numbers are normalised away (${stemScore.toFixed(2)} ≥ ${String(threshold)})`,
       });
-      continue;
     }
 
     const otherKey = answerKeyTokens(other.spec, other.modelAnswer);
@@ -350,13 +357,25 @@ export function findSimilar(
         score: keyScore,
         because: `the accepted answers are nearly the same set (${keyScore.toFixed(2)})`,
       });
-      continue;
     }
 
     const otherNumbers = numbersIn(other.modelAnswer);
-    // A numeric match ONLY counts when the prompts are also close, because two questions that
-    // both happen to have the answer 42 are not duplicates.
+    // A numeric match ONLY counts when the prompts are ALSO close, and the first version did not
+    // check that -- it compared the numbers and reported, so the comment above it described a rule
+    // the code did not implement.
+    //
+    // The reason it matters: two questions that both happen to answer 42 are not duplicates, and a
+    // maths bank is full of them. The student's defence is to know WHICH question they are on, and
+    // a bare numeric match takes that away.
+    //
+    // Which is also why the `continue` statements are gone from the other two branches. With them,
+    // a close-stem pair reported `stem` and stopped, so the numeric dimension could never fire at
+    // all -- which is why the rule could be missing from the code for so long without a test
+    // noticing. All three dimensions are now independent, and a pair can be reported as two
+    // problems rather than one.
     if (
+      promptsComparable &&
+      stemScore >= threshold &&
       candidateNumbers.size > 0 &&
       otherNumbers.size > 0 &&
       jaccard(candidateNumbers, otherNumbers) >= 1
@@ -364,11 +383,16 @@ export function findSimilar(
       hits.push({
         dimension: 'numericAnswer',
         otherQuestionId: other.id,
-        score: 1,
-        because: 'both items have the same numeric answer, so students can carry one answer across',
+        score: stemScore,
+        because:
+          'the prompts are alike AND both items have the same numeric answer, so a student can carry one answer across',
       });
     }
   }
 
-  return hits.sort((a, b) => b.score - a.score);
+  // Score first, then dimension, then id. One pair can now produce several hits of equal score,
+  // and an unstable order makes "the worst offender is first" depend on insertion order.
+  return hits.sort(
+    (a, b) => b.score - a.score || DIMENSION_ORDER[a.dimension] - DIMENSION_ORDER[b.dimension],
+  );
 }

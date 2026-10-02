@@ -102,6 +102,10 @@
       "types": "./dist/question-banks.d.ts",
       "default": "./dist/question-banks.js"
     },
+    "./question-bank-items": {
+      "types": "./dist/question-bank-items.d.ts",
+      "default": "./dist/question-bank-items.js"
+    },
     "./version-snapshot": {
       "types": "./dist/version-snapshot.d.ts",
       "default": "./dist/version-snapshot.js"

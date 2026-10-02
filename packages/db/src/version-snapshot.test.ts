@@ -98,10 +98,78 @@ describe('the too-similar guard', () => {
   it('does NOT flag two questions that merely share a number', () => {
     // Both answer 42 and neither prompt resembles the other. Flagging this would be the guard
     // crying wolf on the most common number in a maths bank.
-    const hits = findSimilar(q('new', 'Name the process that releases energy from glucose'), [
-      q('old', 'Calculate the mean of the data set 40 42 44'),
+    //
+    // The first version asserted only that no `stem` hit was returned, which passed while the
+    // numeric dimension fired on exactly this pair -- the assertion was about the wrong dimension.
+    // It now asserts NO hits at all, which is the thing the comment above claims.
+    const hits = findSimilar(q('new', 'Name the process that releases energy from glucose', '42'), [
+      q('old', 'Calculate the mean of the data set 40 42 44', '42'),
     ]);
-    expect(hits.filter((h) => h.dimension === 'stem')).toHaveLength(0);
+    expect(hits.filter((h) => h.dimension === 'stem')).toEqual([]);
+    // The dimension this test exists for. It fired on exactly this pair before the prompt check
+    // was implemented, and nothing noticed, because the assertion was about `stem`.
+    expect(hits.filter((h) => h.dimension === 'numericAnswer')).toEqual([]);
+    // `answerKey` DOES fire here, and that is the key dimension working as `plans/06` §6.2
+    // describes it: the accepted-answer sets are identical. A single-token key of "42" makes that
+    // coincidence look more alarming than it is, which is an argument for real keys being phrases
+    // rather than numbers -- not a reason to weaken the dimension.
+  });
+
+  it('flags a numeric answer ONLY when the prompts are also alike', () => {
+    // Same answer, different question: nothing to carry across.
+    const unrelated = findSimilar(
+      q('new', 'Name the organelle that stores starch in a plant cell', '42'),
+      [q('old', 'Calculate the mean of 40 42 and 44', '42')],
+    );
+    expect(unrelated.filter((h) => h.dimension === 'numericAnswer')).toEqual([]);
+
+    // Same answer AND alike prompts: this is the pair a student really can carry an answer across,
+    // and the difference between the two cases is the whole point of the dimension.
+    const alike = findSimilar(q('new', 'Add 3 and 4 to give the total', '42'), [
+      q('old', 'Add 5 and 6 to give the total', '42'),
+    ]);
+    const numeric = alike.find((h) => h.dimension === 'numericAnswer');
+    expect(numeric).toBeDefined();
+    expect(numeric?.otherQuestionId).toBe('old');
+    // And it is reported ALONGSIDE the stem hit rather than instead of it. With the old
+    // `continue` statements the stem dimension short-circuited, so the numeric dimension could
+    // never fire -- which is how the missing prompt check went unnoticed for so long.
+    expect(alike.some((h) => h.dimension === 'stem')).toBe(true);
+    expect(numeric?.because).toMatch(/prompts are alike AND/);
+  });
+
+  it('a pair that matches on two dimensions is reported as TWO hits, ordered by score', () => {
+    const hits = findSimilar(
+      q('new', 'Explain how the light-dependent reactions of photosynthesis produce ATP', 'atp', {
+        accept: ['atp', 'adenosine triphosphate'],
+      }),
+      [
+        q('old', 'Explain how the light dependent reactions of photosynthesis produce ATP', 'atp', {
+          accept: ['atp', 'adenosine triphosphate'],
+        }),
+      ],
+    );
+    const dimensions = hits.map((h) => h.dimension);
+    expect(dimensions).toContain('stem');
+    expect(dimensions).toContain('answerKey');
+    expect(hits.every((h) => h.otherQuestionId === 'old')).toBe(true);
+    // Ordered by SCORE, not by dimension. The first version asserted `stem` came first, and it
+    // does not: a jaccard of 1.0 on the answer key legitimately outranks a stem trigram score
+    // below 1.0, and reordering by dimension would mean a teacher never reads the worst match.
+    for (let i = 1; i < hits.length; i += 1) {
+      expect(hits[i - 1]?.score ?? 0).toBeGreaterThanOrEqual(hits[i]?.score ?? 0);
+    }
+  });
+
+  it('a TIE is broken by dimension, so equal scores do not depend on comparison order', () => {
+    const prompt = 'Explain the role of the enzyme amylase in digesting starch';
+    const key = { accept: ['amylase', 'the enzyme amylase'] };
+    const hits = findSimilar(q('new', prompt, 'amylase', key), [q('old', prompt, 'amylase', key)]);
+    // Identical prompt and identical key: both dimensions score 1.0, so the order is decided by
+    // the tie-break and not by the order the comparisons happen to run in.
+    const tied = hits.filter((h) => h.score === 1);
+    expect(tied.length).toBeGreaterThanOrEqual(2);
+    if (tied.length >= 2) expect(tied[0]?.dimension).toBe('stem');
   });
 
   it('flags the SUBTLE copy: same prompt shape, different numbers', () => {

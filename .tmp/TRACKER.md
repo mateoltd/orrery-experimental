@@ -66,9 +66,9 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 77 |
+| Commits | 79 |
 | Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
-| Integration tests | **324** across 26 db files + 6 worker outbox, real Postgres |
+| Integration tests | **336** across 27 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
 | Invariants registered | 29 (8 active) |
@@ -733,6 +733,66 @@ a mode that also cancels somebody's exam. A withdrawn assignment also cannot be 
 because a withdrawal is a statement to students and silently undoing it is worse than doing
 nothing.
 
+#### P5-T6 correction (move and duplicate were missing)
+
+**TWO OF THE FIVE OPERATIONS NAMED IN THE TASK ROW DID NOT EXIST.** `ca0f0b1` was marked DONE and
+shipped CRUD, sharing and pools — not `move/duplicate items`. Nothing failed, because the tracker
+records a commit and evidence, not a coverage check of the task text, and reading the row is the
+only thing that notices. `packages/db/src/question-bank-items.ts` is them, with 12 tests.
+
+**A DUPLICATE IS A NEW QUESTION, NOT AN ALIAS, AND `INV-BANK-3` IS WHY.** Publishing snapshots
+every drawable question by id and a pinned assignment resolves to its snapshot, so one id resolving
+to two prompts depending on which pool drew it means a re-sitting student sees different text for
+the same question and the receipt hash stops meaning anything. So a duplicate copies the row, gets
+a new id, and carries the SAME key — a copy scoring differently is a different question wearing the
+same prompt, which is what the too-similar guard exists to catch.
+
+**THE INTEGRATION TEST CAUGHT AN AUTHORISATION DEFECT THAT WAS MINE.** `duplicateQuestions` asked
+the matrix for `action: 'create'` on a `QuestionBank` subject. `QuestionBank.create` means "may
+create a bank" and is granted to ANY teacher — so every teacher could write questions into every
+other teacher's working set, which is the exam-material leak the bank's sharing rules exist to
+prevent. Duplicating mutates an existing bank, so it is `update`, and `update` is owner-only. A
+static read of the matrix would not have caught this; the test that asserted "somebody who does not
+own the bank is refused" is what found it.
+
+**AUTHORISATION RUNS BEFORE VALIDATION, AND THE CROSS-BANK RULE IS THEREFORE UNREACHABLE FOR A POOL
+YOU CANNOT TOUCH.** The first version of that test pointed the move at another teacher's pool, got a
+403, and asserted 409 — and the failure is what showed that a request's shape is not checked before
+the actor's right to ask about it. Checking shape first would tell an outsider that a pool they
+cannot touch sits in a different bank: a small existence oracle for no benefit.
+
+**A MOVE IS ONE TRANSACTION BECAUSE A POOL IS DRAWN FROM WHILE YOU EDIT IT.** Delete-then-add leaves
+the pool one item short of its `drawCount` for the duration, and the drawer either refuses (a broken
+exam) or draws short (an exam that is not what the teacher published). Only the items actually
+present move, and the count reported is the count moved: the first version counted the REQUESTED ids,
+so moving an item that was never in the pool reported "moved 2" and left a pool one shorter.
+
+**A NEW ID IS NOT THE CALLER'S TO CHOOSE.** The first signature took `newIds`, which meant a caller
+could pass an existing question's id and replace an item thirty students have already sat. Ids are
+generated inside and returned.
+
+#### P5-T6 correction evidence
+- 1170 unit (3 new similarity), 336 db integration (12 new). 8/8 gates, lint 0, typecheck 0,
+  image builds.
+
+#### P5-T11 correction (the numeric dimension did not do what its comment said)
+
+**A COMMENT DESCRIBING A RULE THE CODE DID NOT IMPLEMENT.** The numeric dimension's comment said a
+numeric match "ONLY counts when the prompts are also close", and the code compared the numbers and
+reported. Two questions that both answer 42 are not duplicates, and a maths bank is full of them —
+the student's defence is knowing WHICH question they are on, and a bare numeric match takes it away.
+
+**THE `continue` STATEMENTS WERE WHY NOBODY NOTICED.** A close-stem pair reported `stem` and
+stopped, so the numeric dimension could never fire at all — which is why a rule can be missing from
+the code indefinitely while a test asserts something true about a different dimension. All three
+dimensions are now independent and a pair can be reported as two problems. Hits sort by score with a
+dimension tie-break, because one pair now produces several equal-scored hits.
+
+**THE TEST THAT SHOULD HAVE CAUGHT IT ASSERTED ABOUT THE WRONG DIMENSION.** "does NOT flag two
+questions that merely share a number" asserted that no `stem` hit came back — which passed, in every
+version, while the numeric dimension fired on exactly the pair in the test's comment. It now asserts
+the numeric dimension, which is the thing the comment claims.
+
 #### P5-T15 detail (complete)
 
 **74 REAL QUESTIONS, ACROSS ALL SEVEN TYPES AND ALL THREE RESPONSE PROCESSES.** `D-37`: nothing in
@@ -1299,7 +1359,7 @@ pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
 pnpm run test           # 1125 unit
-pnpm run test:integration   # 324 db + 6 worker, needs DATABASE_URL
+pnpm run test:integration   # 336 db + 6 worker, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
 

@@ -124,8 +124,13 @@ export async function createBank(
   return { ok: true, bankId: bank.id };
 }
 
-/** The bank that owns a pool, which is the only way to answer "may this actor edit this pool?". */
-async function poolOwner(
+/**
+ * The pool's owning bank, for services that need to authorise against a pool rather than a bank.
+ *
+ * Exported for `question-bank-items.ts`; the shape is `poolId`/`bankId`/`ownerId` and nothing
+ * else, so widening the module's surface does not widen what a caller can learn.
+ */
+export async function poolOwnerFor(
   db: Db,
   poolId: string,
 ): Promise<{ readonly poolId: string; readonly bankId: string; readonly ownerId: string } | null> {
@@ -311,7 +316,7 @@ export async function addItemsToPool(
   },
   clock: Clock = systemClock,
 ): Promise<Ok<{ readonly added: number }> | Refusal> {
-  const pool = await poolOwner(db, input.poolId);
+  const pool = await poolOwnerFor(db, input.poolId);
   if (pool === null) return refusal({ ok: false, httpStatus: 404, reason: 'no such pool' });
   const mayEdit = await canGlobal({
     action: 'update',
@@ -370,7 +375,7 @@ export async function deletePool(
       reason: 'deleting a pool needs a reason of at least 10 characters',
     });
   }
-  const pool = await poolOwner(db, input.poolId);
+  const pool = await poolOwnerFor(db, input.poolId);
   if (pool === null) return refusal({ ok: false, httpStatus: 404, reason: 'no such pool' });
   const mayDelete = await canGlobal({
     action: 'delete',
