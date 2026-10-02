@@ -25,14 +25,13 @@
 
 import { existsSync } from 'node:fs';
 import { mkdir, readFile } from 'node:fs/promises';
-import { createServer } from 'node:http';
-import { extname, join, resolve } from 'node:path';
+import { join } from 'node:path';
 import process, { hrtime } from 'node:process';
 import { pathToFileURL } from 'node:url';
-import { build as esbuild } from 'esbuild';
 import { chromium } from 'playwright';
+import { buildHarness } from './conformance/harness.mjs';
+import { ROOT, startAppOrigin, startSimOrigin } from './conformance/origins.mjs';
 
-const ROOT = resolve(import.meta.dirname, '..');
 /** The registry module, imported for its URL composition so there is one base, not three. */
 const { simAssetUrl: assetUrl } = await import(
   new URL('../packages/sim-registry/dist/index.js', import.meta.url).href
@@ -42,17 +41,6 @@ const REGISTRY = join(ROOT, 'sims/registry/registry.json');
 // belongs in a cache: under `.tmp` it was linted as source and contributed ~1900 errors to every
 // `pnpm lint`, which is the cost of a build artefact living where a tool expects code.
 const SHOTS = join(ROOT, '.tmp/conformance');
-const CACHE = join(ROOT, 'node_modules/.cache/orrery-conformance');
-const HARNESS_BUNDLE = join(CACHE, 'harness.js');
-
-const MIME = {
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  // `text/html` matters: without it the browser DOWNLOADS the page instead of rendering it, which is
-  // the same class of mistake as pointing a frame at a script.
-  '.html': 'text/html; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-};
 
 const c = {
   dim: (t) => `[2m${t}[0m`,
@@ -60,98 +48,6 @@ const c = {
   green: (t) => `[32m${t}[0m`,
   bold: (t) => `[1m${t}[0m`,
 };
-
-/**
- * The sim origin.
- *
- * CORP `cross-origin` and a permissive CORS header are not politeness — a browser will refuse the
- * bundle outright without CORP, so an origin that omits it fails every simulation at once with an
- * error that looks like a broken bundle rather than a missing header.
- */
-const startSimOrigin = async () => {
-  const server = createServer((req, res) => {
-    const url = new URL(req.url ?? '/', 'http://sim.local');
-    if (url.pathname === '/__sim_origin_probe') {
-      res.writeHead(200, {
-        'content-type': 'text/plain',
-        'access-control-allow-origin': '*',
-        'cache-control': 'no-store',
-      });
-      res.end('ok');
-      return;
-    }
-    // Served out of each sim's own `dist`, because the registry's bundle paths are relative to THAT
-    // directory and not to the registry. Serving them out of the registry 404s every simulation with
-    // an error that looks like a broken bundle.
-    const [, simId, version, file] = url.pathname.split('/');
-    const path =
-      simId === undefined || version === undefined || file === undefined
-        ? null
-        : join(ROOT, 'sims', simId, 'dist', file);
-    const distRoot = join(ROOT, 'sims');
-    if (path === null || !path.startsWith(distRoot) || !existsSync(path)) {
-      res.writeHead(404).end('not found');
-      return;
-    }
-    void readFile(path).then((body) => {
-      res.writeHead(200, {
-        'content-type': MIME[extname(path)] ?? 'application/octet-stream',
-        'cross-origin-resource-policy': 'cross-origin',
-        'access-control-allow-origin': '*',
-        'cache-control': 'no-store',
-      });
-      res.end(body);
-    });
-  });
-  await new Promise((done) => {
-    server.listen(0, '127.0.0.1', done);
-  });
-  const { port } = server.address();
-  return { origin: `http://127.0.0.1:${String(port)}`, close: () => server.close() };
-};
-
-/** The app origin. Serves the harness page and its bundle. */
-const startAppOrigin = async () => {
-  const server = createServer((req, res) => {
-    const url = new URL(req.url ?? '/', 'http://app.local');
-    if (url.pathname === '/' || url.pathname === '/harness.js') {
-      // Read per request rather than once at startup, so a rebuilt harness needs no restart -- and so a
-      // missing bundle answers 500 with a sentence instead of throwing inside the handler, which Node
-      // answers by dropping the connection and the test by timing out for no stated reason.
-      const send = (body, type) => {
-        res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' });
-        res.end(body);
-      };
-      if (url.pathname === '/') {
-        send(harnessPage(), MIME['.html']);
-        return;
-      }
-      void readFile(HARNESS_BUNDLE)
-        .then((body) => send(body, MIME['.js']))
-        .catch(() => {
-          res.writeHead(500, { 'content-type': 'text/plain' }).end('harness bundle missing');
-        });
-      return;
-    }
-    res.writeHead(404).end('not found');
-  });
-  await new Promise((done) => {
-    server.listen(0, '127.0.0.1', done);
-  });
-  const { port } = server.address();
-  return { origin: `http://127.0.0.1:${String(port)}`, close: () => server.close() };
-};
-
-const harnessPage = () => `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Simulation conformance harness</title>
-  </head>
-  <body>
-    <script src="/harness.js"></script>
-  </body>
-</html>`;
 
 /**
  * One cell of the matrix.
@@ -463,43 +359,6 @@ const CELLS = [
     },
   },
 ];
-
-/**
- * Bundle the harness.
- *
- * Built HERE rather than by a sibling npm script, because `sim:new` tells an author to run
- * `pnpm sim:conformance` and a command that fails with "first run the other command" is a command
- * nobody runs.
- */
-const buildHarness = async () => {
-  await mkdir(CACHE, { recursive: true });
-  await esbuild({
-    entryPoints: [join(ROOT, 'scripts/conformance/harness.tsx')],
-    outfile: HARNESS_BUNDLE,
-    bundle: true,
-    format: 'iife',
-    jsx: 'automatic',
-    platform: 'browser',
-    target: 'es2022',
-    // The harness renders the REAL component, so React and ReactDOM come along; the workspace
-    // aliases are the same ones `sim:build` uses, kept in step deliberately.
-    // React is a dependency of `apps/web`, not of the root, and pnpm does not hoist. Resolution is
-    // pointed at both trees rather than duplicating React into the root for one harness.
-    nodePaths: [join(ROOT, 'node_modules'), join(ROOT, 'apps/web/node_modules')],
-    loader: { '.tsx': 'tsx' },
-    alias: {
-      '@orrery/sim-sdk': join(ROOT, 'packages/sim-sdk/src/index.ts'),
-      '@orrery/sim-sdk/protocol': join(ROOT, 'packages/sim-sdk/src/protocol.ts'),
-      '@orrery/sim-sdk/state': join(ROOT, 'packages/sim-sdk/src/state.ts'),
-      '@orrery/clock': join(ROOT, 'packages/clock/src/index.ts'),
-      '@orrery/rng': join(ROOT, 'packages/rng/src/index.ts'),
-    },
-    logLevel: 'error',
-    // A build that silently drops a failed import produces a harness that mounts nothing and passes
-    // every assertion that does not touch the frame.
-    logLimit: 0,
-  });
-};
 
 const run = async () => {
   if (!existsSync(REGISTRY)) {
