@@ -110,6 +110,10 @@
       "types": "./dist/todo.d.ts",
       "default": "./dist/todo.js"
     },
+    "./seed-banks": {
+      "types": "./dist/seed-banks.d.ts",
+      "default": "./dist/seed-banks.js"
+    },
     "./builder": {
       "types": "./dist/builder.d.ts",
       "default": "./dist/builder.js"

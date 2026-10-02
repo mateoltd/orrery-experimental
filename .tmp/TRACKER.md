@@ -66,9 +66,9 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 75 |
+| Commits | 77 |
 | Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
-| Integration tests | **318** across 25 db files + 6 worker outbox, real Postgres |
+| Integration tests | **324** across 26 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
 | Invariants registered | 29 (8 active) |
@@ -733,6 +733,62 @@ a mode that also cancels somebody's exam. A withdrawn assignment also cannot be 
 because a withdrawal is a statement to students and silently undoing it is worse than doing
 nothing.
 
+#### P5-T15 detail (complete)
+
+**74 REAL QUESTIONS, ACROSS ALL SEVEN TYPES AND ALL THREE RESPONSE PROCESSES.** `D-37`: nothing in
+183 tasks authored a single question, which means every overlap figure in this repository was a
+formula applied to a pool of zero items — and a pool with nothing in it is not a small pool, it is
+proof that the code path runs. The regression test for `D-37` is now simply "every bank has more
+than 20 items", and it fails if anyone deletes the content to make a build faster.
+
+**BANK B IS UNDER THE 40-ITEM THRESHOLD ON PURPOSE, AND THAT IS THE POINT.** Bank A (biology, 49
+items) is at the target. Bank B (physics, 25) is not, and `seedBankReport()` says so as a TASK: "needs
+43 more item(s) … Forces: +29". The alternative was to author 40 in both banks so every test is green
+and the report is a decoration — which is the failure `D-37` is about. A health check that has never
+been seen to fail is not a health check.
+
+**THE SUBJECT MATTER IS BORING ON PURPOSE.** Photosynthesis and forces have unambiguous keys, which
+matters for a bank whose purpose is to be drawn at random by thirty students: an item with two
+defensible answers produces a grade dispute that has nothing to do with the anti-collusion maths.
+
+**THE AUTHORED CONTENT IS PUT THROUGH THE REAL PUBLISH GATES, NOT A SYNTHETIC POOL.** Every other
+integration test builds its pool inline — six items, no metadata problems — which proves the gates
+work but not that the SEED CONTENT works, and the seed content is the part a teacher actually sits.
+So the installer runs `validateForPublish` over every seeded pool and fails on a missing topic or a
+pool that cannot fill its own draw.
+
+**FOUR DEFECTS THE CONTENT TESTS CAUGHT IN THE CONTENT ITSELF.** Six short-text items were first
+authored through the choice helper, which spread the answer STRING into one-letter options; a
+`bio-photosyn-15` prompt named its own answer in the sentence asking for it; no `TRUE_FALSE` items
+existed at all; and `MIN_HEALTHY_ITEM_COUNT` was imported from the wrong module, so three assertions
+compared numbers against `undefined` and reported nonsense. The compiler found the string spread
+before the tests did.
+
+**A "IS THIS A QUESTION?" ASSERTION REJECTED FIVE LEGITIMATE ITEMS IN A ROW** and was replaced with
+one that catches a real defect: two items in a randomly drawn pool asking the same question, because
+a student who meets the same item twice has been given free marks by the draw rather than by their
+own work.
+
+**`revision` IS NOT BUMPED, BECAUSE `revision` IS WHAT A SITTING ATTEMPT IS PINNED TO.** The
+installer upserts, and the upsert's `update` branch runs on every reinstall — so a second `db:seed`
+on an unchanged file marked all 74 items as revised. A no-op installer that quietly invalidates
+thirty students' papers is worse than one that does not update at all. Authored edits go through the
+authoring API, which does bump it; this is a fixture loader.
+
+**THE RATIONALE IS NOT PERSISTED, AND THAT IS A DECISION.** `Question` has no author-notes column,
+and the first version abused `cognitiveDemand` (a display-only field) to carry one. The source file
+is the authoring record — and that is also safer, because an author's reasoning cannot be projected
+to a student by accident when it is not in the row at all.
+
+**A ONE-LETTER ANSWER KEY IS NOT A LEAK.** `INV-Q-1` on real rows: the structural assertion is that
+`studentFacingQuestion` has no field a key could hide in. The substring check is a second line of
+defence and applies only where the key is long enough to be distinctive AND does not already appear
+in the prompt — a NUMERIC key of "12 units" legitimately does, because 12 is data the question gave.
+
+#### P5-T15 evidence
+- 1167 unit (20 new content tests), 324 db integration (6 new). 8/8 gates, lint 0, typecheck 0,
+  image builds.
+
 #### P5-T13 detail (complete)
 
 **D-9 WAS A CIRCULAR DEPENDENCY AND THIS IS THE CUTTING POINT.** `P16-T1` needed to know what may
@@ -1243,7 +1299,7 @@ pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
 pnpm run test           # 1125 unit
-pnpm run test:integration   # 318 db + 6 worker, needs DATABASE_URL
+pnpm run test:integration   # 324 db + 6 worker, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
 
