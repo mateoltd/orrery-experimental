@@ -650,24 +650,24 @@ layer and was right every time. All of them now ask `isSameActor` from `packages
 "is this mine?" is an identity question and a codebase that answers it inline in a dozen places
 has a dozen slightly different answers.
 
-### P5 — Assignments, pinning, question banks & blueprints · **IN PROGRESS** (56h est.)
+### P5 — Assignments, pinning, question banks & blueprints · **DONE** (56h est.)
 
 | Task | Status | Commit | Note |
 |---|---|---|---|
 | P5-T1 `Assignment` with a pinned `resourceVersionId`, window, attempts, weight, late penalty, policy override | **DONE** | `598cfb2` | `packages/contracts/src/policy/` + `packages/db/src/assignments.ts`. The pin is STRUCTURAL: `resourceId` is derived from the version, and there is no parameter for "the current version". |
 | P5-T2 `AssignmentStudentOverride` | **DONE** | `ee74d2e` | `assignment-overrides.ts`. A mid-exam grant is an **additive row**, never a rewrite of `deadlineAt` (C14). |
-| P5-T3 Assignment builder, preview as student | **DONE** | *(next commit)* | `packages/db/src/builder.ts`. The preview runs the SAME resolution path as an attempt. |
-| P5-T4 Student "to do": available / upcoming / completed / expired | **DONE** | *(next commit)* | `packages/db/src/todo.ts`. An ATTEMPT beats the window, always. |
+| P5-T3 Assignment builder, preview as student | **DONE** | `64a2dc2` | `packages/db/src/builder.ts`. The preview runs the SAME resolution path as an attempt. |
+| P5-T4 Student "to do": available / upcoming / completed / expired | **DONE** | `6a4eedd` | `packages/db/src/todo.ts`. An ATTEMPT beats the window, always. |
 | P5-T5 Pinning invariant enforcement: (a) lint rule, (b) slot-level mutation test | **DONE** | `ede383a` | (a) the gate exists (ADR-0025). (b) the slot-level paper is **mutation-verified** per ADR-0027. |
-| P5-T6 QuestionBank CRUD, sharing, move/duplicate | **DONE** | `ca0f0b1` | `packages/db/src/question-banks.ts`. Banks are PRIVATE or classroom-shared, never public. |
+| P5-T6 QuestionBank CRUD, sharing, move/duplicate | **DONE** | `ca0f0b1`, `fb66479` | `question-banks.ts` + `question-bank-items.ts`. Banks are PRIVATE or classroom-shared, never public. Move/duplicate were MISSING at `ca0f0b1`; added with 12 tests, and the test caught an authorisation defect. |
 | P5-T7 `poolHealth`: M vs N, distinct, expected overlap | **DONE** | `96af48c` | `packages/contracts/src/pool-health/`. **I wrote a wrong formula, justified it as an improvement, and brute force proved the plan right.** |
 | P5-T8 Blueprint + worst-case coverage | **DONE** | `ca0f0b1` | `packages/contracts/src/blueprint/`. Exact, not sampled (P-18). |
 | P5-T9 `AssessmentSpec` slots + `variantMap` resolution | **DONE** | `65db2b4` | `packages/db/src/slots.ts`. One draw, one place, per-slot forked streams. | |
 | P5-T10 Version publish snapshots every drawable question | **DONE** | `0980680` | `packages/db/src/version-snapshot.ts`. INV-BANK-3. |
-| P5-T11 "Too similar" guard | **DONE** | `0980680` | Stem trigram + answer key + numeric, with operators PRESERVED. |
-| P5-T13 Interop skeleton, `ExternalBinding` | NOT STARTED | | |
+| P5-T11 "Too similar" guard | **DONE** | `0980680`, `fb66479` | Stem trigram + answer key + numeric, with operators PRESERVED. |
+| P5-T13 Interop skeleton, `ExternalBinding`, sealed/released boundary type (`D-9`) | **DONE** | `1fc3968` | New `packages/interop`, no dependencies. The sealed arm has NO score field to omit, so a leak is a compile error (`D-25`). |
 | P5-T14 `can()` matrix for the new P5 types | **DONE** | `8e7d953` | Three types added with full rules. **The tests found a bank readable by its own students.** |
-| P5-T15 Author the seed banks | NOT STARTED | | D-37: nothing in 183 tasks authored a single question. |
+| P5-T15 Author the seed banks | **DONE** | `8fd460b` | 74 authored items, 6 pools, all 7 question types. Bank B is UNDER the 40-item target ON PURPOSE so the shortfall report has a real failing pool to report. |
 | P5-T12 Publish gates: pool, blueprint, metadata, `INV-SLOT-1` | **DONE** | `8df711d` | `packages/db/src/publish-gates.ts`. **Reports every problem, not the first.** |
 
 #### P5-T1 detail (complete)
@@ -1322,6 +1322,34 @@ untouched.
 #### P5-T1 evidence
 - 327 contracts unit (16 new for the policy), 268 db integration (10 new).
 - 8/8 gates, lint 0, typecheck 0, image builds.
+**Exit criteria, checked:**
+
+| Criterion | Evidence |
+|---|---|
+| The pinning invariant is proven by a test that mutates the resource post-assignment and asserts identical output | `packages/db/src/pinning.integration.test.ts`, plus `gate:pinning` in `pnpm run gates` |
+| A pool can be published only if drawable | `publish-gates.ts` — `POOL_UNDERSIZED` and `INV-SLOT-1` referential integrity, asserted over the SEEDED pools in `seed-banks.integration.test.ts` |
+| 5 students with different seeds demonstrably receive different items | `pinning.integration.test.ts`, the per-seed sweep in `builder.integration.test.ts`, and a draw over every authored pool asserting `drawCount` DISTINCT items. `poolHealth` reports the exact per-cohort overlap for each |
+| Blueprint coverage reports worst case honestly | `packages/contracts/src/blueprint/` — exact per-pool worst case, cross-checked against brute force |
+
+**Final P5 state: 1,170 unit, 336 db integration across 27 files, 6 worker integration, 8/8 gates,
+lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summary-row placeholders.
+
+**What P5 did NOT do, deliberately:**
+
+- **It did not author enough items to make every pool healthy.** Bank B is short by 43 and the report
+  says so in a number. `D-37`'s tooling exists to make that visible; padding the bank to 40 items
+  would have made it invisible.
+- **It did not add an interop WRITE path.** `ExternalBinding` has no creator, because which actor
+  may create one is a P16 question with its own authz surface, and inventing an answer here would
+  put an unattended write path into a table whose comment says every write is an audited event.
+- **It did not implement a question EDITOR.** T6 named bank CRUD, not a stem editor, so the seed
+  banks are authored in source — which is why their rationales are not in the database.
+- **It did not trust a DONE row.** `P5-T6` sat at DONE for three commits with two of its five
+  operations missing, and `P5-T11` sat at DONE with a comment describing a rule the code did not
+  implement. Both were found by re-reading the task text against the code rather than by a failing
+  test. A green suite and a DONE row are not the same as a completed task.
+
+
 
 ### P6 … P17 — **NOT STARTED**
 
