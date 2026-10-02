@@ -39,7 +39,6 @@ import {
   type SimConnection,
   type Stepper,
 } from '@orrery/sim-sdk';
-import { checksumState } from '@orrery/sim-sdk/state';
 import { apex, flightTime, type ProjectileParams, range, simulate, trajectory } from './model.js';
 
 const SIM_ID = 'maths.projectile-motion';
@@ -265,15 +264,26 @@ export function startSim(document_: Document, window_: Window, parent: Window | 
     refresh();
   };
 
+  /**
+   * The state, and nothing else.
+   *
+   * ## NO CHECKSUM IN HERE
+   *
+   * This carried its own `checksum`, computed over `{ params, t }` — while the FRAME carries a checksum
+   * computed over the whole state, by the SDK. Two answers to one question, disagreeing by construction,
+   * and a host that verified the frame checksum against the state would conclude the state was corrupt.
+   *
+   * The frame's checksum is the one that counts, and it belongs to the protocol rather than to the
+   * simulation: `plans/10` §5.1 puts it on `sim:state`, and the SDK computes it from `getState()` so no
+   * simulation can be inconsistent with it. Note what it is for -- `packages/sim-sdk/src/state.ts` says it
+   * plainly, and it is worth repeating here: a change detector, never a security control.
+   */
   const snapshot = (): Record<string, unknown> => ({
     params,
     t: stepper.get().t,
     maxTime: stepper.get().maxTime,
     stepSize: stepper.get().stepSize,
     running,
-    // The checksum is over the VALUES, so a state that round-trips byte-identically is provably the
-    // same state rather than merely a similar one.
-    checksum: checksumState({ params, t: stepper.get().t }),
   });
 
   const handlers: BridgeHandlers = {

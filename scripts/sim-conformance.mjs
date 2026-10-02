@@ -405,7 +405,7 @@ const CELLS = [
           if (checksum === null || checksum === '') return 'the state carried no checksum';
           // Re-derived in the PAGE from the state itself, so a fabricated checksum cannot pass.
           return checksum ===
-            (await page.evaluate((value) => globalThis.__conformance.log.checksumOf(value), state))
+            (await page.evaluate((value) => globalThis.__conformance.checksumOf(value), state))
             ? null
             : `the checksum does not match the state it describes (${String(checksum)})`;
         }

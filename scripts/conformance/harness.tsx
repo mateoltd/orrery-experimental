@@ -127,8 +127,8 @@ createRoot(mountPoint).render(
       onAnswer={(answer) => {
         log.answers.push(answer);
       }}
-      onState={(state) => {
-        log.states.push({ state, checksum: readChecksum(state) });
+      onState={(state, checksum) => {
+        log.states.push({ state, checksum });
       }}
       onFallback={(reason) => {
         log.fallbacks.push(reason);
@@ -136,12 +136,6 @@ createRoot(mountPoint).render(
     />
   </StrictMode>,
 );
-
-function readChecksum(state: unknown): string | null {
-  if (typeof state !== 'object' || state === null) return null;
-  const checksum = (state as { checksum?: unknown }).checksum;
-  return typeof checksum === 'string' ? checksum : null;
-}
 
 const observer = new MutationObserver(() => {
   const host = document.querySelector('.sim-host');

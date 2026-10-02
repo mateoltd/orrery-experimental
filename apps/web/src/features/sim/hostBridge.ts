@@ -83,6 +83,21 @@ export interface HostState {
   readonly framesIgnored: number;
   readonly answer: unknown;
   readonly lastState: unknown;
+  /**
+   * The checksum the sim sent WITH that state.
+   *
+   * ## WHY THE HOST KEEPS IT
+   *
+   * `sim:state` carries `checksum` beside `state`, and the first version threw it away — so the host held
+   * a state it could not verify, and `restoreState` on a later mount had nothing to compare against. The
+   * whole point of a checksum on a wire format is that the RECEIVER checks it; a checksum only the sender
+   * ever looks at is decoration.
+   *
+   * Kept beside the state rather than inside it: the state is the simulation's document, and the checksum
+   * is the protocol's claim about that document. Mixing them lets a sim restate its own checksum over a
+   * subset, which is how the projectile sim ended up with two disagreeing answers to one question.
+   */
+  readonly lastChecksum: string | null;
 }
 
 /**
@@ -106,6 +121,7 @@ export const initialHostState = (): HostState => ({
   framesIgnored: 0,
   answer: null,
   lastState: null,
+  lastChecksum: null,
 });
 
 export interface HostInput {
@@ -409,7 +425,12 @@ export const createHostBridge = (input: HostInput): HostBridge => {
           return counted(state);
         }
         case 'sim:state': {
-          state = { ...state, lastState: (frame as { state: unknown }).state };
+          const { state: payload, checksum } = frame as { state: unknown; checksum?: unknown };
+          state = {
+            ...state,
+            lastState: payload,
+            lastChecksum: typeof checksum === 'string' ? checksum : null,
+          };
           return counted(state);
         }
         case 'sim:answer': {
@@ -507,8 +528,24 @@ export const createHostBridge = (input: HostInput): HostBridge => {
     },
     emit(frame: HostFrame): void {
       // Every builder above is a value producer, not a sender. Routing delivery through one method
-      // means there is exactly one place to instrument and exactly one place to forget.
-      input.transport.post?.(frame);
+      // means there is exactly one place to instrument -- and, more importantly, exactly one place that
+      // CAN FORGET.
+      //
+      // ## THE NONCE IS STAMPED HERE, NOT IN THE BUILDERS
+      //
+      // Every builder except `initFrame` returned a frame with NO nonce, and the sim's SDK drops any
+      // frame whose nonce does not match: `isAuthenticated` is `source === expected && candidate ===
+      // nonce`. So `sim:visibility`, `sim:command`, `sim:setParams`, `sim:requestState` and `sim:teardown`
+      // were all silently discarded — five of the protocol's frames, delivered and thrown away. Only the
+      // handshake worked, because `connectSim` does not authenticate the frame that authorises it.
+      //
+      // That is the worst shape this bug could have taken: the handshake completing proved nothing about
+      // anything after it, and a host whose pause, step, reset, state-capture and teardown were all no-ops
+      // looked perfectly healthy in every test.
+      //
+      // Stamped centrally, no builder can forget, and a frame that arrives without a nonce is now
+      // impossible to construct by accident.
+      input.transport.post?.({ ...frame, nonce: input.nonce } as HostFrame);
     },
     get(): HostState {
       return state;

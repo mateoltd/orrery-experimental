@@ -66,7 +66,7 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 97 |
+| Commits | 98 |
 | Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
 | Integration tests | **336** across 27 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
@@ -1359,7 +1359,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T6 Sandbox host: `sandbox="allow-scripts"`, dedicated origin, **the exact CSP from `03` §1** (`B6`), nonce messaging, resize protocol, offline check, failure UI | **DONE** | *(next commit)* | `packages/interop/src/csp.ts` (B6 as 15 tests), `apps/web/src/features/sim/`. `SIM_ORIGIN` is REQUIRED in config. |
 | P6-T7 `embedSimulation` block, seed policies, lazy mount, static fallback, print fallback | **DONE** | *(next commit)* | `apps/web/src/features/sim/embedSimulation.ts`, 20 tests. A lesson block is a PINNED reference, so a DISABLED version still renders. |
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | *(next commit)* | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is P6-T12-scope. |
-| P6-T9 Conformance matrix over every registered sim | **IN PROGRESS** | *(next commit)* | `scripts/sim-conformance.mjs` + Chromium: **13 of 14 cells green** for `maths.projectile-motion`, including a real sandbox-escape attempt from inside the frame. |
+| P6-T9 Conformance matrix over every registered sim | **DONE** | *(next commit)* | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells** for `maths.projectile-motion`, sandbox escape attempted from inside the frame, grade 4/4 in bare Node. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new` | **DONE** | `677f2b2` | `sims/_template/`, `sims/README.md`, `scripts/sim-new.mjs`. The scaffold is asserted CLEAN, not merely created. The dev playground is NOT DONE — see the note. |
 | P6-T11 24 gold sims | NOT STARTED | | |
 
@@ -1862,18 +1862,35 @@ on mobile Safari and in a bfcache restore.
 handler reporting as well sent two `sim:state` frames per request — and a host that debounces checkpoints
 would persist both.
 
-**WHAT IS STILL BROKEN, STATED PLAINLY.** One cell of fourteen: hiding the tab does not produce a NEW
-state. It is NOT a measurement artefact — the sim's own receive log shows `sim:visibility` and
-`sim:requestState` arriving, and an error listener installed inside the frame reports nothing thrown, so
-the SDK's `isAuthenticated` is dropping frames the host posts while accepting byte-identical frames
-posted from Playwright. That contradiction is unresolved and is recorded rather than papered over. The
-next step is to compare `event.source` identity between the two posting paths.
+**EVERY HOST FRAME EXCEPT `sim:init` WAS BUILT WITHOUT A NONCE.** The sim's `isAuthenticated` is
+`source === expected && candidate === nonce`, so `sim:visibility`, `sim:command`, `sim:setParams`,
+`sim:requestState` and `sim:teardown` were **delivered and thrown away**: pause, step, reset, state
+capture and teardown were all no-ops. Only the handshake worked, because `connectSim` does not
+authenticate the frame that authorises it — so a fully green unit suite accompanied a simulation that
+ignored its host completely. The nonce is now stamped in `emit`, where no builder can forget it, and a
+table-driven test asserts it on all six frames.
+
+**THE HOST THREW AWAY THE CHECKSUM THAT CAME WITH A STATE.** `sim:state` carries `checksum` beside
+`state`; the host stored only the state. So it held a document it could not verify, and `restoreState` on
+a later mount had nothing to compare against — a checksum only the sender ever reads is decoration. The
+host now keeps it beside the state, because the state is the simulation's document and the checksum is
+the protocol's claim about it.
+
+**THE SIM EMBEDDED ITS OWN CHECKSUM INSIDE THE STATE.** Computed over `{ params, t }`, while the frame's
+is computed over the whole state by the SDK. Two answers to one question, disagreeing by construction,
+and a host that verified one against the other would conclude the state was corrupt. The state is now
+just the state.
+
+**WHAT THIS COST, STATED PLAINLY.** Eleven cells of the matrix were red because five of the protocol's
+frames were being discarded at the far end of a connection whose handshake completed perfectly. Every
+unit test in the repository passed throughout. A simulation platform is not a protocol on paper; the
+only thing that found this was running the thing.
 
 #### P6-T9 evidence so far
-- 1485 unit (121 sim-sdk, 92 in `apps/web/src/features/sim`), 336 db integration, 8/8 gates, lint 0,
+- 1495 unit (121 sim-sdk, 257 in `apps/web`), 336 db integration, 8/8 gates, lint 0,
   typecheck 0, image builds green.
-- `pnpm sim:conformance`: **13/14** cells for `maths.projectile-motion`, graded 4/4 in bare Node from the
-  sim's own reported state. One cell failing, cause localised above.
+- `pnpm sim:conformance`: **14/14** cells for `maths.projectile-motion`, graded 4/4 in bare Node from the
+  sim's own reported state, checksum re-derived in the page rather than trusted from the sim.
 
 
 #### P6-T7 detail (complete)

@@ -89,7 +89,11 @@ export interface SimulationFrameProps {
   /** Injected for tests: the app origin the probe presents. */
   readonly appOrigin?: string;
   readonly onAnswer?: (answer: unknown) => void;
-  readonly onState?: (state: unknown) => void;
+  /**
+   * The state and the checksum the sim sent with it. Both, or the receiver cannot check anything --
+   * `restoreState` needs the checksum the state was stored with to know the stored bytes are intact.
+   */
+  readonly onState?: (state: unknown, checksum: string | null) => void;
   readonly onFallback?: (reason: BlockedReason) => void;
 }
 
@@ -467,8 +471,10 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
   }, [state.answer]);
 
   useEffect(() => {
-    if (state.lastState !== null) callbacksRef.current.onState?.(state.lastState);
-  }, [state.lastState]);
+    if (state.lastState !== null) {
+      callbacksRef.current.onState?.(state.lastState, state.lastChecksum);
+    }
+  }, [state.lastState, state.lastChecksum]);
 
   // Visibility, and the STATE CAPTURE that goes with it.  (P6-T9)
   //

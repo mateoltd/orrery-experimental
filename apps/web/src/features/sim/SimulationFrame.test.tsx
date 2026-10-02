@@ -400,9 +400,11 @@ describe('delivering frames to the frame', () => {
     // BOTH frames, in order: pause the timeline AND ask for the state. They are the same event seen
     // from two directions — a hidden tab is the last moment before a student closes the laptop.
     // The LAST TWO, because the call list also contains `sim:init`.
+    // The nonce is on both, because `emit` stamps it: without a matching nonce the sim's SDK drops the
+    // frame, which is how pause and state capture were silently no-ops for a whole commit.
     expect(calls.slice(-2).map((call) => call[0])).toEqual([
-      { type: 'sim:visibility', visible: false },
-      { type: 'sim:requestState', reason: 'blur' },
+      { type: 'sim:visibility', visible: false, nonce: 'nonce-abc' },
+      { type: 'sim:requestState', reason: 'blur', nonce: 'nonce-abc' },
     ]);
   });
 
@@ -411,7 +413,7 @@ describe('delivering frames to the frame', () => {
     const { calls } = watchPosts(container);
     fireLoad(container);
     unmount();
-    expect(calls[calls.length - 1]).toEqual([{ type: 'sim:teardown' }, '*']);
+    expect(calls[calls.length - 1]).toEqual([{ type: 'sim:teardown', nonce: 'nonce-abc' }, '*']);
   });
 
   it('does NOT send a second `sim:init` when the frame fires load twice', () => {

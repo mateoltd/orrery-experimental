@@ -608,3 +608,114 @@ describe('probing the sim origin', () => {
     expect(calls).toBe(2);
   });
 });
+
+/**
+ * Every host frame carries the nonce.  (P6-T9)
+ *
+ * ## WHY THIS TEST EXISTS
+ *
+ * `sim:visibility`, `sim:command`, `sim:setParams`, `sim:requestState` and `sim:teardown` were all built
+ * without a nonce, and the sim's SDK drops any frame whose nonce does not match. Five of the protocol's
+ * frames were delivered and thrown away: pause, step, reset, state capture and teardown were all no-ops,
+ * and the handshake still completed -- because `connectSim` does not authenticate the frame that
+ * authorises it. A fully green unit suite, and a simulation that ignored its host.
+ *
+ * The nonce is stamped in `emit`, so this asserts the invariant at the only place it can be broken.
+ */
+describe('the nonce on every host frame', () => {
+  const posted: Array<Record<string, unknown>> = [];
+  const input = (): HostInput => ({
+    ...baseInput(),
+    transport: {
+      subscribe: () => () => {},
+      post: (frame) => {
+        posted.push(frame as Record<string, unknown>);
+      },
+    },
+  });
+
+  const built: Array<[string, (bridge: ReturnType<typeof createHostBridge>) => unknown]> = [
+    ['sim:init', (b) => b.initFrame()],
+    ['sim:command', (b) => b.command('play')],
+    ['sim:setParams', (b) => b.setParams({ speed: 30 })],
+    ['sim:requestState', (b) => b.requestState('save')],
+    ['sim:visibility', (b) => b.visibility(false)],
+    ['sim:teardown', (b) => b.teardown()],
+  ];
+
+  it.each(built)('%s is emitted with the nonce', (type, build) => {
+    posted.length = 0;
+    const bridge = createHostBridge(input());
+    bridge.emit(build(bridge) as never);
+    expect(posted).toHaveLength(1);
+    expect(posted[0]?.type).toBe(type);
+    // The sim's `isAuthenticated` is exactly this comparison, so a frame without a matching nonce is
+    // discarded by the other end with no error anywhere.
+    expect(posted[0]?.nonce).toBe('nonce-abc');
+  });
+
+  it('emits a DIFFERENT nonce when the mount is different', () => {
+    posted.length = 0;
+    const bridge = createHostBridge({ ...input(), nonce: 'nonce-second' });
+    bridge.emit(bridge.requestState('blur') as never);
+    expect(posted[0]?.nonce).toBe('nonce-second');
+  });
+});
+
+/**
+ * The host KEEPS the checksum the sim sent with its state.  (P6-T9)
+ *
+ * `sim:state` carries `checksum` beside `state`. The first version stored only the state, so the host held
+ * a document it could not verify and `restoreState` on a later mount had nothing to compare against. A
+ * checksum only the sender ever reads is decoration.
+ */
+describe('the checksum that arrives with a state', () => {
+  const harness = (over: Partial<HostInput> = {}) => {
+    const posted: unknown[] = [];
+    const input: HostInput = {
+      ...baseInput(),
+      transport: {
+        subscribe: (handler) => {
+          handlers.push(handler);
+          return () => {};
+        },
+        post: (frame) => {
+          posted.push(frame);
+        },
+      },
+      ...over,
+    };
+    return { input, posted };
+  };
+  let handlers: Array<(frame: unknown, source: unknown) => void> = [];
+
+  it('is kept beside the state, not discarded', () => {
+    handlers = [];
+    const bridge = createHostBridge(harness().input);
+    handlers[0]?.(
+      { type: 'sim:state', nonce: 'nonce-abc', state: { t: 1 }, checksum: 'abc123' },
+      FRAME,
+    );
+    expect(bridge.get().lastState).toEqual({ t: 1 });
+    expect(bridge.get().lastChecksum).toBe('abc123');
+  });
+
+  it('is null when the sim sends a state with no checksum, rather than a fake one', () => {
+    handlers = [];
+    const bridge = createHostBridge(harness().input);
+    // A missing checksum is the receiver's problem to notice. Substituting the state's length, or any
+    // other value that is always present, would turn a detectable corruption into an undetectable one.
+    handlers[0]?.({ type: 'sim:state', nonce: 'nonce-abc', state: { t: 1 } }, FRAME);
+    expect(bridge.get().lastChecksum).toBeNull();
+  });
+
+  it('is CLEARED when the connection restarts, so a new mount cannot inherit an old state', () => {
+    handlers = [];
+    const bridge = createHostBridge(harness().input);
+    handlers[0]?.({ type: 'sim:state', nonce: 'nonce-abc', state: { t: 1 }, checksum: 'a' }, FRAME);
+    expect(bridge.get().lastChecksum).toBe('a');
+    bridge.dispose();
+    expect(bridge.get().lastChecksum).toBeNull();
+    expect(bridge.get().lastState).toBeNull();
+  });
+});
