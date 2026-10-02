@@ -99,6 +99,14 @@
     "./seed-banks": {
       "types": "./dist/seed-banks/index.d.ts",
       "default": "./dist/seed-banks/index.js"
+    },
+    "./jsonschema": {
+      "types": "./dist/jsonschema/index.d.ts",
+      "default": "./dist/jsonschema/index.js"
+    },
+    "./sim-manifest": {
+      "types": "./dist/sim-manifest/index.d.ts",
+      "default": "./dist/sim-manifest/index.js"
     }
   },
   "scripts": {

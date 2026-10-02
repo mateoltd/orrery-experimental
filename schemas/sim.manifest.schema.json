@@ -1,0 +1,443 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://orrery.example/schemas/sim.manifest.schema.json",
+  "title": "Orrery simulation manifest",
+  "description": "sim.manifest.json is the contract between a simulation and the host. It is the source of truth; packages/contracts/src/sim-manifest/index.ts mirrors it in Zod and the two are asserted identical by a test.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "version",
+    "title",
+    "summary",
+    "licence",
+    "provenance",
+    "protocol",
+    "subjects",
+    "ageRange",
+    "accessibility",
+    "entry",
+    "grader",
+    "budget",
+    "params",
+    "capabilities",
+    "stateSchema",
+    "answerSchema",
+    "lifecycle"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "#/$defs/simId"
+    },
+    "version": {
+      "$ref": "#/$defs/semver"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 120
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 400
+    },
+    "authors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "licence": {
+      "$ref": "#/$defs/licence"
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    },
+    "protocol": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1
+    },
+    "subjects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/subject"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "ageRange": {
+      "$ref": "#/$defs/ageRange"
+    },
+    "accessibility": {
+      "$ref": "#/$defs/accessibility"
+    },
+    "entry": {
+      "$ref": "#/$defs/relativeEntry"
+    },
+    "grader": {
+      "$ref": "#/$defs/relativeEntry"
+    },
+    "styles": {
+      "$ref": "#/$defs/relativeEntry"
+    },
+    "budget": {
+      "$ref": "#/$defs/budget"
+    },
+    "params": {
+      "$ref": "#/$defs/params"
+    },
+    "capabilities": {
+      "$ref": "#/$defs/capabilities"
+    },
+    "stateSchema": {
+      "$ref": "#/$defs/plainObjectSchema"
+    },
+    "answerSchema": {
+      "$ref": "#/$defs/plainObjectSchema"
+    },
+    "grading": {
+      "$ref": "#/$defs/grading"
+    },
+    "lifecycle": {
+      "$ref": "#/$defs/lifecycle"
+    },
+    "conformance": {
+      "$ref": "#/$defs/conformance"
+    },
+    "deprecated": {
+      "type": "boolean",
+      "default": false
+    },
+    "replacedById": {
+      "$ref": "#/$defs/simId"
+    }
+  },
+  "$defs": {
+    "simId": {
+      "description": "subject.slug. Two dots is an error, because every id is exactly one.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z0-9]+(?:-[a-z0-9]+)*)+$",
+      "maxLength": 80
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z-.]+)?$"
+    },
+    "subject": {
+      "type": "string",
+      "enum": [
+        "maths",
+        "physics",
+        "chemistry",
+        "biology",
+        "computing",
+        "astronomy",
+        "geography",
+        "computing-science",
+        "general-science"
+      ]
+    },
+    "licence": {
+      "description": "No exceptions. This is how we avoid shipping something we cannot license.",
+      "type": "string",
+      "enum": ["CC-BY-4.0", "CC-BY-SA-4.0", "CC0-1.0", "MIT", "OFL-1.1", "PUBLIC-DOMAIN"]
+    },
+    "provenance": {
+      "description": "INSPIRED_BY:<ref> is respected and recorded, not laundered.",
+      "type": "string",
+      "pattern": "^(ORIGINAL|PORTED|INSPIRED_BY:.+)$"
+    },
+    "ageRange": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 3,
+        "maximum": 21
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "accessibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keyboard", "screenReaderSummary", "reducedMotion", "textAlternative"],
+      "properties": {
+        "keyboard": {
+          "type": "boolean"
+        },
+        "screenReaderSummary": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 600
+        },
+        "reducedMotion": {
+          "type": "boolean"
+        },
+        "textAlternative": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 600
+        },
+        "focusOrder": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      }
+    },
+    "relativeEntry": {
+      "description": "Always relative and always inside the sim directory. An absolute path or a URL would make the bundle unhashable and unreachable from the sim origin. The negative lookaheads reject `..` segments: the character class alone permits them, because `.` is an allowed character, so `./../secrets/browser.js` matched the first version of this pattern.",
+      "type": "string",
+      "pattern": "^\\./(?!\\.\\.\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[A-Za-z0-9._/-]+\\.(?:js|css)$"
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxBytes"],
+      "properties": {
+        "maxBytes": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 1200000
+        }
+      }
+    },
+    "params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "properties"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "object"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/paramProperty"
+          }
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "default": []
+        }
+      }
+    },
+    "paramProperty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "label", "default"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["number", "integer", "boolean", "string", "enum"]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "unit": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "step": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "default": {},
+        "enumValues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 300
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "grading", "randomised", "audio", "webgl", "stepper"],
+      "properties": {
+        "state": {
+          "type": "boolean"
+        },
+        "grading": {
+          "type": "boolean"
+        },
+        "randomised": {
+          "type": "boolean"
+        },
+        "audio": {
+          "type": "boolean"
+        },
+        "webgl": {
+          "type": "boolean"
+        },
+        "stepper": {
+          "type": "boolean"
+        },
+        "scenarios": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          },
+          "uniqueItems": true,
+          "default": []
+        }
+      }
+    },
+    "plainObjectSchema": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "object"
+        }
+      }
+    },
+    "grading": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "maxPoints", "partialCredit"],
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": ["EXACT", "TOLERANCE", "SET", "NUMERIC", "RUBRIC"]
+        },
+        "maxPoints": {
+          "type": "number",
+          "minimum": 0.25,
+          "maximum": 100
+        },
+        "tolerance": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "absolute": {
+              "type": "number",
+              "minimum": 0
+            },
+            "relative": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "partialCredit": {
+          "type": "boolean"
+        },
+        "rationaleTemplate": {
+          "type": "string",
+          "maxLength": 500
+        }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["autoPlay", "defaultHeight"],
+      "properties": {
+        "autoPlay": {
+          "type": "boolean",
+          "default": false
+        },
+        "defaultHeight": {
+          "type": "integer",
+          "minimum": 240,
+          "maximum": 1200
+        },
+        "minHeight": {
+          "type": "integer",
+          "minimum": 160,
+          "maximum": 1200
+        },
+        "aspectRatio": {
+          "type": "string",
+          "pattern": "^[1-9]\\d*/[1-9]\\d*$"
+        }
+      }
+    },
+    "conformance": {
+      "description": "Consumed by the automated suite, so it is part of the contract rather than a test fixture.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["script", "expect"],
+      "properties": {
+        "script": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["command"],
+            "properties": {
+              "command": {
+                "type": "string",
+                "enum": ["setParams", "command", "wait", "requestState", "reset"]
+              },
+              "args": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "expect": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "answer": {
+              "type": "object"
+            },
+            "grade": {
+              "type": "number",
+              "minimum": 0
+            },
+            "stateChecksumPrefix": {
+              "type": "string",
+              "minLength": 4
+            }
+          }
+        },
+        "capturesPath": {
+          "type": "string",
+          "pattern": "^\\./"
+        }
+      }
+    }
+  }
+}

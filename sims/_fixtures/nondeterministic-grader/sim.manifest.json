@@ -1,0 +1,67 @@
+{
+  "id": "maths.fixture-nondeterministic",
+  "version": "1.0.0",
+  "title": "A fixture that passes",
+  "summary": "A deliberately valid manifest used to prove sim:validate accepts a good sim.",
+  "authors": ["Fixture"],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["maths"],
+  "tags": [],
+  "ageRange": [13, 18],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A number line with a marker that moves when the parameter changes.",
+    "reducedMotion": true,
+    "textAlternative": "The marker sits at 7 when the value is 7."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "value": {
+        "type": "number",
+        "label": "Value",
+        "minimum": 0,
+        "maximum": 10,
+        "default": 7
+      }
+    },
+    "required": ["value"]
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "grading": {
+    "strategy": "TOLERANCE",
+    "maxPoints": 1,
+    "tolerance": {
+      "absolute": 0.01
+    },
+    "partialCredit": false
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 300,
+    "minHeight": 200,
+    "aspectRatio": "16/10"
+  }
+}

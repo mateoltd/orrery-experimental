@@ -66,7 +66,7 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 81 |
+| Commits | 83 |
 | Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
 | Integration tests | **336** across 27 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
@@ -1351,8 +1351,8 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 
 | Task | Status | Commit | Note |
 |---|---|---|---|
-| P6-T1 `sim-host@1` spec: frames, handshake, capability negotiation, versioning, error taxonomy, timeouts | **DONE** | *(next commit)* | `packages/sim-sdk/`. The protocol is TYPES, not a table: 7 host frames, 8 sim frames, 10 error codes, and a handshake that returns a decision. |
-| P6-T2 `sim.manifest.schema.json` + Zod mirror + `sim:validate` CLI | NOT STARTED | | |
+| P6-T1 `sim-host@1` spec: frames, handshake, capability negotiation, versioning, error taxonomy, timeouts | **DONE** | `8685ed0` | `packages/sim-sdk/`. The protocol is TYPES, not a table: 7 host frames, 8 sim frames, 10 error codes, and a handshake that returns a decision. |
+| P6-T2 `sim.manifest.schema.json` + Zod mirror + `sim:validate` CLI | **DONE** | *(next commit)* | `schemas/sim.manifest.schema.json`, `@orrery/contracts/sim-manifest`, `scripts/sim-validate.mjs`. Seven committed fixtures, six of them deliberately broken. |
 | P6-T3 `@orrery/sim-sdk`: zero runtime deps, host bridge, state serialisation, param binding, `reportAnswer`, a11y helpers, seeded RNG | NOT STARTED | | |
 | P6-T4 Build pipeline: esbuild → hashed, cache-busted ESM + CSS | NOT STARTED | | |
 | P6-T5 Dual-target enforcement: `./browser` + pure `./grader` in Node, zero Node builtins (`B14`) | NOT STARTED | | |
@@ -1412,6 +1412,62 @@ file can exfiltrate a student's work through the download shelf.
 that happened twice in this phase and both are written as promises now.
 
 #### P6-T1 evidence
+#### P6-T2 detail (complete)
+
+**AN UNSUPPORTED KEYWORD IS AN ERROR, NOT A PASS, AND THAT IS THE WHOLE VALIDATOR.** A permissive
+validator ignores `dependentSchemas` or `patternProperties` it does not implement, so a manifest that
+breaks a rule nobody implemented passes, and "we validate against JSON Schema" becomes a claim about
+a subset nobody checked. So `validate()` throws `UnsupportedKeywordError` naming the keyword, and the
+CLI turns that into a build failure. AJV was not added: "no drive-by third-party dependencies", and
+the roster CSV parser is the precedent for exactly this shape of problem.
+
+**TWO IMPLEMENTATIONS OF ONE CONTRACT, SO THE GUARANTEE IS BEHAVIOURAL.** JSON Schema is the source
+of truth and Zod mirrors it. A structural "the Zod looks like the JSON" assertion would pass while
+the two disagreed about a real manifest — so a fixture battery runs through both, and each fixture
+must be accepted by both or rejected by both. Each fixture name is the behaviour it pins.
+
+**THE `relativeEntry` REGEX PERMITTED `./../secrets/browser.js`, SO EVERY `entry` WAS AN ARBITRARY
+READ.** The character class allows `.`, so a `..` segment matched. The first fix was wrong too: the
+leading lookahead was written `(?![.][/](?!...)` — that rejects `./`, not `../`. Only a `..` SEGMENT is
+traversal, so `./a/..b/c.js` stays legal.
+
+**`aspectRatio` IS `W/H`, NOT `W:H`.** I invented the colon format and every valid manifest in the
+plan's own example was rejected by it. A spec's example is part of the spec.
+
+**FIXTURES THAT ARE MEANT TO FAIL ARE THE ONLY WAY TO TEST A GATE.** `sims/_fixtures/` holds seven
+manifests, six broken in exactly one way each. Testing the CLI against valid manifests proves only
+that it says PASS.
+
+**ONE FIXTURE IS BROKEN WITH NO FORBIDDEN CONSTRUCT AT ALL.** `nondeterministic-grader` uses a
+module-level counter: no clock, no I/O, no randomness, so every static rule passes and the source is
+clean. Only running it three times catches it — which is what justifies the run-based check rather
+than treating it as belt-and-braces. Its test asserts the fixture still contains no `Date.now`, so a
+future edit cannot quietly convert it into a static-rule test that keeps failing the CLI for a
+different reason.
+
+**THE FIRST RULE SET MISSED `import { readFileSync } from 'node:fs'` — THE FORM EVERY AUTHOR WRITES.**
+It matched `require('fs')` and dynamic `import('fs')` only, so the io fixture PASSED. `B14`'s "zero
+Node builtins" now covers static, dynamic, `require` and bare side-effect forms.
+
+**`--all` SWEPT UP THE FIXTURES, SO THE GATE WAS PERMANENTLY RED.** Discovery excluded `_template`
+and not `_fixtures`. A leading underscore now means scaffolding, and a gate that is always red is a
+gate nobody reads.
+
+**THREE RULES CANNOT BE SCHEMA RULES, AND SAYING SO IS A TEST.** Inverted age range, a TOLERANCE
+grading block with no bound, a default outside its own range and a deprecation with no successor are
+all in a `rulesOnly` fixture group: accepted by the schema, accepted by Zod, refused by
+`checkManifestRules`. That boundary is now asserted rather than described.
+
+**THE CLI IMPORTS THE SHIPPED MODULES RATHER THAN REIMPLEMENTING THE RULES.** A validation gate with
+its own copy of the rules is a gate that will disagree with the product. Its first version imported
+only the manifest module and every run died with `assertSchemaIsSupported is not a function`, which
+at least failed loudly.
+
+#### P6-T2 evidence
+- 1251 unit (55 new: 12 schema/mirror agreement, 4 rules-only, 12 CLI end-to-end, plus the JSON
+  Schema evaluator). 8/8 gates, lint 0, typecheck 0, image builds, `pnpm run sim:validate` green.
+
+
 - 1196 unit (26 new). 8/8 gates, lint 0, typecheck 0, image builds.
 
 

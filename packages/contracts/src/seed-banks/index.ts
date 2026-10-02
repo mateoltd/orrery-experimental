@@ -1178,7 +1178,7 @@ export interface SeedBankReport {
   readonly authoringTask: string;
 }
 
-const poolOf = (bank: SeedBank, pool: SeedPool): PoolHealth =>
+const poolOf = (pool: SeedPool): PoolHealth =>
   poolHealth({
     itemCount: pool.questionIds.length,
     drawCount: pool.drawCount,
@@ -1222,7 +1222,7 @@ export function seedBankReport(bankId: string): SeedBankReport {
   }
 
   const pools: SeedPoolReport[] = bank.pools.map((pool) => {
-    const health = poolOf(bank, pool);
+    const health = poolOf(pool);
     const problems: string[] = [];
     for (const qid of pool.questionIds) {
       if (!byId.has(qid)) problems.push(`pool references unknown item ${qid}`);

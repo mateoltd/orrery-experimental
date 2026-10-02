@@ -24,6 +24,7 @@
     "gate:bundle": "node scripts/check-bundle-budget.mjs",
     "gate:schema": "node scripts/schema-gate.mjs",
     "gates": "pnpm run gate:schema && pnpm run gate:board && pnpm run gate:invariants && pnpm run gate:pinning && pnpm run gate:bundle && pnpm run gate:authz && pnpm run gate:migrate && pnpm run gate:subjects",
+    "sim:validate": "node scripts/sim-validate.mjs --all",
     "gate:authz": "node scripts/authz-ownership-gate.mjs",
     "test:integration": "pnpm --filter @orrery/db --filter @orrery/worker test:integration",
     "gate:migrate": "node scripts/migration-corpus-gate.mjs",
