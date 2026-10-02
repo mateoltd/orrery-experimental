@@ -66,7 +66,7 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 79 |
+| Commits | 81 |
 | Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
 | Integration tests | **336** across 27 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
@@ -1347,8 +1347,72 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 - **It did not trust a DONE row.** `P5-T6` sat at DONE for three commits with two of its five
   operations missing, and `P5-T11` sat at DONE with a comment describing a rule the code did not
   implement. Both were found by re-reading the task text against the code rather than by a failing
-  test. A green suite and a DONE row are not the same as a completed task.
+  test. A green suite and a DONE row are not the same as a completed task.### P6 — Simulation platform + 24 gold sims · **IN PROGRESS** (92h est.)
 
+| Task | Status | Commit | Note |
+|---|---|---|---|
+| P6-T1 `sim-host@1` spec: frames, handshake, capability negotiation, versioning, error taxonomy, timeouts | **DONE** | *(next commit)* | `packages/sim-sdk/`. The protocol is TYPES, not a table: 7 host frames, 8 sim frames, 10 error codes, and a handshake that returns a decision. |
+| P6-T2 `sim.manifest.schema.json` + Zod mirror + `sim:validate` CLI | NOT STARTED | | |
+| P6-T3 `@orrery/sim-sdk`: zero runtime deps, host bridge, state serialisation, param binding, `reportAnswer`, a11y helpers, seeded RNG | NOT STARTED | | |
+| P6-T4 Build pipeline: esbuild → hashed, cache-busted ESM + CSS | NOT STARTED | | |
+| P6-T5 Dual-target enforcement: `./browser` + pure `./grader` in Node, zero Node builtins (`B14`) | NOT STARTED | | |
+| P6-T6 Sandbox host: `sandbox="allow-scripts"`, dedicated origin, **the exact CSP from `03` §1** (`B6`), nonce messaging, resize protocol, offline check, failure UI | NOT STARTED | | |
+| P6-T7 `embedSimulation` block: manifest-driven param editor, seed policies, lazy mount, static fallback, print fallback, state capture | NOT STARTED | | |
+| P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index, catalogue page | NOT STARTED | | |
+| P6-T9 Conformance matrix over every registered sim | NOT STARTED | | |
+| P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector | NOT STARTED | | |
+| P6-T11 24 gold sims | NOT STARTED | | |
+
+
+
+
+
+
+#### P6-T1 detail (complete)
+
+**THE PROTOCOL IS TYPES, NOT A TABLE.** `plans/10` §2 describes the protocol in a table, and a
+table cannot be wrong in the interesting way: it cannot tell you that a sim sends `sim:answer` with
+a `points` field the host will honour. The frames are discriminated unions, the error codes are a
+closed set, and the handshake returns a decision rather than a boolean. The same types serve the
+host, the sim and the conformance harness, so a sim built against another revision fails the
+handshake loudly instead of half-working.
+
+**THE NONCE IS CHECKED BEFORE ANYTHING IS PARSED, AND `event.source` BEFORE THE NONCE.** The frame is
+cross-origin so `'*'` is the only workable target origin, which means `event.origin` proves nothing
+about who is talking — both checks are load-bearing. And a frame with the wrong nonce has not been
+authenticated, so parsing it is reasoning about attacker input; an expensive parse before a cheap
+comparison is how a page gets slow from somebody else's traffic.
+
+**A PROTOCOL MISMATCH IS A REFUSAL AND A VERSION MISMATCH IS A DEGRADE, AND THAT IS THE DISTINCTION
+THAT IS EASY TO GET WRONG.** A protocol revision change means the frames mean DIFFERENT things, so
+proceeding would be guessing. A version mismatch means the same protocol and a different content
+version, so the right answer is a clear panel and a working lesson. Treating one like the other
+either crashes a classroom or silently mis-renders a sim.
+
+**`GRADE_PREVIEW_ON_WRONG_SURFACE` HAS ITS OWN ERROR BECAUSE THE FRAME IS NOT EVIDENCE.** The
+`sim:gradePreview` frame carries a `surface` field, and a sim could simply declare `'student'` — so
+the host passes the surface IT is rendering and decides. A comment would not survive contact with a
+third-party program that wants to show its own grade.
+
+**`PROHIBITED_API` HAS ITS OWN ERROR CODE BECAUSE IT IS NOT A BUG.** It is a conformance failure AND
+an error, with two different responses: the host shows the fallback, and the registry job fails the
+build. Folded into `INTERNAL`, the second half is lost.
+
+**THE HANDSHAKE BUDGET IS 10 SECONDS, AND THE SHORT VERSION WOULD FAIL THE WRONG STUDENTS.** The
+bundle comes off a separate origin on a cold cache over a school network. A 2 s budget fails
+precisely the students on the worst connections, who then get a fallback panel and learn nothing.
+The cost of the longer budget is a slower fallback for a genuinely broken sim, which is a far better
+place to spend patience.
+
+**`ALLOW-DOWNLOADS` IS REFUSED, WHICH NO CSP DIRECTIVE WOULD HAVE COVERED.** A sim that can write a
+file can exfiltrate a student's work through the download shelf.
+
+**EVERY ERROR ASSERTION CHECKS THE OUTCOME, NOT JUST THAT IT THREW.** A test that asserts
+`rejects.toThrow(/X/)` on a value it has already awaited passes against a rejection it never saw;
+that happened twice in this phase and both are written as promises now.
+
+#### P6-T1 evidence
+- 1196 unit (26 new). 8/8 gates, lint 0, typecheck 0, image builds.
 
 
 ### P6 … P17 — **NOT STARTED**
