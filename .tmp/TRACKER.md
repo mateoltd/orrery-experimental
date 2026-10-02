@@ -66,7 +66,7 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 83 |
+| Commits | 85 |
 | Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
 | Integration tests | **336** across 27 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
@@ -1353,7 +1353,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 |---|---|---|---|
 | P6-T1 `sim-host@1` spec: frames, handshake, capability negotiation, versioning, error taxonomy, timeouts | **DONE** | `8685ed0` | `packages/sim-sdk/`. The protocol is TYPES, not a table: 7 host frames, 8 sim frames, 10 error codes, and a handshake that returns a decision. |
 | P6-T2 `sim.manifest.schema.json` + Zod mirror + `sim:validate` CLI | **DONE** | *(next commit)* | `schemas/sim.manifest.schema.json`, `@orrery/contracts/sim-manifest`, `scripts/sim-validate.mjs`. Seven committed fixtures, six of them deliberately broken. |
-| P6-T3 `@orrery/sim-sdk`: zero runtime deps, host bridge, state serialisation, param binding, `reportAnswer`, a11y helpers, seeded RNG | NOT STARTED | | |
+| P6-T3 `@orrery/sim-sdk`: zero runtime deps, host bridge, state serialisation, param binding, `reportAnswer`, a11y helpers, seeded RNG | **DONE** | *(next commit)* | `packages/sim-sdk/`. The grader entry point is a MODULE, not a convention: `tsconfig.grader.json` typechecks it with no `dom` lib. |
 | P6-T4 Build pipeline: esbuild → hashed, cache-busted ESM + CSS | NOT STARTED | | |
 | P6-T5 Dual-target enforcement: `./browser` + pure `./grader` in Node, zero Node builtins (`B14`) | NOT STARTED | | |
 | P6-T6 Sandbox host: `sandbox="allow-scripts"`, dedicated origin, **the exact CSP from `03` §1** (`B6`), nonce messaging, resize protocol, offline check, failure UI | NOT STARTED | | |
@@ -1464,6 +1464,71 @@ only the manifest module and every run died with `assertSchemaIsSupported is not
 at least failed loudly.
 
 #### P6-T2 evidence
+#### P6-T3 detail (complete)
+
+**THE DOM-FREE BOUNDARY IS A MODULE AND A TYPECHECK, NOT A COMMENT.** `./grader` is a separate
+entry point, and `tsconfig.grader.json` compiles its transitive closure with `lib: ["ES2023"]` and no
+Node types. That is STRONGER than the esbuild metafile assertion `B14` specifies: a metafile catches a
+bad build after the author has pushed, while this fails in their editor. `sdk.test.ts` walks the real
+import graph and asserts the closure never reaches the DOM, because a metafile is not the only story —
+a dynamic `import()` inside a string is invisible to both.
+
+**THE FIRST VERSION OF THAT WALK REPORTED `protocol.ts` AS A DOM OFFENDER, AND IT WAS RIGHT TO BE
+SUSPICIOUS.** `PROHIBITED_APIS` contains the STRING `'window.open'` — the name of a thing we forbid,
+not a call to it. The check now strips comments AND string literals, because a module may discuss
+`document` in prose and may name `window.open` as a prohibition, and neither is a capability.
+
+**`setMatch` CASE-FOLDED, SO A PUNNETT SQUARE MARKED THE RECESSIVE ANSWER CORRECT.** `AA` and `aa`
+are different phenotypes; folding them made them one selection. Hence `caseSensitive`, and hence
+`biology.genetics-punnett` turning it on. Option lists keep folding, which is right for them.
+
+**THE STEPPER COMPARED MILLISECONDS TO SIM SECONDS, SO A 60 FPS PENDULUM FINISHED BEFORE THE FIRST
+FRAME.** `advance(dt)` took a real-time delta in milliseconds and multiplied by a `timeScale` read as
+seconds, advancing the sim 16.5 of its own seconds per frame. `dt` is now REAL SECONDS and there is
+exactly one conversion, in one place. This is the class of bug that is invisible in a screenshot and
+catastrophic in an exam.
+
+**FLOAT ERROR IN THE CARRY SILENTLY LOST A STEP EVERY ~50 FRAMES.** `advance(2.4)` leaves a carry of
+0.3999999999999999; adding 0.1 gives 0.4999999999999999, whose ratio to a 0.5 s step is
+0.9999999999999998, so `Math.floor` returns ZERO. The comparison now carries a tolerance of 1e-9 of a
+step — orders of magnitude above float noise, orders of magnitude below perception — and a test runs
+300 tenths to prove the timeline lands exactly on 30.
+
+**`defineSim`'s STEPPER CHECK TESTED `scenarios` WHILE ITS MESSAGE TALKED ABOUT `maxTime`.** So every
+stepper with no scenarios was refused and every stepper WITH scenarios and no maxTime was accepted. A
+condition and its message disagreeing is the signature of a check nobody ran.
+
+**THE CARRY IS PART OF THE STATE, NOT A LOCAL.** Otherwise a restored sim has the same `t` and a
+different remainder from the one it was saved from, and `physics.pendulum` exists to break exactly
+that.
+
+**REDUCED MOTION WITHHOLDS `play` AND `advance` BUT LEAVES THE TIMELINE REACHABLE.** The first
+version wrote `reducedMotion ? 'idle' : 'idle'` — two identical branches, which the compiler rejected
+by narrowing `status`. A policy that cannot distinguish its two cases is not a policy.
+
+**`label` IS OPTIONAL, BECAUSE `plans/10` §4's OWN EXAMPLE HAS NONE.** `num({ min: 5, max: 60,
+default: 25, unit: 'm/s' })` — no label. The display label lives in the manifest, which is what the
+host's parameter editor renders and what a translator sees, so an author writing physics is not asked
+for a string and a label cannot drift between the sim and the editor.
+
+**`clampParams` LOGGED A "COERCION" FOR EVERY UNUSED PARAMETER.** One line per parameter per call put
+a real out-of-range clamp on the third line of output nobody read.
+
+**A SHARED DATABASE PROTECTED ROWS, NOT BATCHES.** The P4 notification test failed intermittently
+because `claimDueMessages` is a GLOBAL drain with a LIMIT, so another file's due messages could fill
+the batch. Unique fixture ids are not enough for a shared batch; the test now drains the way a worker
+does. Operational note recorded rather than fixed: one student's message can really be starved by a
+busy queue.
+
+**ONE UNUSED TYPE PARAMETER, REMOVED.** `BrowserHalf<P, S>` never used `P` — the render layer gets
+params through `RenderContext`, not as a type parameter. A type parameter nobody reads is one more
+thing to keep in step.
+
+#### P6-T3 evidence
+- 1308 unit (83 new in the SDK), 336 db integration. 8/8 gates, lint 0, typecheck 0, image builds.
+- `tsconfig.grader.json` (DOM-free, no Node types) is part of `pnpm run typecheck`.
+
+
 - 1251 unit (55 new: 12 schema/mirror agreement, 4 rules-only, 12 CLI end-to-end, plus the JSON
   Schema evaluator). 8/8 gates, lint 0, typecheck 0, image builds, `pnpm run sim:validate` green.
 

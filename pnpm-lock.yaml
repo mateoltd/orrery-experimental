@@ -224,6 +224,10 @@ importers:
   packages/rng: {}
 
   packages/sim-sdk:
+    dependencies:
+      '@orrery/rng':
+        specifier: workspace:*
+        version: link:../rng
     devDependencies:
       vitest:
         specifier: 3.2.7

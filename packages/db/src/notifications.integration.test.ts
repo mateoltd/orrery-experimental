@@ -83,6 +83,33 @@ const base = (userId: string) => ({
   timezone: 'UTC',
 });
 
+/**
+ * A drain, the way the worker does it, rather than one batch.
+ *
+ * `claimDueMessages` is a GLOBAL drain with a LIMIT, because that is what a queue worker wants. The
+ * consequence for a test on a SHARED database is that this file's message competes with every other
+ * file's due messages for the batch, so a single call can return a full batch without it. The first
+ * version made one call and asserted its own message was in the result, so it failed whenever enough
+ * other messages happened to be queued -- which is why the project rule about unique fixture ids was
+ * not sufficient on its own. Uniqueness protects the ROW; it does not protect the BATCH.
+ *
+ * Operational note rather than a bug fixed here: one student's message really can be starved by a
+ * busy queue. That is what the batch size and the repeated drain are for.
+ */
+const drainUntil = async (
+  now: Date,
+  address: string,
+  maxBatches = 25,
+): Promise<readonly { readonly toEmail: string; readonly attempts: number }[]> => {
+  const claimed: { toEmail: string; attempts: number }[] = [];
+  for (let batch = 0; batch < maxBatches; batch += 1) {
+    const due = await claimDueMessages(prisma(), now);
+    claimed.push(...due);
+    if (due.length === 0 || claimed.some((m) => m.toEmail === address)) return claimed;
+  }
+  return claimed;
+};
+
 describe.skipIf(!DATABASE_URL)('P4-T7 notifications, against real Postgres', () => {
   it('writes an in-app notification and QUEUES an email, and sends nothing', async () => {
     // §7: "All sending is queued, never inline." The assertion is that after `notify` returns the
@@ -217,9 +244,12 @@ describe.skipIf(!DATABASE_URL)('P4-T7 notifications, against real Postgres', () 
     const early = await claimDueMessages(prisma(), new Date(Date.UTC(2026, 8, 29, 2, 30, 0)));
     expect(early.map((m) => m.toEmail)).not.toContain(user.address);
 
-    const later = await claimDueMessages(prisma(), new Date(Date.UTC(2026, 8, 29, 7, 30, 0)));
+    const later = await drainUntil(new Date(Date.UTC(2026, 8, 29, 7, 30, 0)), user.address);
     const mine = later.filter((m) => m.toEmail === user.address);
+    // Claimable once it is due, and NOT before -- which is what makes a held message held rather
+    // than merely late to be picked up.
     expect(mine).toHaveLength(1);
+    // Exactly one attempt: the 02:30 drain must not have touched it.
     expect(mine[0]?.attempts).toBe(1);
   });
 

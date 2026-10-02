@@ -17,15 +17,29 @@
     "./grader": {
       "types": "./dist/grader.d.ts",
       "default": "./dist/grader.js"
+    },
+    "./params": {
+      "types": "./dist/params.d.ts",
+      "default": "./dist/params.js"
+    },
+    "./state": {
+      "types": "./dist/state.d.ts",
+      "default": "./dist/state.js"
+    },
+    "./grading": {
+      "types": "./dist/grading.d.ts",
+      "default": "./dist/grading.js"
     }
   },
   "scripts": {
     "build": "tsc -b",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.grader.json",
     "test": "vitest run",
     "clean": "rm -rf dist *.tsbuildinfo"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@orrery/rng": "workspace:*"
+  },
   "devDependencies": {
     "vitest": "3.2.7"
   }

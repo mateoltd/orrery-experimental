@@ -1,0 +1,295 @@
+/**
+ * Grading helpers. Pure, DOM-free, deterministic — and the reason a simulation can be an exam
+ * question graded by a server.  (P6-T3)
+ *
+ * ## A GRADE IS POINTS AND A RATIONALE, NEVER A BOOLEAN
+ *
+ * `boolean correct` throws away the partial credit that most real marks have, and the one thing a
+ * teacher needs to explain a mark is the reason for it. So `correct` exists but is derived, and every
+ * helper produces a `because` a teacher can put in a comment.
+ *
+ * ## EVERY COMPARISON IS SYMMETRIC, AND THAT IS THE POINT
+ *
+ * A student's answer and the expected answer have no privileged order — they are two spellings of a
+ * claim. So `tolerance(a, b)` and `tolerance(b, a)` must agree, and the tests check that directly on
+ * every helper. An asymmetric tolerance is the bug that marks 4.999 wrong when 5.001 is right, and
+ * it is invisible until a real student's number lands near the boundary.
+ */
+
+export type GradingStrategy = 'EXACT' | 'TOLERANCE' | 'SET' | 'NUMERIC' | 'RUBRIC';
+
+export interface Grade {
+  /** Points awarded, within `maxPoints`. Never negative, never above the maximum. */
+  readonly points: number;
+  readonly maxPoints: number;
+  readonly correct: boolean;
+  /** What a teacher can paste into a comment. */
+  readonly rationale: string;
+  /** Which dimension decided it, for the item-analysis tools. */
+  readonly strategy: GradingStrategy;
+}
+
+export interface ToleranceSpec {
+  /** Absolute tolerance in the item's own unit. */
+  readonly abs?: number;
+  /** Relative tolerance, as a fraction: 0.02 is 2% of the expected value. */
+  readonly rel?: number;
+  readonly maxPoints: number;
+  readonly partialCredit?: boolean;
+}
+
+const finish = (
+  points: number,
+  maxPoints: number,
+  strategy: GradingStrategy,
+  rationale: string,
+): Grade => {
+  // Clamped at ONE place. A helper that computes -0.1 or 1.0000001 must not be able to ship it, and
+  // the alternative — trusting five helpers to each be careful — is how the bug happens.
+  const bounded = Math.min(maxPoints, Math.max(0, points));
+  const rounded = Math.round(bounded * 1e6) / 1e6;
+  return {
+    points: rounded,
+    maxPoints,
+    // Full credit is an equality on the clamped points, so `4/4` and `4.0000001/4` agree.
+    correct: rounded >= maxPoints,
+    rationale,
+    strategy,
+  };
+};
+
+/** Did the student's answer parse as a number at all? Units are accepted and ignored, deliberately. */
+export function asNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') {
+    // Units are accepted because "25 m/s" and "25" are the same claim, and refusing the first teaches
+    // students to strip units rather than to check their answer. Degrees and m/s² survive.
+    const cleaned = value.replace(/[^\d.eE+-]/gu, '');
+    if (cleaned === '' || cleaned === '-' || cleaned === '.') return null;
+    const parsed = Number.parseFloat(cleaned);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+/**
+ * Numeric equality within an absolute or relative bound. Symmetric.
+ *
+ * The bound is `max(abs, rel * max(|a|, |b|))`, not `min`. Taking the LARGER bound is what makes it
+ * symmetric, because the larger magnitude decides; and for values near zero, where a relative bound
+ * is meaningless, the absolute one keeps working.
+ */
+export function withinTolerance(
+  given: number,
+  expected: number,
+  spec: { readonly abs?: number; readonly rel?: number },
+): boolean {
+  const difference = Math.abs(given - expected);
+  const magnitude = Math.max(Math.abs(given), Math.abs(expected));
+  const relative = (spec.rel ?? 0) * magnitude;
+  const absolute = spec.abs ?? 0;
+  if (absolute === 0 && relative === 0) return false;
+  return difference <= Math.max(absolute, relative);
+}
+
+/** `TOLERANCE` grading: partial credit proportional to how close, when asked for. */
+export function tolerance(given: unknown, expected: unknown, spec: ToleranceSpec): Grade {
+  const a = asNumber(given);
+  const b = asNumber(expected);
+  if (a === null || b === null) {
+    return finish(
+      0,
+      spec.maxPoints,
+      'TOLERANCE',
+      `expected the number ${String(expected)}, received ${JSON.stringify(given) ?? 'nothing'}`,
+    );
+  }
+  if (withinTolerance(a, b, spec)) {
+    return finish(
+      spec.maxPoints,
+      spec.maxPoints,
+      'TOLERANCE',
+      `${String(a)} is within tolerance of ${String(b)}`,
+    );
+  }
+  if (spec.partialCredit === true) {
+    // Linear in the RELATIVE error, which is the only way to be symmetric: `1 - diff/scale` where
+    // `scale` is the same on both sides. A grade computed from `|given - expected| / expected` alone
+    // would award different points for a student who is 10% high and one who is 10% low.
+    const scale = Math.max(Math.abs(a), Math.abs(b), 1e-12);
+    const relativeError = Math.abs(a - b) / scale;
+    return finish(
+      spec.maxPoints * Math.max(0, 1 - relativeError),
+      spec.maxPoints,
+      'TOLERANCE',
+      `${String(a)} is not within tolerance of ${String(b)}; partial credit from the ${(relativeError * 100).toFixed(1)}% error`,
+    );
+  }
+  return finish(
+    0,
+    spec.maxPoints,
+    'TOLERANCE',
+    `${String(a)} is outside tolerance of ${String(b)} (abs ${String(spec.abs ?? 0)}, rel ${String(spec.rel ?? 0)})`,
+  );
+}
+
+/** `EXACT` grading, on a normalised string or a deep value. */
+export function exact(given: unknown, expected: unknown, maxPoints: number): Grade {
+  const matches = canonicalText(given) === canonicalText(expected);
+  return finish(
+    matches ? maxPoints : 0,
+    maxPoints,
+    'EXACT',
+    matches
+      ? 'exact match'
+      : `expected ${JSON.stringify(expected)}, received ${JSON.stringify(given)}`,
+  );
+}
+
+/** `NUMERIC` grading: exact after parsing, for a mark that is right or wrong with nothing between. */
+export function numeric(given: unknown, expected: unknown, maxPoints: number): Grade {
+  const a = asNumber(given);
+  const b = asNumber(expected);
+  if (a === null || b === null) {
+    return finish(
+      0,
+      maxPoints,
+      'NUMERIC',
+      `expected the number ${String(expected)}, received ${JSON.stringify(given) ?? 'nothing'}`,
+    );
+  }
+  const matches = a === b;
+  return finish(
+    matches ? maxPoints : 0,
+    maxPoints,
+    'NUMERIC',
+    matches ? `${String(a)} is exactly ${String(b)}` : `${String(a)} is not exactly ${String(b)}`,
+  );
+}
+
+/** Normalisation for string comparison: case, whitespace and the punctuation a keyboard adds. */
+export function canonicalText(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') {
+    // An object's KEY ORDER is not part of its meaning, so two objects that differ only in
+    // insertion order compare equal. Sorting here is why `exact({a:1,b:2},{b:2,a:1})` passes.
+    const record = value as Record<string, unknown>;
+    const inner = Object.keys(record)
+      .sort()
+      .map((key) => `${key}:${canonicalText(record[key])}`)
+      .join(',');
+    return `{${inner}}`;
+  }
+  return String(value).normalize('NFKC').toLowerCase().replace(/\s+/gu, ' ').trim();
+}
+
+/**
+ * `SET` grading with partial credit — the strategy for a Punnett square or a set of selections,
+ * where a student who gets three of five has demonstrated something.
+ *
+ * ## PARTIAL CREDIT IS JACCARD, NOT "RATIO OF COUNTS"
+ *
+ * `(correct ∩ given) / |correct ∪ given|` penalises an answer that omits a selection as well as one
+ * that adds a wrong one, which is right: in a genetics Punnett square, "3 of 5" is 3/6 = 0.5 and not
+ * 3/5 = 0.6, because the two omitted cells are part of what was being asked for.
+ *
+ * Duplicates in the student's answer are collapsed first, so answering "AA, AA, aa" is not a way to
+ * inflate an intersection.
+ */
+export function setMatch(
+  given: unknown,
+  expected: readonly string[] | string[],
+  spec: {
+    readonly maxPoints: number;
+    readonly partialCredit?: boolean;
+    readonly caseSensitive?: boolean;
+  },
+): Grade {
+  // Case folding is right for a list of selectable options and WRONG for a Punnett square, where
+  // `AA` and `aa` are different genotypes. The first version folded unconditionally, so a genetics
+  // item silently compared one phenotype against the other and marked the recessive answer correct.
+  // Hence the option, and hence `biology.genetics-punnett` turning it on.
+  const fold = spec.caseSensitive === true ? (value: string): string => value : canonicalText;
+  const givenSet = toSet(given, fold);
+  const expectedSet = toSet(expected, fold);
+  const maxPoints = spec.maxPoints;
+
+  if (expectedSet.size === 0) {
+    return finish(0, maxPoints, 'SET', 'the expected set is empty, so nothing can be credited');
+  }
+  const intersection = [...givenSet].filter((item) => expectedSet.has(item));
+  const union = new Set([...givenSet, ...expectedSet]);
+  if (intersection.length === expectedSet.size && givenSet.size === expectedSet.size) {
+    return finish(
+      maxPoints,
+      maxPoints,
+      'SET',
+      `all ${String(expectedSet.size)} expected selections, and no others`,
+    );
+  }
+  if (intersection.length === 0) {
+    return finish(
+      0,
+      maxPoints,
+      'SET',
+      `none of the ${String(givenSet.size)} selections was expected (${[...expectedSet].join(', ')})`,
+    );
+  }
+  if (spec.partialCredit === true) {
+    const jaccard = intersection.length / union.size;
+    return finish(
+      maxPoints * jaccard,
+      maxPoints,
+      'SET',
+      `${String(intersection.length)} of ${String(expectedSet.size)} expected, and ${String(givenSet.size - intersection.length)} extra; partial credit from the ${(jaccard * 100).toFixed(1)}% Jaccard overlap`,
+    );
+  }
+  return finish(
+    0,
+    maxPoints,
+    'SET',
+    `${String(intersection.length)} of ${String(expectedSet.size)} expected, which does not earn partial credit here`,
+  );
+}
+
+/** `RUBRIC` grading: a human decided, and the machine records it without re-deciding. */
+export function rubric(decision: {
+  readonly points: number;
+  readonly maxPoints: number;
+  readonly reason: string;
+}): Grade {
+  if (decision.reason.trim() === '') {
+    return finish(
+      0,
+      decision.maxPoints,
+      'RUBRIC',
+      'no reason was recorded, so the mark cannot be explained or appealed',
+    );
+  }
+  return finish(decision.points, decision.maxPoints, 'RUBRIC', decision.reason);
+}
+
+function toSet(value: unknown, fold: (value: string) => string = canonicalText): Set<string> {
+  if (Array.isArray(value)) return new Set(value.map((item) => fold(String(item))));
+  if (typeof value === 'string') {
+    // A comma-separated string is what a text input produces, and refusing it teaches students that
+    // the sim wants a different shape rather than teaching them the biology.
+    return new Set(
+      value
+        .split(/[,;\n]/u)
+        .map((part) => fold(part))
+        .filter((part) => part !== ''),
+    );
+  }
+  if (value === null || value === undefined) return new Set();
+  return new Set([fold(String(value))]);
+}
+
+/**
+ * `partialCredit: false` is not a mode; it is the DEFAULT.
+ *
+ * A simulation item with four marks should not silently hand out two of them for half an answer
+ * unless the author asked. The manifest says `partialCredit` explicitly, so the helpers take it
+ * explicitly too — there is no way to get partial credit by forgetting to pass a flag.
+ */
+export const DEFAULT_MAX_POINTS = 4;

@@ -1,0 +1,28 @@
+{
+  // The DOM-FREE half, typechecked with no `dom` lib and no Node types at all.
+  //
+  // This is the type-level half of `INV-SIM-2`, and it is the stronger half: the esbuild metafile
+  // assertion (`B14`, P6-T5) catches a bad BUILD, after the author has already written the DOM call,
+  // while this catches it in the author's editor, in their `pnpm test`, before they push.
+  //
+  // `files` rather than `include` so that adding a browser-side file does not quietly join this
+  // project, and so the set of graded modules is an explicit list rather than a glob that grows.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["ES2023"],
+    "types": [],
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "files": [
+    "src/grader.ts",
+    "src/protocol.ts",
+    "src/params.ts",
+    "src/state.ts",
+    "src/grading.ts",
+    "src/define.ts"
+  ]
+}
