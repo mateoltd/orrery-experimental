@@ -66,8 +66,8 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 63 |
-| Unit tests | **1074** (db 23 with 15 new slot tests, auth 436, contracts 327, web 158) |
+| Commits | 64 |
+| Unit tests | **1087** (contracts 340, db 23, auth 436, web 158) |
 | Integration tests | **285** across 20 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
@@ -660,7 +660,7 @@ has a dozen slightly different answers.
 | P5-T4 Student "to do" | NOT STARTED | | |
 | P5-T5 Pinning invariant enforcement: (a) lint rule, (b) slot-level mutation test | **DONE** | `ede383a` | (a) the gate exists (ADR-0025). (b) the slot-level paper is **mutation-verified** per ADR-0027. |
 | P5-T6 QuestionBank CRUD | NOT STARTED | | |
-| P5-T7 QuestionPool, four draw strategies, `poolHealth` | NOT STARTED | | |
+| P5-T7 `poolHealth`: M vs N, distinct, expected overlap | **DONE** | *(next commit)* | `packages/contracts/src/pool-health/`. **I wrote a wrong formula, justified it as an improvement, and brute force proved the plan right.** |
 | P5-T8 Blueprint + worst-case coverage | NOT STARTED | | |
 | P5-T9 `AssessmentSpec` slots + `variantMap` resolution | **DONE** | `65db2b4` | `packages/db/src/slots.ts`. One draw, one place, per-slot forked streams. | |
 | P5-T10 Publish snapshots every drawable question | NOT STARTED | | |
@@ -732,6 +732,58 @@ attempts run to their own deadline and remain submittable. There is no way to ca
 a mode that also cancels somebody's exam. A withdrawn assignment also cannot be re-published,
 because a withdrawal is a statement to students and silently undoing it is worse than doing
 nothing.
+
+#### P5-T7 detail (complete)
+
+**I DEPARTED FROM THE PLAN, WROTE THREE PARAGRAPHS SAYING THE PLAN WAS AN APPROXIMATION, AND WAS
+WRONG.** `plans/20` P5-T7 asks for expected overlap `N²/M`. I implemented `N(N−1)/(M−1)` on the
+reasoning that two items drawn without replacement are not independent, and wrote a comment
+claiming the plan was wrong and that mine was exact.
+
+**The plan was right.** A and B are two *independent* N-subsets of the same M-set, and
+independence is precisely what makes the product rule apply:
+`E[|A∩B|] = Σ P(i∈A)·P(i∈B) = M(N/M)² = N²/M`. The without-replacement correction belongs
+*within* one draw and cancels out of that sum. My formula is the expectation for a DIFFERENT
+experiment — drawing B from the complement of A, which is a pool guaranteeing zero overlap, the
+opposite of what a question pool is for.
+
+The brute-force test caught it: M=6, N=2 is 0.667 by definition and my formula said 0.400. **A
+departure from a written plan needs a test that fails on the plan's own formula, not a paragraph
+about why the plan is wrong.** "The plan is the approximation and I have the exact version" is
+exactly the sentence that makes a reader stop checking.
+
+**A SECOND BUG WAS MASKED BY A SHORTCUT THAT HAPPENED TO BE TAKEN IN EVERY TEST.**
+`pAnyShared` read `1 - logChoose(m-n, n) + logChoose(m, n)`, which by precedence is
+`(1 − lnC) + lnC` — not a probability, a large positive number. It survived because every test
+that reached that line hit the `2n > m` shortcut first and returned 1. There is now a test that
+reaches the computing branch, because "every test of this function took the early return" is a
+fact about the tests rather than about the function.
+
+**`−∞ − (−∞)` IS `NaN`, AND THE CLAMP COULD NOT SAVE IT.** For M=6, N=5, cohort 30,
+`logChoose(1, 30) − logChoose(6, 30)` is NaN, and `Math.min(1, NaN)` is NaN rather than 1. So the
+health figure for the single most likely first-term configuration — a pool of 6 drawing 5 — was
+not a number. The guard is now `m - n < k`: with fewer items outside one form than students, the
+cohort cannot all avoid one item, so it is used.
+
+**A WARNING THAT FIRES ON EVERY REAL POOL IS NOISE.** The overlap warning first triggered on
+P(≥1 shared) > 0.7, which is 0.98 for a pool of 120 drawing 20 — two students almost always
+overlap *somewhere* when they each hold 20 of 120 items. So the tool would always have something
+to say, and a health figure people stop reading is how the pool of 6 beside it goes unnoticed.
+The threshold moved to the FRACTION: `expectedOverlap / n = N/M`, i.e. each student's share of
+their paper with any one peer. 17% is quiet; 83% is "anti-collusion is decoration".
+
+**THE COUNT ALONE CANNOT SEPARATE TWO POOLS.** 120 items drawing 20 shares 3.33 items;
+6 drawing 5 shares 4.17. Judged on the count they look like the same problem, and on the fraction
+they are 17% versus 83%. So both are reported, and the test asserts the two pools are within
+1.5 items of each other on the count while differing sixfold on the fraction.
+
+**A POOL OF 6 DRAWING 5 CANNOT REPEAT A PAPER, AND SAYS THE REAL REASON.** P(identical) is 0
+there — 2N > M leaves nowhere to put a second form — so warning about repeated papers would be
+wrong. It is hopeless for the reason the fraction exposes. A test that asserted the warning I
+EXPECTED to fire would have pinned a bug; asserting the one that actually fires is the point.
+
+#### P5-T7 evidence
+- 1087 unit (13 new pool-health tests). 8/8 gates, lint 0, typecheck 0, image builds.
 
 #### P5-T5 detail (complete) — the P5 EXIT CRITERION
 
@@ -940,7 +992,7 @@ pnpm run build          # must pass before typecheck; tsbuildinfo can go stale
 pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
-pnpm run test           # 1074 unit
+pnpm run test           # 1087 unit
 pnpm run test:integration   # 285 db + 6 worker, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```

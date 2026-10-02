@@ -87,6 +87,10 @@
     "./policy": {
       "types": "./dist/policy/index.d.ts",
       "default": "./dist/policy/index.js"
+    },
+    "./pool-health": {
+      "types": "./dist/pool-health/index.d.ts",
+      "default": "./dist/pool-health/index.js"
     }
   },
   "scripts": {
