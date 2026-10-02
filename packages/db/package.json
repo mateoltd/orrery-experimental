@@ -131,6 +131,7 @@
     "@orrery/auth": "workspace:*",
     "@orrery/clock": "workspace:*",
     "@orrery/contracts": "workspace:*",
+    "@orrery/interop": "workspace:*",
     "@orrery/rng": "workspace:*",
     "@prisma/client": "6.19.3"
   },

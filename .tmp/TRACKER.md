@@ -66,9 +66,9 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 73 |
+| Commits | 75 |
 | Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
-| Integration tests | **316** across 24 db files + 6 worker outbox, real Postgres |
+| Integration tests | **318** across 25 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
 | Lint / typecheck | 0 / 0 errors |
 | Invariants registered | 29 (8 active) |
@@ -733,6 +733,61 @@ a mode that also cancels somebody's exam. A withdrawn assignment also cannot be 
 because a withdrawal is a statement to students and silently undoing it is worse than doing
 nothing.
 
+#### P5-T13 detail (complete)
+
+**D-9 WAS A CIRCULAR DEPENDENCY AND THIS IS THE CUTTING POINT.** `P16-T1` needed to know what may
+leave the system and `P10-T10` needed to know what may be shown, so the two waited for each other.
+`packages/interop` has NO dependencies — not even Prisma — and both sides depend on it. That is a
+skeleton for a dependency, not an abstraction for its own sake.
+
+**THE SEALED ARM HAS NO SCORE FIELD TO OMIT, SO A LEAK IS A COMPILE ERROR.** The obvious type is
+`{ released: boolean; score?: number }`, and it is wrong in a way no careful code fixes: the field
+exists, so every consumer grows a populated branch and an unpopulated one, written by different
+people. So the sealed arm is a DIFFERENT TYPE with no score in it. `SCORE_BEARING_KEYS` exists
+because `INV-RELEASE-2` is about INFERENCE: `maxTotal` travels with `rawTotal` and a student can
+divide, `excusedCount` moves the denominator, and both were "harmless" fields at some point.
+
+**THE GUARD IS "NO SCORE CROSSES WHILE SEALED", NOT "NO SCORE EVER CROSSES".** The first version
+called `assertNoScoreLeak` on the released arm too and rejected every real release, because `score`
+IS what a released payload is for. That is how a check gets switched off.
+
+**THE OBVIOUS TERNARY DOES NOT NARROW, WHICH IS WHY THE GUARD IS A FUNCTION.**
+`g.state === 'RELEASED' ? g : sealed` widens back to the union, so the honest path needs an `if`
+— and every code path that needed one is a code path where somebody wrote `as ReleasedGrade`, which
+compiles happily and IS the leak. Found by the compiler while writing assertion 5.
+
+**A BARE TYPE PROBE IS NOT CODE AND ESLINT REFUSED IT.** `assert.types.ts` originally asserted its
+four compile errors with bare `sealed.score;` statements at module scope; `no-unused-expressions`
+correctly called them what they were. Each probe is now a `use(...)` call inside a never-called
+function, so the assertion is still a compile error and is also reviewable. All four
+`@ts-expect-error` directives are USED on this commit — an unused one is a red build, which is the
+only evidence the guarantee still holds.
+
+**THE TABLE AND THE TYPE ARE CHECKED AGAINST `information_schema`, NOT `Prisma.dmmf`.** The
+generated client no longer ships the DMMF, and a conformance check that must import an internal
+package to see its own schema is a check that gets deleted. Asking Postgres what is actually there
+also catches a migration that did not apply, which is the drift worth catching. It lives in
+`@orrery/db` because that is where the table is.
+
+**B13: A QTI EXPORT THAT NAMES NO ITEMS IS REFUSED, BECAUSE THE AUDIT WOULD NAME NOTHING.** For
+the audit event to carry item ids, somebody has to have them when the binding is written. A codec
+that could not say what it was sending would produce an audit event with nothing in it, and an audit
+event with nothing in it is a receipt, not a control. A duplicated id is refused for the same
+reason: the pool drew it twice and the audit would name it once.
+
+**THERE IS NO WRITE PATH, DELIBERATELY.** Which actor may create a binding is a P16 question with an
+authz surface of its own. Inventing an answer here to make a test convenient would put an
+unattended write path into a table whose comment says every write is an audited event.
+
+**THE DIGEST REFUSES A `Date`, WHICH WOULD OTHERWISE HASH AS `{}`.** A roster whose `syncedAt` was a
+Date would be indistinguishable from one with no timestamp at all, so a changed export reads as
+clean — the silent failure is worse than the throw. `-0` and `0` must hash the same, or a re-export
+never settles.
+
+#### P5-T13 evidence
+- 1147 unit (22 new interop), 318 db integration (2 new). 8/8 gates, lint 0, typecheck 0,
+  image builds.
+
 #### P5-T3 detail (complete)
 
 **THE PREVIEW USES THE EXACT RESOLUTION PATH, OR IT IS A LIAR.** The failure mode here is specific
@@ -1188,7 +1243,7 @@ pnpm run typecheck      # 0 errors
 pnpm run lint           # 0 errors
 pnpm run gates          # 8 / 8
 pnpm run test           # 1125 unit
-pnpm run test:integration   # 316 db + 6 worker, needs DATABASE_URL
+pnpm run test:integration   # 318 db + 6 worker, needs DATABASE_URL
 cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundle gate
 ```
 
