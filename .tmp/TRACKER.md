@@ -66,7 +66,7 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 91 |
+| Commits | 93 |
 | Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
 | Integration tests | **336** across 27 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
@@ -1358,7 +1358,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T5 Dual-target enforcement: `./browser` + pure `./grader` in Node, zero Node builtins (`B14`) | **DONE** | `51d1066` | 13 tests. The BUILT grader is imported in a bare Node process, 3 runs, byte-identical. |
 | P6-T6 Sandbox host: `sandbox="allow-scripts"`, dedicated origin, **the exact CSP from `03` §1** (`B6`), nonce messaging, resize protocol, offline check, failure UI | **DONE** | *(next commit)* | `packages/interop/src/csp.ts` (B6 as 15 tests), `apps/web/src/features/sim/`. `SIM_ORIGIN` is REQUIRED in config. |
 | P6-T7 `embedSimulation` block: manifest-driven param editor, seed policies, lazy mount, static fallback, print fallback, state capture | NOT STARTED | | |
-| P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index, catalogue page | NOT STARTED | | |
+| P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | *(next commit)* | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is P6-T12-scope. |
 | P6-T9 Conformance matrix over every registered sim | NOT STARTED | | |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new` | **DONE** | `677f2b2` | `sims/_template/`, `sims/README.md`, `scripts/sim-new.mjs`. The scaffold is asserted CLEAN, not merely created. The dev playground is NOT DONE — see the note. |
 | P6-T11 24 gold sims | NOT STARTED | | |
@@ -1682,6 +1682,52 @@ token, never `srcdoc`, the alternative text in the DOM before any script runs �
 assertion is P6-T9's job, in a browser, as a separate suite.
 
 #### P6-T6 evidence
+#### P6-T8 detail (complete)
+
+**A PRERELEASE NEVER WINS AN UNPINNED RESOLUTION.** A merge that adds a simulation would immediately
+serve a draft to every student in every lesson, with no flag and no review. A prerelease is reachable
+only by an exact pin, which is how you test one.
+
+**A DISABLED VERSION STILL RESOLVES FOR A PINNED RESOURCE.** The alternative is every student in the
+affected cohort losing their work at 09:00 on the day the decision was made. And when the sim's ONLY
+version is disabled, the failure is `DISABLED` — the first version said `UNKNOWN_SIM`, which sends a
+teacher looking for a typo in a sim id that was switched off ten minutes ago.
+
+**A PIN THAT DOES NOT EXIST IS `VERSION_MISMATCH`, NOT `UNKNOWN_SIM`.** The host gives the second a
+safe reset for stored states and the first a static fallback, and the distinction is what tells it
+which. The message also lists what IS there, because "not found" is not something a teacher can act
+on.
+
+**THE CATALOGUE INDEX HAS NO FIELD A BUNDLE PATH COULD GO IN.** `plans/10` §9: "the catalogue fetches a
+metadata index, never code". The projection is the enforcement rather than a promise, and it is
+written to a SEPARATE file from `registry.json` so the catalogue page cannot fetch paths at all.
+
+**`results.push` WAS MISSING, SO THE REGISTRY WAS NEVER WRITTEN AND THE BUILD SAID "1/1".** The
+collection line simply was not there. A build that reports success while emitting no registry is the
+same failure as the one that declared `emit` and never called it: the honest output and the real
+output have to be the same output.
+
+**`sims/registry/` IS A DIRECTORY INSIDE `sims/`, SO DISCOVERY TRIED TO BUILD IT AS A SIMULATION** —
+and `sim:validate` went red on it too, the second time a generated artefact has broken a discovery
+rule. The exclusion is now an explicit SET, deliberately not "any directory without a manifest":
+that would silently skip a sim whose manifest was deleted, which is exactly the defect the gate
+exists to catch.
+
+**THE MANIFEST REQUIRES A PARAM LABEL AND THE SDK DOES NOT, AND THE TEST NOW SAYS WHICH IS WHICH.**
+`plans/10` §4's example has no label, because a sim author writes physics; the manifest requires one
+because the host's editor renders it. The registry's `label ?? name` is therefore defensive rather
+than reachable, and the test asserts the enforced behaviour instead of testing the fallback as though
+it were the path.
+
+**THE DIGEST IS A PROPERTY OF THE CONTENT.** Sorted before hashing, so two builds of one tree produce
+the same digest. An order-dependent digest makes every rebuild look like a change, and a change
+detector that always fires is one people learn to ignore.
+
+#### P6-T8 evidence
+- 1421 unit (23 registry, 43 interop), 336 db integration. 8/8 gates, lint 0, typecheck 0, image
+  builds, `sim:validate` and `sim:check` green with the registry digest reported.
+
+
 - 1398 unit (43 interop CSP, 54 web sim), 336 db integration. 8/8 gates, lint 0, typecheck 0,
   image builds, `sim:validate` and `sim:build` green.
 
