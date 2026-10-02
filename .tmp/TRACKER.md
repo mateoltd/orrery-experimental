@@ -66,7 +66,7 @@ Three things had to be re-established, and each is a portability finding worth k
 
 | Metric | Value |
 |---|---|
-| Commits | 94 |
+| Commits | 95 |
 | Unit tests | **1125** (db 51, contracts 350, auth 436, web 158) |
 | Integration tests | **336** across 27 db files + 6 worker outbox, real Postgres |
 | Gates | **8 / 8 passing** |
@@ -1724,6 +1724,69 @@ the same digest. An order-dependent digest makes every rebuild look like a chang
 detector that always fires is one people learn to ignore.
 
 #### P6-T8 evidence
+#### P6-T6 correction (the host could listen and never speak)
+
+The row was marked DONE on the strength of its CSP work. The host built six frames — `initFrame`,
+`command`, `setParams`, `requestState`, `visibility`, `teardown` — and delivered **none** of them.
+`createHostBridge` had a transport that only `subscribe`d, and `SimulationFrame` never called
+`contentWindow.postMessage`. No simulation could ever handshake. Every existing test still passed,
+because every one of them asserted a property of our OUTPUT: an attribute, a fallback, a status. None
+of them watched the only thing a simulation experiences.
+
+**`postMessage` TAKES AN EXPLICIT TARGET ORIGIN, AND A MISSING ONE STOPS THE MOUNT.** Posting to `'*'`
+hands the init frame — params, seed and nonce — to whatever document is in the frame afterwards. A sim
+that redirects receives a student's seed and this mount's nonce, and **with the nonce it can post
+frames that pass our source check**. So `simOrigin` is a required prop, an unparseable one renders the
+fallback with a teacher line naming it, and there is no `'*'` fallback anywhere.
+
+**`frame: HostFrame` SHADOWED THE IFRAME ELEMENT.** The transport's `post(frame)` parameter shadowed the
+outer `const frame`, so `frame.contentWindow` read `undefined` on a plain object and **every outbound
+frame was silently dropped** — the exact bug I was fixing, reintroduced by the fix. The element is now
+`frameEl` in this file, and `frame` means the protocol frame everywhere.
+
+**REACT DETACHES A REF DURING THE COMMIT THAT UNMOUNTS.** `sim:teardown` read `frameRef.current` and
+found `null`, so the teardown was dropped and the sim kept its rAF loop running for the rest of the
+page. The transport posts to the window captured when the bridge was created.
+
+**A `load` EVENT WAS FIRED MANUALLY, WHICH STARTED THE CLOCK DURING THE DOWNLOAD.** The component called
+`onLoad()` itself right after adding the listener, "so tests do not have to" — so the handshake timer
+started while the bundle was still arriving, which is precisely what the adjacent comment said it must
+not do, and a slow bundle reported a handshake failure for a frame that had not arrived. Two tests
+asserted the buggy behaviour (`LOADING` on mount, "a timer is cleared" for a timer that never existed)
+and were rewritten to fire a real `load`. The guard against a second `load` starting a second timer
+stayed.
+
+**THE PROBE IS THREE STATES, NOT TWO.** `PENDING`, `DONE` and `SKIPPED`. `SKIPPED` exists only for a
+caller with no fetch, where the honest answer is "we could not check" — treating *did not ask* as *did
+not pass* is how a host refuses to mount in exactly the environment it was written for. The first cut
+mounted while the probe was still in flight, which downloads a bundle for a network already known to be
+blocked; the dependency rule caught it.
+
+**OFFLINE IS ONLY REPORTED WHEN THE BROWSER SAYS SO.** A failed fetch is ambiguous in every other way:
+a blocked response, a 502 and a dropped packet all reject identically. Reporting OFFLINE for a firewall
+sends a student to check a cable that is plugged in. A 4xx is FIREWALL (the origin was reached and chose
+not to answer), a 5xx is DNS.
+
+**THE CACHE STORED A BARE RESULT, SO NOTHING WAS EVER REUSED.** `probeCache.set(origin, result)` omitted
+the timestamp, so `now() - at` was `NaN`, and `NaN` fails every comparison — the throttle silently did
+nothing at all. Entries now carry `at`, and successes expire on a TTL: a tab open across a lesson period
+must re-ask, or a network fixed at 09:00 is still declared broken at 11:00 by a cache nobody can clear.
+**Failures are never cached**, because the moment a student is least able to interpret a cached failure
+is immediately after they fix the thing that caused it.
+
+**A MODULE-LEVEL CACHE MADE A "THE PROBE WAS BLOCKED" TEST PASS ON A CACHED OK.** `resetProbeCache()` in
+`afterEach` is not ceremony; it is what makes that test mean anything.
+
+**TESTING LIBRARY'S AUTOMATIC CLEANUP NEVER REGISTERED.** This project does not enable vitest globals, so
+`cleanup()` runs explicitly. Without it each test's DOM joined the next test's — which is how "found
+multiple elements" arrives in a test that only rendered once, and how a query can silently match a
+previous test's element.
+
+#### P6-T6 correction evidence
+- 1476 unit (91 in `apps/web/src/features/sim`, up from 71), 336 db integration. 8/8 gates, lint 0,
+  typecheck 0, image builds green.
+
+
 #### P6-T7 detail (complete)
 
 **A LESSON IS NEVER BROKEN BY A REGISTRY PROBLEM.** An unknown `simId@simVersion` renders the TEXT

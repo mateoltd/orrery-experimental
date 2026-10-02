@@ -27,6 +27,7 @@
  * takes a clock: a test that needs to wait cannot reproduce a failure.
  */
 
+import { systemClock } from '@orrery/clock';
 import { createResizeCoalescer, RESIZE_DEBOUNCE_MS } from '@orrery/sim-sdk';
 import {
   evaluateHandshake,
@@ -122,9 +123,19 @@ export interface HostInput {
   readonly defaultHeight: number;
   readonly minHeight: number;
   readonly now: () => number;
-  /** Injected so a test can deliver frames without a `window`, and so a listener is removable. */
+  /**
+   * Injected so a test can deliver frames without a `window`, and so a listener is removable.
+   *
+   * `post` is separate from `subscribe` because the two directions are not symmetric: inbound frames
+   * arrive on `globalThis` from a frame we did not choose, and outbound frames go to exactly one
+   * window at exactly one origin. A transport that only subscribes can model a host that listens and
+   * never speaks, which is how the first version of this component shipped six builders and not one
+   * of them was ever delivered.
+   */
   readonly transport: {
     subscribe(handler: (frame: unknown, source: unknown) => void): () => void;
+    /** Absent only in tests that assert frames by value and never mount. */
+    post?(frame: HostFrame): void;
   };
   /** The frame element the host created. Frames from anything else are dropped. */
   readonly expectedSource: unknown;
@@ -151,6 +162,11 @@ export interface HostBridge {
   requestState(reason: 'save' | 'submit' | 'blur' | 'unload' | 'replay' | 'resize'): HostFrame;
   visibility(visible: boolean): HostFrame;
   teardown(): HostFrame;
+  /**
+   * Deliver one host frame. Every builder returns a frame rather than sending one, so a test can read
+   * the value; nothing reaches a simulation without going through here.
+   */
+  emit(frame: HostFrame): void;
   get(): HostState;
   dispose(): void;
 }
@@ -474,16 +490,25 @@ export const createHostBridge = (input: HostInput): HostBridge => {
     teardown(): HostFrame {
       return { type: 'sim:teardown' };
     },
+    emit(frame: HostFrame): void {
+      // Every builder above is a value producer, not a sender. Routing delivery through one method
+      // means there is exactly one place to instrument and exactly one place to forget.
+      input.transport.post?.(frame);
+    },
     get(): HostState {
       return state;
     },
     dispose(): void {
       // Idempotent: `sim:teardown` disposes, and unmounting disposes again.
+      unsubscribe();
       state = initialHostState();
     },
   };
 
-  input.transport.subscribe((frame, source) => {
+  // Retained, not discarded. The first version called `subscribe` and threw the unsubscribe away,
+  // so a lesson with twelve sims left twelve listeners behind, each one holding a closure over a
+  // disposed bridge that still answered messages.
+  const unsubscribe = input.transport.subscribe((frame, source) => {
     bridge.receive(frame, source);
   });
 
@@ -504,6 +529,132 @@ export const createHostBridge = (input: HostInput): HostBridge => {
  * and the offline check in `SimOriginStatus` is what consumes it.
  */
 export const SIM_ORIGIN_PROBE_PATH = '/__sim_origin_probe';
+
+/** What the probe concluded. `OK` is the only outcome that lets a mount proceed. */
+export type ProbeOutcome = 'OK' | 'FIREWALL' | 'OFFLINE' | 'DNS';
+
+export interface ProbeResult {
+  readonly outcome: ProbeOutcome;
+  /** For a teacher. The student's advice comes from `BLOCKED_ADVICE`, keyed by `outcome`. */
+  readonly detail: string;
+  /** The status the fetch returned, or 0 when the request never produced a response. */
+  readonly status: number;
+}
+
+/**
+ * Probe the sim origin.
+ *
+ * ## A THROTTLE, AND WHY IT IS ONE
+ *
+ * This runs once per mount, and a lesson with twelve sims would fire twelve probes for one answer. The
+ * cache is keyed by origin, holds only successful probes, and is bounded by TIME, not by an entry count
+ * that never gets cleared.
+ */
+const PROBE_TTL_MS = 60_000;
+const probeCache = new Map<string, { readonly result: ProbeResult; readonly at: number }>();
+
+/**
+ * Classify a CORS probe failure.
+ *
+ * ## `navigator.onLine === false` IS THE ONLY PROOF OF OFFLINE
+ *
+ * A failed fetch is ambiguous in every other way: a blocked response, a 502 and a dropped packet all
+ * reject identically. So OFFLINE is only reported when the browser itself says so, and everything else
+ * is FIREWALL -- which is the advice a school can act on. Reporting OFFLINE for a firewall sends a
+ * student to check a network cable that is plugged in.
+ */
+export function classifyProbe(error: unknown, status: number, online: boolean): ProbeResult {
+  if (online === false) {
+    return { outcome: 'OFFLINE', detail: 'the browser reports no network connection', status };
+  }
+  const detail =
+    typeof error === 'object' && error !== null && 'message' in error
+      ? String((error as { message: unknown }).message)
+      : 'the request produced no readable failure';
+  return { outcome: 'FIREWALL', detail, status };
+}
+
+/**
+ * Decide whether the sim origin is reachable, from the host's point of view.
+ *
+ * ## A `cors` FETCH AND NOT `<img>` OR A SCRIPT TAG
+ *
+ * A `<script>` tag or an image cannot tell "blocked" from "404" from "slow", and a CSP that blocks the
+ * request reports success. A `no-cors` fetch resolves with an OPAQUE response whether it came from the
+ * server or was blocked, so it is useless for the check.
+ *
+ * What works is a CORS probe: the sim origin sends `Access-Control-Allow-Origin: <app origin>`, so a
+ * blocked request and a served one are distinguishable. The sim origin is configured to answer it, and
+ * the offline check in `SimOriginStatus` is what consumes it.
+ *
+ * @param origin The sim origin, already validated as distinct from the app origin.
+ * @param appOrigin Sent as the request origin, so the probe checks OUR side of the CORS handshake too.
+ * @param fetchImpl Injected so the check is testable without a network and without a timer.
+ * @param now Injected for the same reason, and to keep `INV-TIME-1` intact.
+ */
+export async function probeSimOrigin(
+  origin: string,
+  appOrigin: string,
+  fetchImpl: typeof fetch = fetch,
+  now: () => number = systemClock.now,
+): Promise<ProbeResult> {
+  const cached = probeCache.get(origin);
+  // Expiry rather than eviction: a tab left open across a lesson period must re-ask, or a network that
+  // was broken at 09:00 is still declared broken at 11:00 by a cache nobody can clear.
+  if (cached !== undefined && now() - cached.at < PROBE_TTL_MS) return cached.result;
+
+  const online = globalThis.navigator?.onLine !== false;
+  let result: ProbeResult;
+  try {
+    // A `cors` fetch, never `no-cors`: an opaque response cannot be distinguished from a blocked one,
+    // which is the entire question being asked here.
+    const response = await fetchImpl(`${origin}${SIM_ORIGIN_PROBE_PATH}`, {
+      mode: 'cors',
+      cache: 'no-store',
+      credentials: 'omit',
+      // Sent explicitly because the sim origin may not echo it, and a rejected header would look
+      // identical to a block.
+      headers: { 'X-Orrery-App-Origin': appOrigin },
+    });
+    if (response.ok) {
+      result = {
+        outcome: 'OK',
+        detail: 'the sim origin answered the CORS probe',
+        status: response.status,
+      };
+      // Cached WITH ITS TIMESTAMP, not as a bare result: an entry with no `at` makes `now() - at` NaN,
+      // and NaN fails every comparison -- so nothing is ever reused and the throttle silently does
+      // nothing at all.
+      probeCache.set(origin, { result, at: now() });
+      return result;
+    }
+    // A 4xx from the probe endpoint means the origin is REACHABLE and chose not to answer, which is a
+    // deployment fault rather than a network one, and the advice differs.
+    result = {
+      outcome: response.status >= 500 ? 'DNS' : 'FIREWALL',
+      detail: `the sim origin answered ${String(response.status)} for the probe`,
+      status: response.status,
+    };
+  } catch (error) {
+    result = classifyProbe(error, 0, online);
+  }
+  // Only successes are cached: caching a failure means a student who fixes their network keeps the
+  // stale advice until a reload, which is the moment they are least able to interpret it.
+  return result;
+}
+
+/** Drop cached probe results. Exported so a test cannot leak state into the next one. */
+export function resetProbeCache(): void {
+  probeCache.clear();
+}
+
+/** How long a successful answer is reused. Exported so the policy is assertable rather than implied. */
+export const PROBE_CACHE_TTL_MS = PROBE_TTL_MS;
+
+/** True when the mount may proceed: the origin answered, or nobody has asked yet. */
+export function probeAllowsMount(result: ProbeResult | null): boolean {
+  return result === null || result.outcome === 'OK';
+}
 
 export function isBlockedReason(value: unknown): value is BlockedReason {
   return value === 'FIREWALL' || value === 'OFFLINE' || value === 'DNS' || value === 'UNKNOWN';

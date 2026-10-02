@@ -12,13 +12,23 @@
  * script runs, the failure path renders something a student can read, and no state update happens
  * after unmount.
  */
-import { act, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { resetProbeCache } from './hostBridge';
 import { SimulationFrame } from './SimulationFrame';
 
 afterEach(() => {
+  // Explicit, because this project does not enable vitest globals and Testing Library's automatic
+  // cleanup registers itself against a global `afterEach`. Without it, each test's DOM joins the next
+  // test's, and a query can match a previous test's element -- which is how "found multiple elements"
+  // arrives in a test that only rendered once.
+  cleanup();
   vi.useRealTimers();
   vi.restoreAllMocks();
+  // The probe caches successful answers per origin, keyed by nothing but the origin. Without this, the
+  // first test to prove the origin answers decides the answer for every test after it -- which is how
+  // a "the probe was blocked" test came back green on a cached OK.
+  resetProbeCache();
 });
 
 const baseProps = {
@@ -34,6 +44,27 @@ const baseProps = {
   title: 'Projectile motion',
   now: () => 1_000,
   nonce: 'nonce-abc',
+  simOrigin: 'https://sims.example',
+  // No probe by default: these tests are about our OUTPUT, and a stubbed fetch would only make them
+  // assert the stub. The probe has its own describe block below, where being probed is the point.
+  probeFetch: null,
+  appOrigin: 'https://app.example',
+};
+
+/**
+ * Do what a browser does when a cross-origin frame finishes loading.
+ *
+ * The component used to call this itself, immediately after adding the listener, "so tests do not have
+ * to". That started the handshake clock during the DOWNLOAD, which is precisely what the code's own
+ * comment said it must not do, and it made a slow bundle report a handshake failure for a frame that
+ * had simply not arrived yet. A browser always fires `load`, so the test fires it too.
+ */
+const fireLoad = (container: HTMLElement): void => {
+  const frame = container.querySelector('iframe');
+  expect(frame).not.toBeNull();
+  act(() => {
+    frame?.dispatchEvent(new Event('load'));
+  });
 };
 
 describe('the sandbox attribute', () => {
@@ -188,6 +219,10 @@ describe('lazy mounting', () => {
 describe('failure', () => {
   it('reports the status on the container, so a test or a monitor can read it', () => {
     const { container } = render(<SimulationFrame {...baseProps} lazy={false} />);
+    // IDLE before the frame loads, and LOADING after: the status reflects a real signal rather than
+    // the component's own optimism.
+    expect(container.firstElementChild?.getAttribute('data-sim-status')).toBe('IDLE');
+    fireLoad(container);
     expect(container.firstElementChild?.getAttribute('data-sim-status')).toBe('LOADING');
   });
 
@@ -228,7 +263,10 @@ describe('unmounting', () => {
   it('clears the handshake timer, because a state update on a dead tree is a warning and a leak', () => {
     vi.useFakeTimers();
     const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
-    const { unmount } = render(<SimulationFrame {...baseProps} lazy={false} />);
+    const { container, unmount } = render(<SimulationFrame {...baseProps} lazy={false} />);
+    // The timer only exists once the frame has loaded, so the test has to load it first -- otherwise
+    // this asserts that a timer which was never created is cleared, which is true of every component.
+    fireLoad(container);
     unmount();
     expect(clearSpy).toHaveBeenCalled();
   });
@@ -248,5 +286,187 @@ describe('unmounting', () => {
     } finally {
       console.error = original;
     }
+  });
+});
+
+/**
+ * ## WHAT WAS MISSING, AND WHY THESE TESTS ARE THE POINT OF THE REOPEN
+ *
+ * The host built six frames and delivered none of them. Every test above still passed, because each
+ * one asserted something about our OUTPUT -- an attribute, a fallback, a status -- and none of them
+ * watched the one thing a simulation actually experiences: bytes crossing into the frame.
+ *
+ * jsdom gives `iframe.contentWindow` as a real-ish object, so `postMessage` can be observed without a
+ * browser. What still cannot be proven here is cross-origin isolation, which stays P6-T9's job.
+ */
+describe('delivering frames to the frame', () => {
+  /** Intercept `postMessage` on the iframe's contentWindow, which is where our transport sends. */
+  const watchPosts = (container: HTMLElement): { calls: Array<[unknown, string]> } => {
+    const frame = container.querySelector('iframe');
+    const calls: Array<[unknown, string]> = [];
+    Object.defineProperty(frame?.contentWindow, 'postMessage', {
+      configurable: true,
+      writable: true,
+      value: (message: unknown, targetOrigin: string): void => {
+        calls.push([message, targetOrigin]);
+      },
+    });
+    return { calls };
+  };
+
+  it('sends `sim:init` after load, with the nonce, the seed and the params', () => {
+    const { container } = render(<SimulationFrame {...baseProps} lazy={false} />);
+    const { calls } = watchPosts(container);
+    // Nothing before load: a frame that has not loaded has no window to receive anything, and posting
+    // early spends the handshake budget on a download.
+    expect(calls).toHaveLength(0);
+    fireLoad(container);
+    expect(calls).toHaveLength(1);
+    const first = calls[0] as [unknown, string];
+    const [frame, target] = first;
+    expect(target).toBe('https://sims.example');
+    expect(frame).toMatchObject({
+      type: 'sim:init',
+      protocol: 1,
+      nonce: 'nonce-abc',
+      simId: 'maths.projectile-motion',
+      simVersion: '1.0.0',
+      seed: 'lesson-1',
+      mode: 'lesson',
+      params: { speed: 25, angle: 45 },
+    });
+  });
+
+  it('posts to the EXPLICIT origin and never to "*", because a wildcard leaks the nonce', () => {
+    const { container } = render(<SimulationFrame {...baseProps} lazy={false} />);
+    const { calls } = watchPosts(container);
+    fireLoad(container);
+    // A simulation that redirects would receive a student's seed and this mount's nonce, and with the
+    // nonce it could post frames that pass our source check.
+    expect(calls.every((call) => call[1] !== '*')).toBe(true);
+    expect(calls.every((call) => call[1] === 'https://sims.example')).toBe(true);
+  });
+
+  it('REFUSES to mount when the origin is unusable, rather than downgrading to "*"', () => {
+    // A missing or malformed origin is a configuration bug. It should fail in development, visibly,
+    // and in production it should show the fallback -- never silently post a nonce to whatever loaded.
+    for (const simOrigin of ['', 'sims.example', '/relative', 'https://sims.example/sub']) {
+      // Unmounted per iteration, so each case asserts against its own DOM rather than the union of four
+      // renders -- which reports "multiple elements" and proves nothing about any single origin.
+      const { container, unmount } = render(
+        <SimulationFrame {...baseProps} simOrigin={simOrigin} lazy={false} />,
+      );
+      expect(container.querySelector('iframe')).toBeNull();
+      const detail = container.querySelector('[data-testid="sim-teacher-detail"]');
+      expect(detail?.textContent).toContain('not a usable origin');
+      expect(container.querySelector('[data-testid="sim-alternative"]')?.textContent).toContain(
+        '64 m',
+      );
+      unmount();
+    }
+  });
+
+  it('sends `sim:visibility` on a tab change, because a sim left running is a sim nobody asked for', () => {
+    const { container } = render(<SimulationFrame {...baseProps} lazy={false} />);
+    const { calls } = watchPosts(container);
+    fireLoad(container);
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(calls[calls.length - 1]).toEqual([
+      { type: 'sim:visibility', visible: false },
+      'https://sims.example',
+    ]);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('sends `sim:teardown` before unmount finishes, so the sim can stop its rAF loop', () => {
+    const { container, unmount } = render(<SimulationFrame {...baseProps} lazy={false} />);
+    const { calls } = watchPosts(container);
+    fireLoad(container);
+    unmount();
+    expect(calls[calls.length - 1]).toEqual([{ type: 'sim:teardown' }, 'https://sims.example']);
+  });
+
+  it('does NOT send a second `sim:init` when the frame fires load twice', () => {
+    const { container } = render(<SimulationFrame {...baseProps} lazy={false} />);
+    const { calls } = watchPosts(container);
+    fireLoad(container);
+    fireLoad(container);
+    // Two inits means a sim that re-initialises mid-answer discards the student's work so far.
+    expect(calls.filter(([frame]) => (frame as { type: string }).type === 'sim:init')).toHaveLength(
+      1,
+    );
+  });
+});
+
+/**
+ * Drain the probe's promise chain.
+ *
+ * One `await` is not one round trip: the fetch rejects, `probeSimOrigin` catches, and the component
+ * then commits two states. A test that flushes once is testing how many microtasks a rejection takes,
+ * not whether the fallback works.
+ */
+const flushProbe = async (): Promise<void> => {
+  await act(async () => {
+    for (let turn = 0; turn < 5; turn += 1) await Promise.resolve();
+  });
+};
+
+describe('the reachability probe', () => {
+  const okFetch = (): typeof fetch =>
+    (() =>
+      Promise.resolve(
+        new Response('ok', {
+          status: 200,
+          headers: { 'Access-Control-Allow-Origin': 'https://app.example' },
+        }),
+      )) as unknown as typeof fetch;
+
+  it('mounts when the sim origin answers its CORS probe', async () => {
+    const { container } = render(
+      <SimulationFrame {...baseProps} lazy={false} probeFetch={okFetch()} />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(container.querySelector('iframe')).not.toBeNull();
+  });
+
+  it('shows the FIREWALL advice when the probe is blocked, and never requests the bundle', async () => {
+    const blocked = (): typeof fetch =>
+      (() => Promise.reject(new TypeError('Failed to fetch'))) as unknown as typeof fetch;
+    const { container } = render(
+      <SimulationFrame {...baseProps} lazy={false} probeFetch={blocked()} />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // The advice is specific, because "it did not load" is not something a student can act on.
+    expect(screen.getByText(/blocking the simulation server/u)).toBeTruthy();
+    expect(container.querySelector('iframe')).toBeNull();
+    expect(screen.getByTestId('sim-teacher-detail').textContent).toContain('sims.example');
+  });
+
+  it('uses a CORS fetch with the app origin presented, never `no-cors`', async () => {
+    const seen: Array<[string, RequestInit | undefined]> = [];
+    const spy = ((input: RequestInfo | URL, init?: RequestInit) => {
+      seen.push([String(input), init]);
+      return Promise.resolve(new Response('ok', { status: 200 }));
+    }) as unknown as typeof fetch;
+    render(<SimulationFrame {...baseProps} lazy={false} probeFetch={spy} />);
+    await flushProbe();
+    const [url, init] = seen[0] ?? [];
+    // An opaque response cannot be distinguished from a blocked one, which is the whole question.
+    expect(url).toBe('https://sims.example/__sim_origin_probe');
+    expect(init?.mode).toBe('cors');
+    const headers = init?.headers as Record<string, string> | undefined;
+    expect(headers?.['X-Orrery-App-Origin']).toBe('https://app.example');
+    // The bundle must not even be requested for a network that cannot serve it.
+    expect(url).not.toContain('browser.');
   });
 });

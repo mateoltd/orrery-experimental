@@ -26,7 +26,13 @@
  */
 
 import { systemClock } from '@orrery/clock';
-import { FRAME_SANDBOX_TOKENS, type SeedPolicy, type SimMode } from '@orrery/sim-sdk/protocol';
+import {
+  FRAME_SANDBOX_TOKENS,
+  HANDSHAKE_TIMEOUT_MS,
+  type HostFrame,
+  type SeedPolicy,
+  type SimMode,
+} from '@orrery/sim-sdk/protocol';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BLOCKED_ADVICE,
@@ -35,6 +41,8 @@ import {
   deriveSeed,
   type HostState,
   initialHostState,
+  type ProbeResult,
+  probeSimOrigin,
 } from './hostBridge';
 
 export interface SimulationFrameProps {
@@ -42,6 +50,17 @@ export interface SimulationFrameProps {
   readonly simVersion: string;
   /** The content-hashed bundle URL on the SIM origin. Never the app origin. */
   readonly bundleUrl: string;
+  /**
+   * The SIM ORIGIN, and the reason it is a prop rather than something read from the bundle URL:
+   * `postMessage` needs a TARGET ORIGIN, and it is a security decision rather than a convenience.
+   *
+   * Posting to `'*'` would hand the init frame -- params, seed and the nonce -- to whatever document
+   * happens to be in the frame afterwards. A simulation that redirects, or a compromised bundle, would
+   * receive a student's seed and this mount's nonce, and with the nonce it could post frames that pass
+   * our source check. So the origin is explicit, and a missing one stops the mount instead of
+   * downgrading to `'*'`.
+   */
+  readonly simOrigin: string;
   readonly params: Readonly<Record<string, unknown>>;
   readonly mode: SimMode;
   readonly seedPolicy: SeedPolicy;
@@ -56,6 +75,14 @@ export interface SimulationFrameProps {
   /** Injected for tests: the clock and the per-mount nonce. */
   readonly now?: () => number;
   readonly nonce?: string;
+  /**
+   * Injected so the reachability probe is testable without a network. Explicit `null` SKIPS the probe,
+   * which is how a unit test mounts the frame without one; the default resolves to `globalThis.fetch`
+   * and becomes `null` only where there is no fetch at all.
+   */
+  readonly probeFetch?: typeof fetch | null;
+  /** Injected for tests: the app origin the probe presents. */
+  readonly appOrigin?: string;
   readonly onAnswer?: (answer: unknown) => void;
   readonly onState?: (state: unknown) => void;
   readonly onFallback?: (reason: BlockedReason) => void;
@@ -88,6 +115,9 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
     title,
     identity = {},
     lazy = true,
+    simOrigin,
+    probeFetch = typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : null,
+    appOrigin = '',
     // `systemClock`, never `Date.now()`: `INV-TIME-1`, and the app-wide gate enforces it. A component
     // default of `Date.now()` would be a clock nobody can substitute in a test.
     now = systemClock.now,
@@ -99,11 +129,34 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
   const [visible, setVisible] = useState(!lazy);
   const [state, setState] = useState<HostState>(initialHostState);
   const [blockedReason, setBlockedReason] = useState<BlockedReason | null>(null);
+  const [probe, setProbe] = useState<ProbeResult | null>(null);
+  /**
+   * Three states, not two, because "not asked yet" and "asked and told no" must not mount the same
+   * thing. `SKIPPED` exists only for a caller with no fetch, where the honest answer is "we could not
+   * check" rather than a pass or a fail -- see `probeAllowsMount`.
+   */
+  const [probeState, setProbeState] = useState<'SKIPPED' | 'PENDING' | 'DONE'>(() =>
+    probeFetch === null ? 'SKIPPED' : 'PENDING',
+  );
   const containerRef = useRef<HTMLDivElement | null>(null);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bridgeRef = useRef<ReturnType<typeof createHostBridge> | null>(null);
   const lastAnswerRef = useRef<unknown>(null);
+
+  // A `postMessage` target origin must be an absolute origin. If it is not, we refuse to mount rather
+  // than fall back to `'*'`: a wildcard here is a nonce leak, and a missing prop is a config bug that
+  // should fail in development rather than silently in a student's lesson.
+  const targetOrigin = useMemo(() => {
+    try {
+      const parsed = new URL(simOrigin);
+      return parsed.origin === simOrigin ? parsed.origin : null;
+    } catch {
+      return null;
+    }
+  }, [simOrigin]);
+
+  const originUsable = targetOrigin !== null;
 
   const nonce = useMemo(() => props.nonce ?? mintNonce(), [props.nonce]);
   // Named fields, not the `identity` object, in both the capture and the dependency list. The first
@@ -141,10 +194,47 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
     };
   }, [lazy, visible]);
 
+  // Reachability BEFORE the bundle is requested.
+  //
+  // The first version inferred everything from the iframe's `error` event, which cannot tell a
+  // blocked request from a 404 from a slow network, so every failure told a student to check their
+  // firewall. Probing first also means a student on a blocked network never downloads a bundle that
+  // was never going to run.
   useEffect(() => {
     if (!visible) return undefined;
-    const frame = frameRef.current;
-    if (frame === null) return undefined;
+    // No fetch means the check cannot run. Proceeding is the right call: a host that blocks mounts
+    // because it could not ask a question is worse than a host that asks and does not listen.
+    if (probeFetch === null) return undefined;
+    let cancelled = false;
+    const run = async (): Promise<void> => {
+      // The component's own clock, so the probe's cache expiry obeys the same `INV-TIME-1` injection
+      // as the handshake timeout and a test can expire it deliberately.
+      const result = await probeSimOrigin(simOrigin, appOrigin, probeFetch, now);
+      if (cancelled) return;
+      setProbe(result);
+      // Set on the way out of the effect, not on the way in: a `PENDING` that never becomes `DONE`
+      // leaves the mount on its poster forever, which reads as "slow" rather than "broken".
+      setProbeState('DONE');
+      if (result.outcome !== 'OK') setBlockedReason(result.outcome);
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, simOrigin, appOrigin, probeFetch, now]);
+
+  useEffect(() => {
+    // Not mounted until the check has RESOLVED, in either direction. Mounting while a probe is still in
+    // flight is how the first version downloaded a bundle for a network that had already been found to
+    // be blocked.
+    if (!visible || !originUsable) return undefined;
+    if (probeState === 'PENDING') return undefined;
+    if (probeState === 'DONE' && probe?.outcome !== 'OK') return undefined;
+    // `frameEl`, not `frame`: `frame` is already the PROTOCOL frame everywhere else in this file,
+    // and the shadowing made `frameEl.contentWindow` read `undefined` on a plain object -- so every
+    // outbound frame was silently dropped.
+    const frameEl = frameRef.current;
+    if (frameEl === null) return undefined;
 
     const bridge = createHostBridge({
       simId,
@@ -159,7 +249,7 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
       defaultHeight,
       minHeight,
       now,
-      expectedSource: frame.contentWindow,
+      expectedSource: frameEl.contentWindow,
       transport: {
         subscribe(handler) {
           const listener = (event: MessageEvent): void => {
@@ -167,6 +257,15 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
           };
           globalThis.addEventListener('message', listener);
           return () => globalThis.removeEventListener('message', listener);
+        },
+        post(frame: HostFrame) {
+          // The window captured when the bridge was created, not `frameRef.current`. React detaches a
+          // ref during the commit that unmounts, so a teardown posted by the effect cleanup read a null
+          // ref and was silently dropped -- the sim kept its rAF loop running for the rest of the page.
+          const target = frameEl.contentWindow;
+          if (target === null || target === undefined) return;
+          // The explicit origin, never '*'. See `simOrigin`.
+          target.postMessage(frame, targetOrigin);
         },
       },
     });
@@ -181,30 +280,45 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
 
     // The handshake timer starts when the frame ELEMENT loads, not here: a bundle that takes nine
     // seconds to download has not spent nine seconds failing to hand-shake.
+    let loadObserved = false;
     const onLoad = (): void => {
+      // Guarded, because a second `load` would start a second timer and the first one would still be
+      // pending when the component unmounts.
+      if (loadObserved) return;
+      loadObserved = true;
       apply(bridge.onFrameEvent('load'));
-      timerRef.current = setTimeout(() => {
-        const timedOut = bridge.checkTimeout();
-        if (timedOut !== null) apply(timedOut);
-      }, 10_000);
+      timerRef.current = setTimeout(
+        () => {
+          const timedOut = bridge.checkTimeout();
+          if (timedOut !== null) apply(timedOut);
+        },
+        // The protocol's constant, not a literal. A timeout copied from the spec is a timeout that
+        // drifts from the spec the first time the spec moves.
+        HANDSHAKE_TIMEOUT_MS,
+      );
+      // The handshake starts HERE, after load, and `sim:init` is the first thing out. A frame that has
+      // not loaded has no window to receive it, and a host that talks first spends its whole budget
+      // downloading.
+      bridge.emit(bridge.initFrame());
     };
     const onError = (): void => {
       apply(bridge.onFrameEvent('error'));
       setBlockedReason('FIREWALL');
     };
-    frame.addEventListener('load', onLoad);
-    frame.addEventListener('error', onError);
-
-    // `sim:init` goes out after load, because a frame that has not loaded has no window to receive it.
-    onLoad();
+    frameEl.addEventListener('load', onLoad);
+    frameEl.addEventListener('error', onError);
 
     return () => {
-      frame.removeEventListener('load', onLoad);
-      frame.removeEventListener('error', onError);
+      frameEl.removeEventListener('load', onLoad);
+      frameEl.removeEventListener('error', onError);
       if (timerRef.current !== null) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
       }
+      // `sim:teardown` first, so the sim can stop its rAF loop and release its listeners before we
+      // stop listening to it. A simulation left running after its host is gone keeps a timer alive for
+      // as long as the student stays on the page.
+      bridge.emit(bridge.teardown());
       bridge.dispose();
       bridgeRef.current = null;
     };
@@ -222,6 +336,10 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
     minHeight,
     now,
     onFallback,
+    originUsable,
+    probeState,
+    probe,
+    targetOrigin,
   ]);
 
   // The answer is reported ONCE per value, not once per render: a re-render of the surrounding lesson
@@ -241,7 +359,11 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
   // look something up comes back to a timeline that ran on without them.
   useEffect(() => {
     const onVisibility = (): void => {
-      bridgeRef.current?.visibility(document.visibilityState === 'visible');
+      // Emitted, not merely computed. A hidden tab pauses the sim's rAF loop, and a host that computes
+      // the frame and never sends it leaves every student's timeline running on without them.
+      const bridge = bridgeRef.current;
+      if (bridge === null) return;
+      bridge.emit(bridge.visibility(document.visibilityState === 'visible'));
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
@@ -249,21 +371,33 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
 
   const height = Math.max(minHeight, state.height ?? defaultHeight);
 
+  // A failed probe is a fallback in its own right, with its OWN advice rather than the bridge's generic
+  // one: "your school network is blocking this" and "your network is blocking this" send a student to
+  // two different places.
+  const probeBlocked = probeState === 'DONE' && probe !== null && probe.outcome !== 'OK';
+  const showFallback = state.showFallback || probeBlocked || !originUsable;
+  const teacherDetail = !originUsable
+    ? `The simulation origin ${JSON.stringify(simOrigin)} is not a usable origin, so the frame was not mounted. ` +
+      'postMessage needs an explicit target origin, and falling back to "*" would leak the nonce.'
+    : probeBlocked
+      ? `The simulation origin ${simOrigin} did not answer its reachability probe: ${probe.detail}`
+      : state.teacherDetail;
+
   return (
     <div className="sim-host" ref={containerRef} data-sim-id={simId} data-sim-status={state.status}>
-      {state.showFallback ? (
+      {showFallback ? (
         <div className="sim-host__fallback" role="status">
           <p className="sim-host__message">
             {state.studentMessage ?? BLOCKED_ADVICE[blockedReason ?? 'UNKNOWN']}
           </p>
           <p className="sim-host__text">{textAlternative}</p>
-          {state.teacherDetail !== null ? (
+          {teacherDetail !== null ? (
             <p className="sim-host__teacher" data-testid="sim-teacher-detail">
-              {state.teacherDetail}
+              {teacherDetail}
             </p>
           ) : null}
         </div>
-      ) : visible ? (
+      ) : visible && originUsable && (probeState === 'SKIPPED' || probe?.outcome === 'OK') ? (
         <iframe
           ref={frameRef}
           className="sim-host__frame"

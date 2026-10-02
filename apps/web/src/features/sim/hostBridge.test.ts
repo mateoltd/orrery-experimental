@@ -14,14 +14,20 @@
  *  - `a flush with nothing pending changes NOTHING` — the first flush sent a synthetic
  *    `{width: 0, height: 0}`, so unmounting any sim collapsed it to its minimum height.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BLOCKED_ADVICE,
   type BlockedReason,
+  classifyProbe,
   createHostBridge,
   deriveSeed,
   type HostInput,
   isBlockedReason,
+  PROBE_CACHE_TTL_MS,
+  probeAllowsMount,
+  probeSimOrigin,
+  resetProbeCache,
+  SIM_ORIGIN_PROBE_PATH,
   STUDENT_MESSAGES,
 } from './hostBridge';
 
@@ -473,5 +479,132 @@ describe('the blocked-reason vocabulary', () => {
     }
     // And the firewall one says so outright, because "not your fault" is the point.
     expect(BLOCKED_ADVICE.FIREWALL).toMatch(/Nothing is wrong with your work/u);
+  });
+});
+
+/**
+ * The reachability probe.  (P6-T6)
+ *
+ * ## WHY `classifyProbe` IS TESTED SEPARATELY FROM `probeSimOrigin`
+ *
+ * The interesting question is not "does a rejected fetch produce a non-OK outcome" but "does it produce
+ * the RIGHT non-OK outcome". Reporting OFFLINE for a firewall sends a student to check a cable that is
+ * plugged in, so the classifier gets its own cases rather than being inferred from the fetcher.
+ */
+describe('classifying a probe failure', () => {
+  it('reports OFFLINE only when the browser itself says there is no network', () => {
+    expect(classifyProbe(new TypeError('Failed to fetch'), 0, false).outcome).toBe('OFFLINE');
+  });
+
+  it('reports FIREWALL for everything else, because every other failure looks the same', () => {
+    // A 502, a dropped packet and a blocked request all reject identically. Only the browser's own
+    // opinion distinguishes them, and it is the only trustworthy one.
+    for (const error of [new TypeError('Failed to fetch'), new Error('network error'), undefined]) {
+      expect(classifyProbe(error, 0, true).outcome).toBe('FIREWALL');
+    }
+  });
+
+  it('keeps the underlying message for the teacher line, and it is a string', () => {
+    const result = classifyProbe(new TypeError('Failed to fetch'), 0, true);
+    expect(result.detail).toBe('Failed to fetch');
+    expect(typeof result.detail).toBe('string');
+  });
+
+  it('has an advice entry for every outcome it can produce', () => {
+    // "It did not load" is not something a student can act on, so each outcome names its own next step.
+    for (const outcome of ['FIREWALL', 'OFFLINE', 'DNS'] as const) {
+      expect(BLOCKED_ADVICE[outcome].length).toBeGreaterThan(20);
+      expect(isBlockedReason(outcome)).toBe(true);
+    }
+    expect(probeAllowsMount({ outcome: 'OK', detail: '', status: 200 })).toBe(true);
+    expect(probeAllowsMount({ outcome: 'FIREWALL', detail: '', status: 0 })).toBe(false);
+    // Not having asked is not the same as having been told no.
+    expect(probeAllowsMount(null)).toBe(true);
+  });
+});
+
+describe('probing the sim origin', () => {
+  const respond = (status: number): typeof fetch =>
+    (() => Promise.resolve(new Response('ok', { status }))) as unknown as typeof fetch;
+
+  beforeEach(() => {
+    resetProbeCache();
+  });
+
+  it('uses mode `cors`, never `no-cors`, and presents the app origin', async () => {
+    const seen: Array<[string, RequestInit | undefined]> = [];
+    const spy = ((input: RequestInfo | URL, init?: RequestInit) => {
+      seen.push([String(input), init]);
+      return Promise.resolve(new Response('ok', { status: 200 }));
+    }) as unknown as typeof fetch;
+    const result = await probeSimOrigin('https://sims.example', 'https://app.example', spy);
+    expect(result.outcome).toBe('OK');
+    const [url, init] = seen[0] ?? [];
+    expect(url).toBe(`https://sims.example${SIM_ORIGIN_PROBE_PATH}`);
+    // An opaque response cannot be told apart from a blocked one, which is the entire question.
+    expect(init?.mode).toBe('cors');
+    expect(init?.credentials).toBe('omit');
+    const headers = init?.headers as Record<string, string> | undefined;
+    expect(headers?.['X-Orrery-App-Origin']).toBe('https://app.example');
+  });
+
+  it('treats a 5xx as DNS and a 4xx as FIREWALL, because the advice differs', async () => {
+    // A 4xx means the origin was REACHED and chose not to answer, which is a deployment fault; a 5xx
+    // means the origin exists and is unwell. Neither is the student's network.
+    expect(
+      (await probeSimOrigin('https://a.example', 'https://app.example', respond(502))).outcome,
+    ).toBe('DNS');
+    expect(
+      (await probeSimOrigin('https://b.example', 'https://app.example', respond(404))).outcome,
+    ).toBe('FIREWALL');
+  });
+
+  it('caches a SUCCESS, so a lesson with twelve sims does not fire twelve probes', async () => {
+    let calls = 0;
+    const counting = (() => {
+      calls += 1;
+      return Promise.resolve(new Response('ok', { status: 200 }));
+    }) as unknown as typeof fetch;
+    await probeSimOrigin('https://cached.example', 'https://app.example', counting);
+    await probeSimOrigin('https://cached.example', 'https://app.example', counting);
+    expect(calls).toBe(1);
+  });
+
+  it('EXPIRES a cached success, so a network that changes is re-asked rather than remembered', async () => {
+    let calls = 0;
+    let clock = 0;
+    const counting = (() => {
+      calls += 1;
+      return Promise.resolve(new Response('ok', { status: 200 }));
+    }) as unknown as typeof fetch;
+    const now = (): number => clock;
+    await probeSimOrigin('https://ttl.example', 'https://app.example', counting, now);
+    clock = PROBE_CACHE_TTL_MS - 1;
+    await probeSimOrigin('https://ttl.example', 'https://app.example', counting, now);
+    expect(calls).toBe(1);
+    // A tab left open across a lesson period must re-ask: a cache nobody can clear will still be
+    // declaring a fixed network broken hours later.
+    clock = PROBE_CACHE_TTL_MS + 1;
+    await probeSimOrigin('https://ttl.example', 'https://app.example', counting, now);
+    expect(calls).toBe(2);
+  });
+
+  it('does NOT cache a failure, so a student who fixes their network is not left with stale advice', async () => {
+    // The moment a student is least able to interpret a cached failure is immediately after they fix the
+    // thing that caused it.
+    let calls = 0;
+    const flaky = (() => {
+      calls += 1;
+      return calls === 1
+        ? Promise.reject(new TypeError('Failed to fetch'))
+        : Promise.resolve(new Response('ok', { status: 200 }));
+    }) as unknown as typeof fetch;
+    expect(
+      (await probeSimOrigin('https://flaky.example', 'https://app.example', flaky)).outcome,
+    ).toBe('FIREWALL');
+    expect(
+      (await probeSimOrigin('https://flaky.example', 'https://app.example', flaky)).outcome,
+    ).toBe('OK');
+    expect(calls).toBe(2);
   });
 });
