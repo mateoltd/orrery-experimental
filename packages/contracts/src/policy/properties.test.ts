@@ -662,7 +662,7 @@ describe('SHUFFLE SEEDS — injective, and refusing the ambiguous case', () => {
             studentId: 's',
             attemptId: 'at',
             ...(field === 'variantLabel' ? {} : {}),
-            [field]: `${value} `,
+            [field]: `${value}\u0000`,
           } as {
             assignmentId: string;
             studentId: string;
