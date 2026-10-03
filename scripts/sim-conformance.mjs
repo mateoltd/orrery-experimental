@@ -83,9 +83,28 @@ const waitForStatus = async (page, wanted, timeout = 15_000) => {
  * must go through the HOST: posting into the frame ourselves would prove the sim responds, not that the
  * host asks.
  */
+/**
+ * THE NONCE OF THE CURRENT MOUNT, NOT THE FIRST ONE EVER.
+ *
+ * Every inbound frame is authenticated against the nonce the host minted for the mount it belongs to, and
+ * a re-mount mints a new one. The runner took `log.inbound.find(f => f.type === 'sim:ready')` -- the
+ * FIRST ready frame in the log -- so after any re-mount it sent a STALE nonce and the bridge silently
+ * dropped every frame. Every lookup below therefore scans BACKWARDS.
+ *
+ * It looked like the simulations were broken: `setParams` did nothing, so no cell could perturb one and
+ * the new reset cell could not see a reset. But `__simReceived` showed `sim:setParams` ARRIVING, because
+ * the sims record the frame type in their own listener, which runs BEFORE the bridge authenticates it --
+ * so the evidence that looked like proof of delivery was evidence of the opposite.
+ *
+ * Nothing caught it across nine simulations, because every one of them declares a conformance script that
+ * sets its parameters to their DEFAULTS. A frame that does nothing and a frame that sets a value to what
+ * it already was are indistinguishable, and the suite only ever asked for the second.
+ */
 const captureState = async (page) => {
   const nonce = await page.evaluate(
-    () => globalThis.__conformance.log.inbound.find((f) => f.type === 'sim:ready')?.nonce ?? null,
+    () =>
+      [...globalThis.__conformance.log.inbound].reverse().find((f) => f.type === 'sim:ready')
+        ?.nonce ?? null,
   );
   if (nonce === null) return null;
   await page.evaluate((n) => {
@@ -157,12 +176,28 @@ const runManifestScript = async (page, frame, entry, manifest) => {
   const steps = manifest?.conformance?.script ?? [];
   if (steps.length === 0) return { ok: true, note: 'no script declared' };
 
+  // WAIT FOR THE HANDSHAKE BEFORE SCRIPTING ANYTHING.
+  //
+  // A frame that arrives before `sim:init` is dropped without comment -- there is no nonce to
+  // authenticate it with, and `sim:init` is what establishes one. A script that starts posting the moment
+  // the page loads therefore races the handshake, and the loser is silent: the `sim:setParams` vanishes
+  // and the simulation goes on with its `sim:init` defaults.
+  //
+  // That is what made `physics.newtons-second-law` answer `"acceleration"` for a script that had just set
+  // `"mass"`, in roughly one run in three. It was invisible while `sim:init` params were discarded,
+  // because then the simulation started from the same defaults the script set and the race had nothing to
+  // decide. Now that a host's parameters are honoured, the ordering matters -- and a conformance script
+  // that depends on winning a race is not a conformance script.
+  await waitForStatus(page, ['READY', 'DEGRADED']);
+
   const before = await page.evaluate(() => globalThis.__conformance.log.answers.length);
   for (const step of steps) {
     await page.evaluate(async (s) => {
       const frame = globalThis.document.querySelector('iframe');
       const target = frame?.contentWindow;
-      const nonce = globalThis.__conformance.log.inbound.find((f) => f.type === 'sim:ready')?.nonce;
+      const nonce = [...globalThis.__conformance.log.inbound]
+        .reverse()
+        .find((f) => f.type === 'sim:ready')?.nonce;
       if (target === null || target === undefined || nonce === undefined) return;
       const args = s.args ?? {};
       const outbounds = [];
@@ -511,8 +546,8 @@ const CELLS = [
       // Read from what the PAGE saw, recorded by a listener installed before React mounted. The first
       // version attached its listener afterwards and then waited two seconds for a frame that had
       // already arrived.
-      const ready = await page.evaluate(
-        () => globalThis.__conformance.log.inbound.find((f) => f.type === 'sim:ready') ?? null,
+      const ready = await page.evaluate(() =>
+        [...globalThis.__conformance.log.inbound].reverse().find((f) => f.type === 'sim:ready'),
       );
       if (ready === null) return 'no sim:ready was ever received by the page';
       return ready.nonce === null || ready.nonce === '' ? 'sim:ready carried no nonce' : null;
@@ -700,6 +735,114 @@ const CELLS = [
       return existsSync(join(SHOTS, name)) ? null : 'the screenshot was not written';
     },
   },
+  // LAST, DELIBERATELY. This cell remounts the page three times through the host, and every cell that
+  // follows it inherits whatever it leaves behind -- which is how "a SCRIPTED INTERACTION produces an
+  // answer" and "the answer is GRADEABLE" started failing the moment this cell sat second in the list.
+  // A cell that owns the page gets the last word on it.
+  {
+    name: 'RESET puts the student back where they started',
+    why:
+      'reset is the button a student presses after a wrong answer, and no simulation had a check for ' +
+      'it: every conformance script drove `setParams` only, and `expect.grade` is computed in Node from ' +
+      "the manifest's own params, so the suite proved the grader agreed with the manifest and never that " +
+      'the simulation obeyed anything',
+    run: async ({ page, entry, simOrigin, appOrigin }) => {
+      const baselineConfig = new URL(page.url()).searchParams.get('cfg');
+      const parameter = (entry.parameters ?? []).find((p) => p.default !== undefined);
+      if (parameter === undefined) return 'the simulation declares no parameter to perturb';
+
+      const perturbedValue =
+        parameter.type === 'number'
+          ? Number(parameter.default) +
+            (Number(parameter.default) === Number(parameter.maximum) ? -1 : 1)
+          : Array.isArray(parameter.enumValues) && parameter.enumValues.length > 1
+            ? parameter.enumValues.find((v) => v !== parameter.default)
+            : null;
+      if (perturbedValue === null) return 'no way to perturb a parameter with exactly one value';
+
+      // THE PERTURBATION GOES THROUGH THE HOST, by remounting with a different `cfg`.
+      //
+      // Posting `sim:setParams` into the frame cannot see this: the reply came back with the UNCHANGED
+      // state for all nine simulations, and `expect.grade` passed regardless, because that grade never
+      // reads the browser. A cell that cannot see a change cannot test that a change was undone.
+      const configFor = (overrides) => {
+        const config = harnessConfig(entry, simOrigin);
+        return Buffer.from(
+          JSON.stringify(
+            overrides ? { ...config, params: { ...config.params, ...overrides } } : config,
+          ),
+        ).toString('base64url');
+      };
+      const mount = async (cfg) => {
+        await page.goto(`${appOrigin}/?cfg=${cfg}`, { waitUntil: 'load' });
+        await page.waitForFunction(() => globalThis.__conformance?.ready === true, undefined, {
+          timeout: 15_000,
+        });
+        await waitForStatus(page, ['READY', 'DEGRADED']);
+        return captureState(page);
+      };
+
+      // LEAVE THE PAGE AS IT WAS FOUND. This cell reloads it three times, and a cell that leaves a
+      // perturbed simulation behind changes the verdicts of every cell that runs after it -- which is
+      // how "a SCRIPTED INTERACTION produces an answer" and "the answer is GRADEABLE" started failing
+      // the moment this cell landed. A cell owns its own effects and returns the world as it found it.
+      const restore = async () => {
+        await mount(baselineConfig ?? configFor(null));
+      };
+
+      const perturbedCfg = configFor({ [parameter.name]: perturbedValue });
+      const perturbed = await mount(perturbedCfg);
+      if (perturbed === null || typeof perturbed.checksum !== 'string') {
+        await restore();
+        return 'the perturbed simulation reported no state';
+      }
+      const defaults = await mount(baselineConfig ?? configFor(null));
+      if (defaults === null || typeof defaults.checksum !== 'string') {
+        return 'the default simulation reported no state';
+      }
+      if (perturbed.checksum === defaults.checksum) {
+        await restore();
+        return (
+          `${parameter.name}=${JSON.stringify(perturbedValue)} produced the same state as the default, so ` +
+          'the host is not configuring the simulation and this cell would pass for the wrong reason'
+        );
+      }
+
+      // A SECOND perturbed mount, so "reset restored it" compares two states rather than three guesses.
+      const again = await mount(perturbedCfg);
+      if (again === null || again.checksum !== perturbed.checksum) {
+        await restore();
+        return 'mounting the same configuration twice produced different states';
+      }
+
+      const afterReset = await page.evaluate(async () => {
+        const target = globalThis.document.querySelector('iframe')?.contentWindow;
+        const log = globalThis.__conformance.log;
+        const nonce = [...log.inbound].reverse().find((f) => f.type === 'sim:ready')?.nonce;
+        const before = log.states.length;
+        if (target === null || target === undefined || nonce === undefined) return null;
+        target.postMessage({ type: 'sim:command', name: 'reset', args: {}, nonce }, '*');
+        await new Promise((done) => setTimeout(done, 200));
+        target.postMessage({ type: 'sim:requestState', reason: 'save', nonce }, '*');
+        const until = Date.now() + 6000;
+        for (;;) {
+          if (log.states.length > before) {
+            return log.states[log.states.length - 1];
+          }
+          if (Date.now() > until) return null;
+          await new Promise((done) => setTimeout(done, 100));
+        }
+      });
+      if (afterReset === null) return 'reset produced no state';
+
+      const verdict =
+        afterReset.checksum === defaults.checksum
+          ? null
+          : `reset left ${String(afterReset.checksum)}; the declared defaults are ${String(defaults.checksum)}`;
+      await restore();
+      return verdict;
+    },
+  },
 ];
 
 const run = async () => {
@@ -771,6 +914,7 @@ const run = async () => {
       try {
         failure = await cell.run({
           page,
+          appOrigin: app.origin,
           frame: simFrame,
           simOrigin: sim.origin,
           entry,

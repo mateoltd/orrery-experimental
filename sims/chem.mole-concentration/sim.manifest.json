@@ -73,19 +73,19 @@
         "command": "setParams",
         "args": {
           "params": {
-            "buretteCm": 23.4,
-            "flaskMl": 250
+            "buretteCm": 40.0,
+            "flaskMl": 500
           }
         }
       }
     ],
     "type": {
-      "concentration": 0.0936
+      "concentration": 0.08
     },
     "expect": {
       "value": {
-        "min": 0.0935,
-        "max": 0.0937
+        "min": 0.0799,
+        "max": 0.0801
       },
       "grade": 4
     }

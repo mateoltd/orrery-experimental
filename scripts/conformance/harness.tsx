@@ -17,7 +17,6 @@
  */
 
 import { checksumState } from '@orrery/sim-sdk/state';
-import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { SimulationFrame } from '../../apps/web/src/features/sim/SimulationFrame';
 
@@ -107,34 +106,43 @@ mountPoint.id = 'root';
 document.body.append(mountPoint);
 
 createRoot(mountPoint).render(
-  <StrictMode>
-    <SimulationFrame
-      simId={config.simId}
-      simVersion={config.simVersion}
-      bundleUrl={config.bundleUrl}
-      simOrigin={config.simOrigin}
-      params={config.params}
-      mode={config.mode}
-      seedPolicy={{ kind: 'FIXED', seed: 'conformance-seed' }}
-      defaultHeight={config.defaultHeight}
-      minHeight={config.minHeight}
-      textAlternative={config.textAlternative}
-      title={config.title}
-      lazy={false}
-      // No probe: this harness serves its own sim origin, so the reachability check is a separate
-      // concern with its own tests, and stubbing it here would only assert the stub.
-      probeFetch={null}
-      onAnswer={(answer) => {
-        log.answers.push(answer);
-      }}
-      onState={(state, checksum) => {
-        log.states.push({ state, checksum });
-      }}
-      onFallback={(reason) => {
-        log.fallbacks.push(reason);
-      }}
-    />
-  </StrictMode>,
+  // NOT WRAPPED IN `StrictMode`, AND THAT IS LOAD-BEARING.
+  //
+  // StrictMode double-invokes effects in development, so the frame mounts, tears down, and mounts again
+  // with a fresh document. A conformance script that posts `sim:setParams` can land in the FIRST document
+  // and then read the SECOND one's state -- which showed up as `expect.answer.quantity` answering
+  // `"acceleration"` for a script that had just set `"mass"`, intermittently, in whichever run lost the
+  // race. The defect was invisible while `sim:init` params were discarded, because the simulation always
+  // started from its own defaults and the script happened to set those same values.
+  //
+  // Production does not remount a lesson block to check for impure effects, and a harness that measures a
+  // simulation through a remount is measuring React, not the simulation.
+  <SimulationFrame
+    simId={config.simId}
+    simVersion={config.simVersion}
+    bundleUrl={config.bundleUrl}
+    simOrigin={config.simOrigin}
+    params={config.params}
+    mode={config.mode}
+    seedPolicy={{ kind: 'FIXED', seed: 'conformance-seed' }}
+    defaultHeight={config.defaultHeight}
+    minHeight={config.minHeight}
+    textAlternative={config.textAlternative}
+    title={config.title}
+    lazy={false}
+    // No probe: this harness serves its own sim origin, so the reachability check is a separate
+    // concern with its own tests, and stubbing it here would only assert the stub.
+    probeFetch={null}
+    onAnswer={(answer) => {
+      log.answers.push(answer);
+    }}
+    onState={(state, checksum) => {
+      log.states.push({ state, checksum });
+    }}
+    onFallback={(reason) => {
+      log.fallbacks.push(reason);
+    }}
+  />,
 );
 
 const observer = new MutationObserver(() => {

@@ -191,6 +191,12 @@ describe('the handshake', () => {
     const init = lesson as Extract<typeof lesson, { type: 'sim:init' }>;
     expect(init.nonce).toBe('nonce-abc');
     expect(init.mode).toBe('lesson');
+    // The lesson's PARAMETERS travel in `sim:init`, and this assertion is the one that was missing.
+    //
+    // `baseInput()` sets `params: { speed: 25, angle: 45 }` and nothing ever checked they arrived --
+    // and the SDK was discarding them, so a host could carry a lesson's values, stamp them on a frame,
+    // and a simulation would begin on its own hardcoded defaults with nothing reporting the difference.
+    expect(init.params).toEqual({ speed: 25, angle: 45 });
     // No grading block in a lesson mount, so a sim that grades has nothing to score and must be refused.
     expect((lesson as { grading?: unknown }).grading).toBeUndefined();
 

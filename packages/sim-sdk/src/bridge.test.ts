@@ -16,7 +16,10 @@ const CAPABILITIES: SimCapabilities = { grading: true, stepper: true, scenarios:
  * mode a passing unit suite is worst at finding.
  */
 describe('connectSim', () => {
-  const handlers = (): BridgeHandlers => ({ getState: () => ({ t: 1 }) });
+  const handlers = (over: Partial<BridgeHandlers> = {}): BridgeHandlers => ({
+    getState: () => ({ t: 1 }),
+    ...over,
+  });
   const posted: unknown[] = [];
   const transport = () => {
     posted.length = 0;
@@ -47,6 +50,61 @@ describe('connectSim', () => {
     seed: 'seed-1',
     mode: 'lesson',
     ...over,
+  });
+
+  // THE PARAMS IN `sim:init` ARE THE LESSON'S, AND THEY WERE BEING DROPPED.
+  //
+  // The handler marked the simulation started and returned, so a host could carry a teacher's parameter
+  // values, stamp them on `sim:init`, and the simulation would begin on whatever defaults its own source
+  // file hardcoded. Nothing reported the difference. This took a browser probe to notice, because no test
+  // asserted the values arrived and every conformance script set its parameters to their defaults.
+  it('APPLIES the params carried by `sim:init`', () => {
+    const t = transport();
+    const seen: unknown[] = [];
+    const connection = connectSim({
+      transport: t,
+      handlers: handlers({ onSetParams: (params) => seen.push(params) }),
+      expectedSimId: 'maths.projectile-motion',
+      expectedVersion: '1.0.0',
+      capabilities: CAPABILITIES,
+    });
+    t.deliver(initFrame({ params: { speed: 25, angle: 45 } }));
+    expect(connection.started).toBe(true);
+    expect(seen).toEqual([{ speed: 25, angle: 45 }]);
+  });
+
+  it('applies `sim:init` params even when they are empty, so a lesson CAN clear them', () => {
+    const t = transport();
+    const seen: unknown[] = [];
+    connectSim({
+      transport: t,
+      handlers: handlers({ onSetParams: (params) => seen.push(params) }),
+      expectedSimId: 'maths.projectile-motion',
+      expectedVersion: '1.0.0',
+      capabilities: CAPABILITIES,
+    });
+    t.deliver(initFrame({ params: {} }));
+    expect(seen).toEqual([{}]);
+  });
+
+  it('tolerates a `sim:init` with NO params at all, rather than calling the handler with undefined', () => {
+    const t = transport();
+    let calls = 0;
+    connectSim({
+      transport: t,
+      handlers: handlers({
+        onSetParams: () => {
+          calls += 1;
+        },
+      }),
+      expectedSimId: 'maths.projectile-motion',
+      expectedVersion: '1.0.0',
+      capabilities: CAPABILITIES,
+    });
+    const frame = initFrame() as Record<string, unknown>;
+    delete frame.params;
+    t.deliver(frame);
+    expect(calls).toBe(0);
   });
 
   it('has NO bridge before `sim:init`, because there is no nonce to echo yet', () => {

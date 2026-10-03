@@ -139,6 +139,22 @@ export function createHostBridge(init: BridgeInit): HostBridge {
     switch (frame.type) {
       case 'sim:init': {
         started = true;
+        // THE PARAMS IN `sim:init` WERE BEING DISCARDED.
+        //
+        // `sim:init` carries `params`, and the host fills them from the lesson block, and the handler
+        // marked the sim started and returned. Every simulation therefore began at whatever defaults its
+        // own source file hardcoded, and a teacher who configured a lesson with specific values got a
+        // simulation showing different numbers from the ones they set -- silently, because nothing in the
+        // protocol reported that the values had been dropped.
+        //
+        // Nothing caught it for nine simulations. Every conformance script sets its parameters to their
+        // DEFAULTS, so "the params arrived" and "the params were ignored" are indistinguishable; and
+        // `expect.grade` is computed in Node from the manifest rather than from the browser, so the grade
+        // passed on a simulation that had never seen the values. It took a cell that perturbs a parameter
+        // through the host and compares STATES to notice.
+        if (frame.params !== undefined) {
+          handlers.onSetParams?.(frame.params, frame.seed);
+        }
         return;
       }
       case 'sim:setParams':
@@ -445,6 +461,21 @@ export function connectSim(input: ConnectSimInput): SimConnection {
       init: frame,
       ...(input.expectedSource === undefined ? {} : { expectedSource: input.expectedSource }),
     });
+    // THE LESSON'S PARAMETERS TRAVEL ON THIS FRAME, AND THEY WERE NEVER HANDED TO THE SIMULATION.
+    //
+    // This listener consumes the FIRST `sim:init` to learn the nonce and build the bridge, and then
+    // returns for every later frame because the bridge subscribes for itself. So the `params` on it were
+    // read for the sim id and the version and nothing else: a host could carry a teacher's values, stamp
+    // them here, and the simulation would begin on whatever defaults its own source hardcoded -- with
+    // nothing reporting that the values had been dropped.
+    //
+    // It took a browser probe to find, because no unit test asserted the values arrived, every
+    // conformance script sets its parameters to their DEFAULTS, and `expect.grade` is computed in Node
+    // from the manifest rather than from the browser -- so all three would have passed on a simulation
+    // that had never seen a single configured value.
+    if (frame.params !== undefined) {
+      input.handlers.onSetParams?.(frame.params, frame.seed);
+    }
     bridge.ready({
       simId: input.expectedSimId,
       simVersion: input.expectedVersion,
