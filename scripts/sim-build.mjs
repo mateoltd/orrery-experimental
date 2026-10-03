@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 /**
  * `pnpm sim:build` — the simulation build pipeline.  (P6-T4, P6-T5)
  *
@@ -41,6 +42,7 @@
  *   node scripts/sim-build.mjs --manifest sims/_fixtures/valid/sim.manifest.json
  */
 
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -60,6 +62,12 @@ const loadRegistry = async () => {
 };
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+/**
+ * THE REGRESSION THRESHOLD FROM `plans/10` §9. A FIFTEEN PERCENT growth fails; anything less is reported by
+ * the budget gate rather than here, because a guard that fires on every keystroke is a guard people disable.
+ */
+const REGRESSION_GUARD = 0.15;
+
 const SIMS_DIR = join(root, 'sims');
 const ESC = String.fromCharCode(27);
 const c = {
@@ -400,6 +408,49 @@ const buildSim = async (manifestPath, options) => {
   });
 
   const total = artefacts.reduce((sum, a) => sum + a.bytes, 0);
+
+  /**
+   * THE 15% REGRESSION GUARD, WHICH `plans/10` §9 SPECIFIES AND NOTHING IMPLEMENTED.
+   *
+   * "350 KB typical; 1.2 MB hard ceiling; CI fails on a 15% regression." Only the hard ceiling existed, so a
+   * simulation could grow from 12 KB to 300 KB -- twenty-five times -- without a single build failing, and
+   * would have done so one dependency at a time, each individually reasonable.
+   *
+   * ## THE BASELINE IS THE COMMITTED REGISTRY, NOT A CACHED NUMBER
+   *
+   * `sims/registry/registry.json` is written by THIS script and committed, so `git show HEAD:` gives the
+   * previously published byte counts. A number stashed in a local file would be a baseline nobody reviews and
+   * that a rebase silently resets; the committed registry is the artefact CI already trusts for every other
+   * purpose. `--check` skips the whole rule, because a read-only CI run has nothing new to compare and should
+   * not fail merely for being a checkout.
+   *
+   * A simulation that is NEW has no baseline, and the guard says nothing about it: the ceiling still applies,
+   * and the growth that matters is measured from the first published build.
+   */
+  if (!options.check) {
+    // THE REGISTRY KEY IS THE MANIFEST'S `id`, NOT THE DIRECTORY.
+    //
+    // `id` in this function is `relative(root, dir)` -- `sims/maths.pythagoras` -- and the registry keys on
+    // `manifest.id`, which is `maths.pythagoras`. So the lookup found nothing, `previousBytes` returned null,
+    // and the guard silently did nothing on an 18.4% regression while the build reported success. The symptom
+    // is identical to the baseline being absent, which is why it took an instrumented run to find rather than
+    // a reading of the code: every line was individually correct and the identifier was wrong by a prefix.
+    const previous = previousBytes(manifest.id);
+    if (previous !== null && previous > 0) {
+      const growth = (total - previous) / previous;
+      if (growth > REGRESSION_GUARD) {
+        problems.push({
+          pointer: '#/budget/maxBytes',
+          message:
+            `${id} grew from ${String(previous)} to ${String(total)} bytes, a ` +
+            `${(growth * 100).toFixed(1)}% regression against the last published build. ` +
+            '`plans/10` §9 fails CI on a 15% regression: a dependency added for a dashboard is not a style ' +
+            'change, it is a student waiting longer to start the exam.',
+        });
+      }
+    }
+  }
+
   if (total > manifest.budget.maxBytes) {
     problems.push({
       pointer: '#/budget/maxBytes',
@@ -431,6 +482,33 @@ const buildSim = async (manifestPath, options) => {
   }
 
   return { id, problems, bytes: total, entry, artefacts, manifest, outDir };
+};
+
+/**
+ * THE BYTES A SIM PUBLISHED LAST TIME, or null if it is new or the baseline is unreadable.
+ *
+ * `git show HEAD:sims/registry/registry.json` rather than the file on disk, because a developer who has just
+ * rebuilt will have a registry describing the build they are trying to check -- comparing a build against
+ * itself is a guard that can never fail, which is the defect this whole exercise keeps running into.
+ *
+ * Returns null on ANY git failure. A missing baseline is not evidence of growth, and a guard that turns a
+ * dirty checkout or a shallow clone into a red build trains people to pass `--force` instead of to read it.
+ */
+const previousBytes = (id) => {
+  try {
+    const shown = execFileSync('git', ['show', `HEAD:${'sims/registry/registry.json'}`], {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const registry = JSON.parse(shown);
+    const entries = Array.isArray(registry) ? registry : (registry.sims ?? registry.entries ?? []);
+    const entry = entries.find((candidate) => candidate && candidate.id === id);
+    const bytes = entry?.bytes?.total ?? entry?.totalBytes;
+    return typeof bytes === 'number' && Number.isFinite(bytes) && bytes > 0 ? bytes : null;
+  } catch {
+    return null;
+  }
 };
 
 /**
