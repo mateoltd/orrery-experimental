@@ -1362,7 +1362,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
 | P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `47657e0` | **16 of 24 built.** Every sim's declared `conformance.script`, `expect`, `conformance.type`, `reset` and **`initialState`** are honoured and checked against the simulation's real fields and states; randomised sims are checked for a seeded question; the manifest's capabilities are checked against the grader's. All eight subjects represented. |
-| P6-T14 Exercise `mode: 'graded'` end to end (EXAM PATH, currently untested in a browser) | **OPEN** | -- | `hostBridge.test.ts:204` asserts a graded `sim:init` carries a `grading` block and `:320` asserts a `sim:gradePreview` during a graded mount is discarded and recorded, so the HOST logic is covered. What is NOT covered is a browser mount in graded mode: no conformance run has ever used it, because the harness always mounts `lesson`. A cell was written for it and **removed**: it took the suite from ~2 min to ~15 min and then died with `EXIT=1` and no summary line, after ~40 cells. Shipping a cell that destabilises the suite is worse than shipping no cell, so the gap is recorded here instead. **Next: profile the per-cell page loads before retrying** -- three of the twenty cells now remount the page, and the suite has gone from minutes to a quarter of an hour. |
+| P6-T14 Exercise `mode: 'graded'` end to end (EXAM PATH, currently untested in a browser) | **OPEN** | -- | `hostBridge.test.ts:204` asserts a graded `sim:init` carries a `grading` block and `:320` asserts a `sim:gradePreview` during a graded mount is discarded and recorded, so the HOST logic is covered. What is NOT covered is a browser mount in graded mode: no conformance run has ever used it, because the harness always mounts `lesson`. A cell was written for it and **removed**: it took the suite from ~2 min to ~15 min and then died with `EXIT=1` and no summary line, after ~40 cells. Shipping a cell that destabilises the suite is worse than shipping no cell, so the gap is recorded here instead. **Profiled: the remounts are NOT the cost.** `sim:conformance` now prints per-cell timings, and a remounting cell costs about **1.5 s**, so a graded cell with two mounts would add roughly 25 s across sixteen simulations. Total *cell* time for the whole matrix is **57 s**, against a wall clock several times that -- so the dominant cost is per-simulation MOUNTING, not cells. **Next: look at what the reverted cell left behind**, because it remounted in `graded` mode and every cell after it inherited a page that was not a lesson mount. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -2153,6 +2153,32 @@ mounts a randomised simulation twice with the same seed and requires the same st
 biology.mitosis-order as declaring `randomised: false` while containing `Math.random`, and the occurrences
 were prose explaining why they do not call it. A grep is not an audit, and a defect found by grep alone is
 often a defect in the grep.
+
+#### P6-T11: the measurement that REFUTES the hypothesis it was filed under
+
+**`sim:conformance` NOW PRINTS PER-CELL TIMINGS**, because "the suite got slower" is not an actionable
+observation and every cell printed the same single line whether it took forty milliseconds or forty seconds.
+A run that is **green AND slow** is exactly the run nobody investigates, because nothing is wrong.
+
+**AND IT SAYS THE OPPOSITE OF WHAT P6-T14 ASSUMED.** Total cell time for the whole matrix is **57 s**; the
+suite's wall clock is several times that. The two remounting cells -- `RESET` at 1172 ms/sim and the
+saved-work check at 1571 ms/sim -- are 44 of those 57 seconds, so remounting costs about **1.5 s** each. A
+graded-mode cell with two mounts would therefore add roughly **25 s** across sixteen simulations.
+
+**So P6-T14's stated next step -- "profile the per-cell page loads" -- was aimed at the wrong thing**, and the
+profile is what proved it. The dominant cost is per-simulation **mounting**, sixteen times over, not the
+cells. The reverted cell's real problem is more likely what it **left behind**: it remounted in `graded` mode
+and did not restore, so every cell after it inherited a page that was not a lesson mount -- which is the same
+class of mistake as the saved-work cell leaving a restored state behind, and the same lesson applies: a cell
+that owns the page has to put it back.
+
+**A ROW THAT RECORDS A HYPOTHESIS NEEDS THE MEASUREMENT THAT KILLED IT.** P6-T14's note was written from the
+observation that the suite slowed down; it named the wrong culprit, and the honest fix is to correct the row
+rather than leave a plausible-sounding reason that will send the next attempt down the same path.
+
+#### P6-T11 evidence
+- 16 of 24 gold sims. `pnpm sim:conformance` **320/320** with per-cell timings; `pnpm test:sims` 157/157;
+  **1684 unit**; 336 db integration; 3 e2e; 9/9 container gates; lint 0; typecheck 0; `pnpm test` 22/22.
 
 #### P6-T11: graded mode is unit-tested, and that is not the same as exercised
 

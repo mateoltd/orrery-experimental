@@ -1107,6 +1107,29 @@ const CELLS = [
   },
 ];
 
+/**
+ * The slowest cells, printed at the end.
+ *
+ * A conformance run that has quietly gone from two minutes to fifteen is a problem nobody will notice by
+ * reading the output, because every cell prints the same single line whether it took forty milliseconds or
+ * forty seconds. The numbers are here so the next cell someone adds can be costed before it is written.
+ */
+const slowestCells = (timings, count = 6) => {
+  const rows = [...timings.entries()].sort((a, b) => b[1].ms - a[1].ms).slice(0, count);
+  if (rows.length === 0) return '';
+  const total = [...timings.values()].reduce((sum, entry) => sum + entry.ms, 0);
+  process.stdout.write(`\n  slowest cells (of ${String(total / 1000).padStart(6)} s total):\n`);
+  for (const [name, entry] of rows) {
+    const seconds = entry.ms / 1000;
+    const perSim = entry.ms / Math.max(1, entry.n);
+    process.stdout.write(
+      `    ${seconds.toFixed(1).padStart(7)} s  ${String(Math.round(perSim)).padStart(5)} ms/sim  ` +
+        `${c.dim(name)}\n`,
+    );
+  }
+  return '';
+};
+
 const run = async () => {
   if (!existsSync(REGISTRY)) {
     process.stderr.write(`${c.red('no registry')} — run \`pnpm sim:build\` first\n`);
@@ -1129,6 +1152,8 @@ const run = async () => {
   const browser = await chromium.launch();
   const failures = [];
   let skipped = 0;
+  /** Accumulated milliseconds per cell name, across every simulation. */
+  const timings = new Map();
 
   process.stdout.write(`${c.dim(`app ${app.origin} · sim ${sim.origin}\n`)}`);
 
@@ -1175,6 +1200,7 @@ const run = async () => {
     for (const cell of CELLS) {
       let failure = null;
       // eslint-disable-next-line no-continue -- the click branch above deliberately continues
+      const startedAt = Date.now();
       try {
         failure = await cell.run({
           page,
@@ -1187,6 +1213,18 @@ const run = async () => {
       } catch (error) {
         failure = `threw: ${error instanceof Error ? error.message : String(error)}`;
       }
+      // HOW LONG EACH CELL TOOK, because "the suite got slower" is not actionable and this is.
+      //
+      // Three cells remount the page per simulation -- the reset check, the saved-work check, and (before
+      // it was reverted) the graded-mode check -- and the run went from about two minutes to about fifteen.
+      // Nobody could say which cell was responsible, because every cell printed the same one line whether
+      // it took 40 ms or 40 s. The slowest few are printed at the end, so the next person adding a cell
+      // knows what a cell COSTS before adding twenty of them.
+      const elapsed = Date.now() - startedAt;
+      const seen = timings.get(cell.name) ?? { ms: 0, n: 0 };
+      seen.ms += elapsed;
+      seen.n += 1;
+      timings.set(cell.name, seen);
       // A CELL THAT SKIPPED MUST NOT LOOK LIKE A CELL THAT PASSED.
       //
       // Returning `null` for "not applicable" and `null` for "verified" printed the same green line, so a
@@ -1226,6 +1264,25 @@ const run = async () => {
 
   const total = entries.length * (CELLS.length + 1);
   process.stdout.write('\n');
+
+  // WHERE THE TIME WENT, because a suite that got fifteen times slower and prints one line per cell
+  // cannot tell you which cell did it. Printed on SUCCESS as well as on failure -- a run that is green AND
+  // slow is exactly the run nobody investigates, because nothing is wrong.
+  const slowest = [...timings.entries()]
+    .sort((a, b) => (b[1].ms ?? 0) - (a[1].ms ?? 0))
+    .slice(0, 6);
+  const totalMs = [...timings.values()].reduce((sum, entry) => sum + (entry.ms ?? 0), 0);
+  if (totalMs > 0) {
+    process.stdout.write(c.dim('slowest cells (total across every simulation):\n'));
+    for (const [name, seen] of slowest) {
+      const share = Math.round(((seen.ms ?? 0) / totalMs) * 100);
+      process.stdout.write(
+        `  ${String(Math.round((seen.ms ?? 0) / 1000)).padStart(4)}s  ${String(share).padStart(3)}%  ${name}\n`,
+      );
+    }
+    process.stdout.write(c.dim(`  total cell time: ${String(Math.round(totalMs / 1000))}s\n`));
+  }
+
   if (failures.length === 0) {
     process.stdout.write(
       `${c.green(`sim:conformance passed — ${String(total)}/${String(total)} cells`)}\n` +
@@ -1233,11 +1290,13 @@ const run = async () => {
           ? `  ${String(skipped)} cell${skipped === 1 ? '' : 's'} SKIPPED — green lines count only what was checked\n`
           : ''),
     );
+    slowestCells(timings);
     return;
   }
   process.stdout.write(
     `${c.red(`sim:conformance failed — ${String(failures.length)} of ${String(total)} cells`)}\n`,
   );
+  slowestCells(timings);
   for (const failure of failures) {
     process.stdout.write(
       `  ${failure.sim} · ${failure.cell}\n    ${failure.why}\n    ${failure.failure}\n`,
