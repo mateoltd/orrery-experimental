@@ -838,6 +838,45 @@ const CELLS = [
       return problems.length === 0 ? null : problems.join('; ');
     },
   },
+  {
+    name: 'a RANDOMISED simulation gives the same student the same question',
+    why:
+      'a simulation that calls Math.random() puts a different question in front of every student, breaks ' +
+      'save and restore, and makes its own tests impossible -- and it declares `randomised: true` while ' +
+      'doing it, so nothing anywhere reports the difference',
+    run: async ({ page, entry, manifest, appOrigin }) => {
+      // Only for simulations that claim randomness. One without it has nothing to be deterministic about,
+      // and a simulation whose state legitimately advances with elapsed time would fail a cell about
+      // randomness for no reason at all.
+      if (entry.randomised !== true && (manifest?.capabilities?.randomised ?? false) !== true) {
+        return {
+          skip: 'the simulation does not declare randomness, so there is nothing to be deterministic',
+        };
+      }
+      const baselineConfig = new URL(page.url()).searchParams.get('cfg');
+      const mount = async () => {
+        await page.goto(`${appOrigin}/?cfg=${String(baselineConfig)}`, { waitUntil: 'load' });
+        await page.waitForFunction(() => globalThis.__conformance?.ready === true, undefined, {
+          timeout: 15_000,
+        });
+        await waitForStatus(page, ['READY', 'DEGRADED']);
+        // Long enough for a seeded shuffle to have run and a frame to have been painted, and short enough
+        // that a simulation with a play/pause timeline has not advanced far enough to differ for that
+        // reason rather than this one.
+        await page.waitForTimeout(400);
+        return captureState(page);
+      };
+      const first = await mount();
+      if (first === null || typeof first.checksum !== 'string') return 'no state to compare';
+      const second = await mount();
+      if (second === null || typeof second.checksum !== 'string')
+        return 'the second mount reported no state';
+      return first.checksum === second.checksum
+        ? null
+        : `two mounts with the same seed gave ${String(first.checksum)} and ${String(second.checksum)}, ` +
+            'so the randomness is not seeded';
+    },
+  },
   // LAST, DELIBERATELY. This cell remounts the page three times through the host, and every cell that
   // follows it inherits whatever it leaves behind -- which is how "a SCRIPTED INTERACTION produces an
   // answer" and "the answer is GRADEABLE" started failing the moment this cell sat second in the list.
@@ -1005,6 +1044,7 @@ const run = async () => {
   const app = await startAppOrigin();
   const browser = await chromium.launch();
   const failures = [];
+  let skipped = 0;
 
   process.stdout.write(`${c.dim(`app ${app.origin} · sim ${sim.origin}\n`)}`);
 
@@ -1050,6 +1090,7 @@ const run = async () => {
     process.stdout.write(`\n${c.bold(String(entry.id))} ${c.dim(String(entry.version))}\n`);
     for (const cell of CELLS) {
       let failure = null;
+      // eslint-disable-next-line no-continue -- the click branch above deliberately continues
       try {
         failure = await cell.run({
           page,
@@ -1062,7 +1103,18 @@ const run = async () => {
       } catch (error) {
         failure = `threw: ${error instanceof Error ? error.message : String(error)}`;
       }
-      if (failure === null) {
+      // A CELL THAT SKIPPED MUST NOT LOOK LIKE A CELL THAT PASSED.
+      //
+      // Returning `null` for "not applicable" and `null` for "verified" printed the same green line, so a
+      // matrix full of skips reads exactly like a matrix full of proofs. The determinism cell skips for
+      // every simulation that does not declare randomness, which is all but one -- and I could not tell
+      // from the output whether it had actually checked anything.
+      if (failure !== null && typeof failure === 'object' && failure.skip !== undefined) {
+        skipped += 1;
+        process.stdout.write(
+          `  ${c.dim('SKIP')} ${cell.name} ${c.dim(`(${String(failure.skip)})`)}\n`,
+        );
+      } else if (failure === null) {
         process.stdout.write(`  ${c.green('PASS')} ${cell.name}\n`);
       } else {
         failures.push({ sim: String(entry.id), cell: cell.name, why: cell.why, failure });
@@ -1092,7 +1144,10 @@ const run = async () => {
   process.stdout.write('\n');
   if (failures.length === 0) {
     process.stdout.write(
-      `${c.green(`sim:conformance passed — ${String(total)}/${String(total)} cells`)}\n`,
+      `${c.green(`sim:conformance passed — ${String(total)}/${String(total)} cells`)}\n` +
+        (skipped > 0
+          ? `  ${String(skipped)} cell${skipped === 1 ? '' : 's'} SKIPPED — green lines count only what was checked\n`
+          : ''),
     );
     return;
   }
