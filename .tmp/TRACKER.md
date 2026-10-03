@@ -3020,31 +3020,44 @@ whether that is deliberate. **Recorded here as an open question rather than quie
 threshold is a gate change with its own convention and its own review, and doing it as a side effect of adding
 sibling files would be exactly the kind of unexamined move this section exists to prevent.
 
-### PF-3 · A wrong sign in a committed P0 primitive, found by re-deriving rather than reusing
+### PF-3 · A wrong sign in a committed P0 primitive — CLOSED in `9a67507`
 
-`@orrery/clock`'s `clockOffset(serverNow, rttMs)` returns `serverNow + rttMs / 2 - Date.now()`. P7-T14 needed the
-same quantity as a testable pure function, so it was **re-derived from NTP rather than copied** -- and the sign is
-the other way round.
+`@orrery/clock`'s `clockOffset(serverNow, rttMs)` returned `serverNow + rttMs / 2 - Date.now()`. It is now
+`serverNow - rttMs / 2 - Date.now()`.
 
-`((T2 - T1) + (T3 - T4)) / 2`, with one `serverNow` standing in for both server timestamps, reduces to
-`serverNow - clientSentAt - rtt / 2`. The server reads its clock *after* the request left, so half the round trip
-has already elapsed and has to be subtracted back out. The committed version is wrong by `rtt`.
+**NTP'S ESTIMATOR SAYS `- rtt / 2`.** `((T2 - T1) + (T3 - T4)) / 2`, with one `serverNow` standing in for both
+server timestamps, reduces to `serverNow - (T1 + rtt / 2)`. The server reads its clock **after** the request left, so
+half the round trip has already elapsed by the time it reports and that half comes back OFF. The old version was
+wrong by `rtt` — twice the intended correction.
 
-**Why it matters more than a unit test failing:** the error is always in the direction that makes a countdown read
-**LATE**, and `plans/15` requires the per-question timer to be announced politely and accurately for a
+**THE ERROR HAS A DIRECTION, WHICH IS WHY IT MATTERED MORE THAN A WRONG NUMBER.** It always errs so a countdown
+reads **LATE**, and `plans/15` requires the per-question timer to be announced politely and accurately for a
 screen-reader user. A student reading a timer that runs long is a student still typing when the paper closed.
 
-**Why it was not fixed in the same commit.** `clockOffset` is a P0 primitive with its own tests and callers in
-`apps/web`. Correcting it is a behaviour change to a shared function, and the alternative -- a corrected formula in
-one module beside a wrong one in another -- leaves **two offsets disagreeing in two packages**, which is worse than
-one wrong offset because nothing reports the disagreement. So `serverClock.ts` carries the corrected pure version
-with the discrepancy stated in its header, and the fix is filed here as its own piece of work.
+**THE OLD TEST COULD NOT HAVE CAUGHT IT, AND THAT IS THE PART WORTH RECORDING.** It asserted `clockOffset` was close
+to `serverNow + rtt / 2 - Date.now()` — the implementation's own formula, **retyped**. A test derived from the code
+it checks is evidence of nothing, and it passed with the wrong sign for as long as it existed.
 
-**The generalisable finding.** Every task in this phase that re-implemented something existing found a defect in
-it within one commit: `shuffleSeedFor`'s separator, `orderingCredit`'s blank, `applyMethod`'s totality, `canonicalJson`
-normalisation, and now a sign. **Copying a formula reproduces its bug; re-deriving it finds one.** That is the
-argument for PF-1's "grep before you write", extended one step: when you must write your own version, derive it
-from the specification rather than transcribing the neighbour.
+**This is the mirror image of the failure this phase has produced three times.** Those were assertions that
+asserted MORE than reality allows and so failed for the wrong reason. This one asserted LESS, and so could never
+fail at all. **Both directions of a wrong assertion are invisible from inside the assertion**, which is the reason
+the remedy is the same in each case: derive the expectation from the specification, never from the code.
+
+**THE NEW TESTS WORK FROM A CONCRETE SCENARIO.** A device whose clock is 30 seconds slow sends a request; the
+server stamps its time on ARRIVAL, 200 ms into a 400 ms round trip; the offset must be +30 000. With the old `+` it
+is 30 400 — a full RTT of error. A second test asserts the offset is **unbounded by round-trip time**, which is what
+the midpoint buys and what a timer actually depends on.
+
+**AND `serverClock.ts` NO LONGER DISAGREES WITH `@orrery/clock`.** Its comment said it "disagrees with the impure
+one on purpose", because correcting a P0 primitive was filed as a defect rather than quietly forked. A test now
+asserts the two agree. **A stale comment claiming a known divergence is worse than no comment** — the next reader
+either trusts it and adds a compensating `+`, or checks and finds the file lying. Both still exist and that is not
+redundant: `clockOffset` reads `Date.now()` internally, which is right for the one sanctioned place a clock may, but
+it cannot be property-tested and a countdown cannot be replayed.
+
+**SCOPE CHECK FIRST, WHICH MADE THIS CHEAP.** `clockOffset` had **zero production callers** outside `packages/clock`
+and its own test, so correcting a P0 primitive cost nothing and risked nothing. Worth thirty seconds to know before
+editing shared code — which is PF-1's grep-first habit paying off in a third, unrelated place.
 
 ### PF-4 · Three committed files acquired a raw NUL byte, and a fourth and fifth already had one
 
