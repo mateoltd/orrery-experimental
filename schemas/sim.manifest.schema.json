@@ -449,6 +449,11 @@
                 "type": "string",
                 "enum": ["setParams", "command", "click", "wait", "requestState", "reset"]
               },
+              "what": {
+                "description": "How a `click` step acts on its target. `click` presses it; `fill` types a value into it and `select` chooses an option. It is the only way to drive a control whose interaction the SIMULATION implements itself -- a typed answer injected through `conformance.type` would exercise the grader rather than the simulation, which is a different thing to have tested.",
+                "type": "string",
+                "enum": ["click", "fill", "select"]
+              },
               "args": {
                 "type": "object"
               }

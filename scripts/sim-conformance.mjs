@@ -417,6 +417,24 @@ const runManifestScript = async (page, frame, entry, manifest) => {
       const high = want.max ?? Number.POSITIVE_INFINITY;
       return got >= low && got <= high;
     }
+    // `{ prefix: "..." }` -- "the answer STARTS WITH this", for an answer that is a longer piece of text than
+    // the part worth asserting: a formatted string with units, or a working shown alongside its result.
+    //
+    // THE SCHEMA HAS ALLOWED THIS SINCE THE VOCABULARY WAS WRITTEN, AND NOTHING HERE CONSUMED IT, which is the
+    // worst of the two failure modes this task covers. A manifest declaring `{prefix: "..."}` passed schema
+    // validation and every other gate, then fell through to the `JSON.stringify` line below, which compared the
+    // WRAPPER `{prefix: "..."}` against the VALUE. It could never match, so the cell failed for a reason that
+    // had nothing to do with the simulation -- and the note it printed talked about the student's answer.
+    //
+    // Implementing the branch is better than deleting the schema entry, because "does the answer begin with
+    // this" is a real assertion that no other form can make: `exact` demands the whole string, which no
+    // simulation whose answer carries units could ever satisfy.
+    if (want !== null && typeof want === 'object' && typeof want.prefix === 'string') {
+      // The answer must be a string for a prefix to mean anything. A number has no beginning, and coercing it
+      // with `String()` would make `{prefix: "2"}` silently pass on the answer 2 while reading as a text check.
+      if (typeof got !== 'string') return false;
+      return got.startsWith(want.prefix);
+    }
     return JSON.stringify(want) === JSON.stringify(got);
   };
 
