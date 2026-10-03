@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `9b5e063` | **9 of 24 built.** Every sim's declared `conformance.script` and `expect` are honoured and checked; `conformance.type` is checked against the fields the simulation actually has; `expect.value` covers a scalar answer and `expect.answer` a keyed one. `reset` is checked to restore the declared defaults, through the host. `defineSim` enforces the grader arity. |
+| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `7f7b057` | **10 of 24 built.** Every sim's declared `conformance.script`, `expect`, `conformance.type` and `reset` are honoured and checked against the simulation's real fields and states. `expect.value` covers a scalar answer, `expect.answer` a keyed one. `defineSim` enforces the grader arity, and a stepper now requires a `maxTime`. Maths, physics, chemistry and computing are all represented; partial credit, set grading, enums, seeded randomness, null answers, units, scenarios and process-derived answers are all exercised by real sims. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -2132,6 +2132,46 @@ two unrelated cells started failing the moment it sat second in the list. A cell
 - 9 of 24 gold sims. `pnpm sim:conformance` **153/153** across **three consecutive runs**; `pnpm test:sims`
   69/69; **1575 unit**; 336 db integration; 3 e2e; 9/9 container gates; lint 0; typecheck 0;
   `pnpm test` 22/22; `gate:browser` green; image builds green.
+
+#### P6-T11: gold sim 10, and a zero tolerance that rejected every correct answer
+
+**`computing.binary-search` — THE ANSWER IS A PROPERTY OF A PROCESS.** How many comparisons the search
+made, and no number on the display is that number. Every other simulation's answer is a value: a
+distance, a temperature, a concentration, a root. This is the platform's first `computing` simulation;
+the other nine were maths, physics and chemistry.
+
+**THE MIDPOINT CONVENTION IS THE WHOLE QUESTION**, so it is declared in the manifest, drawn on screen,
+and used by the grader. Binary search on an even-length range has two defensible midpoints and they give
+different counts. `low + floor((high - low) / 2)` on `0..7` is index 3 — the FOURTH element — and a student
+whose trace split the other way was wrong for a reason the question never stated.
+
+**THE COMPARISON THAT ENDS AN UNSUCCESSFUL SEARCH IS INCLUDED**, marked `exhausted`. An array searched
+for a value it does not contain still ends in a comparison against something, and stopping one step early
+is the most common trace error there is.
+
+**A ZERO TOLERANCE MEANT "NOTHING IS WITHIN TOLERANCE".** `withinTolerance(4, 4, {abs: 0, rel: 0})`
+returned **false**. The guard existed to stop an *absent* tolerance accepting everything, and it keyed on
+the value being zero rather than undefined — so it also rejected a *deliberately exact* one. `abs: 0,
+rel: 0` is the natural way to say "this is a count, match it exactly", and it scored **every correct
+answer zero**. `difference <= 0` is the honest reading and it is STRICTER than the old guard, not looser:
+an absent spec now accepts only an exact match instead of rejecting everything. Nine gold simulations and
+a green matrix never declared a zero tolerance. The tenth did, immediately, and it failed — which is the
+only reason this was ever going to be found.
+
+**THE MANIFEST SAID `stepper: true` AND THE GRADER SAID NOTHING**, so `defineSim`'s own check — the thing
+that refuses a stepper with no `maxTime` — never fired, and the manifest could claim a capability the
+simulation had not declared. Two declarations of one fact, only one of them enforced. There is a test now.
+
+**THE PARAMETERS WERE DECLARED AS BARE OBJECT LITERALS** rather than `num(...)`, and `clampParams` threw
+on them. Invisible while `sim:init` params were discarded, because nothing called the handler — and now
+that the handler runs during the handshake, a throw there stops the simulation before it becomes READY,
+so the entire matrix failed on a simulation whose MODEL was correct. A param declaration is not a
+description; it is an input to a validator.
+
+#### P6-T11 evidence
+- 10 of 24 gold sims. `pnpm sim:conformance` **170/170**; `pnpm test:sims` 82/82; **1592 unit**;
+  336 db integration; 3 e2e; 9/9 container gates; lint 0; typecheck 0; `pnpm test` 22/22;
+  `gate:browser` green (12/12 escapes, 170/170 cells).
 
 #### P6-T11: the verification scripts that could not do what they claimed
 
