@@ -2008,7 +2008,15 @@ control that actually exercises it.
 #### P6-T11 evidence
 - 5 of 24 gold sims. `pnpm sim:conformance` **80/80 cells** across all five; `pnpm test:sims` 30/30;
   sim-sdk 66.
-- 1495 unit, 336 db integration, 8/8 container gates, lint 0, typecheck 0, `gate:browser` green.
+- **1470 unit** — 1440 in the workspace packages and apps, plus 30 simulation tests — 336 db
+  integration, 8/8 container gates, lint 0, typecheck 0, `gate:browser` green.
+
+**THE COUNTING LOOP WAS LYING, AND NOW SAYS SO.** The sweep this replaced added whatever number each
+package's output matched, so a package whose output did not match contributed nothing and the total came
+out short with no error anywhere — which is how an earlier report in this tracker claimed 1495 when two
+independent runs agreed on 1440. `.tmp/unit-count.sh` reports `NO COUNT: <package>` and exits non-zero
+instead, and it includes the simulation tests rather than leaving them to a separate line. A count that
+cannot detect a missing package is not a measurement.
 
 
 #### P6-T6 correction (the host could listen and never speak)
