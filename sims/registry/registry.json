@@ -1,6 +1,6 @@
 {
   "generatedFrom": "1970-01-01",
-  "digest": "af1dc521831e62564a1d07a4d1f5b168eb62a3e14c42b5bc53dfa5d9843f0e0b",
+  "digest": "66bf4c8833e9f9de1e1581ad4786219518e1ed0256b037da27214792f1ef7966",
   "entries": [
     {
       "id": "astronomy.orrery",
@@ -252,6 +252,58 @@
       "defaultHeight": 300,
       "minHeight": 220,
       "parameters": []
+    },
+    {
+      "id": "chemistry.particle-view",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.9b8baa1605ee.html",
+        "browser": "./browser.8349e5abfeb9.js",
+        "grader": "./grader.2bd608edadb2.js",
+        "style": "./style.13aa5dcedc33.css"
+      },
+      "bytes": {
+        "browser": 14959,
+        "grader": 9814,
+        "total": 27198
+      },
+      "defaultHeight": 420,
+      "minHeight": 320,
+      "parameters": [
+        {
+          "name": "kelvin",
+          "type": "number",
+          "label": "temperature",
+          "unit": "K",
+          "minimum": 50,
+          "maximum": 900,
+          "step": null,
+          "default": 300
+        },
+        {
+          "name": "box",
+          "type": "number",
+          "label": "side",
+          "unit": "m",
+          "minimum": 0.05,
+          "maximum": 0.5,
+          "step": null,
+          "default": 0.2
+        },
+        {
+          "name": "particles",
+          "type": "number",
+          "label": "atoms",
+          "unit": "",
+          "minimum": 200,
+          "maximum": 2000,
+          "step": null,
+          "default": 1000
+        }
+      ]
     },
     {
       "id": "computing-science.download-time",

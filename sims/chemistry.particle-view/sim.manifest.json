@@ -1,0 +1,122 @@
+{
+  "id": "chemistry.particle-view",
+  "version": "1.0.0",
+  "title": "How often do the atoms meet?",
+  "summary": "Watch a thousand argon atoms bounce off each other, counting every meeting, and work out how many collisions they make each second.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["chemistry"],
+  "tags": ["gas", "kinetic-theory", "collisions", "temperature"],
+  "ageRange": [13, 18],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A box full of small dots moving about and bouncing off each other, a running collision counter, a temperature slider, and a box for the collisions each second.",
+    "reducedMotion": true,
+    "textAlternative": "A box of argon contains a fixed number of atoms, drawn as small dots moving in straight lines and bouncing off the walls and off each other. A counter tallies the number of times two atoms meet. The temperature and the number of atoms are given. The task is to work out how many collisions the atoms make each second, measured over a stated window."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "kelvin": {
+        "type": "number",
+        "label": "temperature",
+        "unit": "K",
+        "minimum": 50,
+        "maximum": 900,
+        "default": 300
+      },
+      "box": {
+        "type": "number",
+        "label": "side",
+        "unit": "m",
+        "minimum": 0.05,
+        "maximum": 0.5,
+        "default": 0.2
+      },
+      "particles": {
+        "type": "number",
+        "label": "atoms",
+        "unit": "",
+        "minimum": 200,
+        "maximum": 2000,
+        "default": 1000
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object",
+    "properties": {
+      "step": {
+        "type": "number"
+      },
+      "collisions": {
+        "type": "number"
+      },
+      "swaps": {
+        "type": "number"
+      },
+      "lastCollisions": {
+        "type": "number"
+      }
+    },
+    "required": ["step", "collisions"]
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 420,
+    "minHeight": 320,
+    "aspectRatio": "4/3"
+  },
+  "grading": {
+    "strategy": "TOLERANCE",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 1,
+      "relative": 0
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You said {answer}. The count depends on this list of atoms, not only on how many there are, and n(n-1)/2 is only the ceiling."
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "kelvin": 300,
+            "box": 0.2,
+            "particles": 1000
+          }
+        }
+      }
+    ],
+    "type": {
+      "answer": "69984"
+    },
+    "expect": {
+      "value": 69984,
+      "grade": 4
+    }
+  }
+}
