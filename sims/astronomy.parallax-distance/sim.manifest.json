@@ -1,0 +1,100 @@
+{
+  "id": "astronomy.parallax-distance",
+  "version": "1.0.0",
+  "title": "Distance from annual parallax",
+  "summary": "Measure a star's parallax and work out how far away it is.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["astronomy"],
+  "tags": ["parallax", "distance", "stars"],
+  "ageRange": [13, 18],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "An annual parallax in arcseconds, a choice of units, and a box for the distance.",
+    "reducedMotion": true,
+    "textAlternative": "A star is measured to have an annual parallax in arcseconds. Larger parallax means closer. Work out the distance, in parsecs or in light years as selected. One parsec is the distance at which a star has a parallax of exactly one arcsecond."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "parallax": {
+        "type": "number",
+        "label": "Annual parallax",
+        "unit": "arcsec",
+        "minimum": 0.05,
+        "maximum": 2,
+        "default": 0.1,
+        "step": 0.01
+      },
+      "inLightYears": {
+        "type": "enum",
+        "label": "Answer in light years",
+        "enumValues": ["false", "true"],
+        "default": "false"
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 330,
+    "minHeight": 240,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "parallax": 0.2,
+            "inLightYears": false
+          }
+        }
+      }
+    ],
+    "type": {
+      "distance": 5
+    },
+    "expect": {
+      "value": {
+        "min": 4.9,
+        "max": 5.1
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "NUMERIC",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0,
+      "relative": 0.02
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You said {answer}; the distance is {expected}."
+  }
+}
