@@ -1,0 +1,120 @@
+/* Deliberately tiny. */
+#sim-root {
+  font:
+    14px / 1.4 system-ui,
+    sans-serif;
+  color: #1f2933;
+}
+
+/*
+ * THE GRID IS SVG, AND THE CLASSES BELOW ARE ITS ONLY STYLING.
+ *
+ * Nineteen other simulations draw into a canvas and style nothing, because a canvas has no elements to
+ * style. Here every line, tick and label is an element, so the axis can be a different colour from the grid
+ * without a second drawing pass -- which is the reason this simulation is drawn this way and not as pixels.
+ */
+#sim-grid {
+  display: block;
+  max-width: 420px;
+  background: #fdfdfb;
+  border: 1px solid #cbd2d9;
+  touch-action: none;
+}
+.sim-grid-line {
+  stroke: #e4e7eb;
+  stroke-width: 0.04;
+}
+.sim-axis {
+  stroke: #7b8794;
+  stroke-width: 0.08;
+}
+.sim-tick {
+  fill: #52606d;
+  font-size: 0.7px;
+  font-family: system-ui, sans-serif;
+}
+.sim-line {
+  stroke: #9b2c2c;
+  stroke-width: 0.12;
+}
+.sim-crossing {
+  fill: none;
+  stroke: #0b6b8a;
+  stroke-width: 0.1;
+}
+/*
+ * THE MARKER IS A FOCUSABLE ELEMENT, SO IT LOOKS FOCUSED.
+ *
+ * A canvas rectangle is a pixel region with no identity and therefore no focus ring. This marker is a `<rect>`
+ * with `tabindex`, so `:focus-visible` applies and a keyboard user can see where they are -- and the
+ * arrow-key handler on it is the primary input, not a courtesy, because a drag snaps to half a grid unit
+ * and a pointer cannot reliably land on every lattice point.
+ */
+.sim-marker {
+  fill: #0b6b8a;
+  stroke: #ffffff;
+  stroke-width: 0.08;
+  cursor: grab;
+}
+.sim-marker:focus-visible {
+  outline: none;
+  stroke: #0b6b8a;
+  stroke-width: 0.2;
+}
+
+#sim-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 8px 0;
+}
+#sim-controls input {
+  width: 8em;
+  padding: 3px 5px;
+}
+/* A DISABLED UNDO BUTTON IS THE POINT OF `canUndo`, so it looks unmistakably unavailable. */
+#sim-controls button[disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+#sim-readout,
+#sim-status {
+  margin: 6px 0 0;
+  min-height: 1.4em;
+}
+.sim-alternative {
+  margin: 4px 0 0;
+  color: #52606d;
+}
+
+/* THE BLOCKS ARE DRAWN IN DOM ORDER, so CSS order IS the list order.
+   `transition` is deliberately absent: a swapping pair should teleport, not glide, because a gliding pair
+   invites the student to read the animation as the algorithm rather than the swap. */
+#sim-list {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+  min-height: 72px;
+  margin: 8px 0;
+}
+.sim-block {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-width: 26px;
+  padding: 4px 2px;
+  background: #3d5a80;
+  color: #fff;
+  font:
+    13px / 1 system-ui,
+    sans-serif;
+  border-radius: 2px 2px 0 0;
+}
+#sim-counter {
+  margin: 4px 0;
+  font:
+    bold 15px / 1.4 system-ui,
+    sans-serif;
+  color: #102a43;
+}

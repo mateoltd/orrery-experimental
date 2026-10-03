@@ -1,0 +1,78 @@
+{
+  "id": "computing.sorting-visualiser",
+  "version": "1.0.0",
+  "title": "How many comparisons does bubble sort make?",
+  "summary": "Watch bubble sort reorder a list, counting each pair it compares, and work out how many comparisons the whole sort takes on that list.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["computing"],
+  "tags": ["sorting", "algorithm", "comparison", "complexity"],
+  "ageRange": [11, 16],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A row of numbered blocks that swap places as bubble sort runs, a running comparison counter, a pass slider, and a box for the total.",
+    "reducedMotion": true,
+    "textAlternative": "A list of different numbers is sorted into order by repeatedly comparing each pair of neighbours and swapping them when the left is bigger, stopping once a whole pass swaps nothing. The numbers being sorted are given. The task is to work out how many comparisons the whole sort makes."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": { "maxBytes": 350000 },
+  "params": {
+    "type": "object",
+    "properties": {
+      "size": {
+        "type": "number",
+        "label": "numbers",
+        "unit": "",
+        "minimum": 5,
+        "maximum": 14,
+        "default": 9
+      },
+      "seed": {
+        "type": "number",
+        "label": "list",
+        "unit": "",
+        "minimum": 0,
+        "maximum": 999,
+        "default": 7
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object",
+    "properties": {
+      "passes": { "type": "number" },
+      "comparisons": { "type": "number" },
+      "swaps": { "type": "number" },
+      "finished": { "type": "boolean" }
+    },
+    "required": ["passes", "comparisons"]
+  },
+  "answerSchema": { "type": "object" },
+  "lifecycle": { "autoPlay": false, "defaultHeight": 420, "minHeight": 320, "aspectRatio": "4/3" },
+  "grading": {
+    "strategy": "TOLERANCE",
+    "maxPoints": 4,
+    "tolerance": { "absolute": 1, "relative": 0 },
+    "partialCredit": true,
+    "rationaleTemplate": "You said {answer}. The count depends on this list, not only on how many numbers are in it, and n(n-1)/2 is only the ceiling."
+  },
+  "conformance": {
+    "script": [{ "command": "setParams", "args": { "params": { "size": 9, "seed": 7 } } }],
+    "type": { "answer": "35" },
+    "expect": { "value": 35, "grade": 4 }
+  }
+}

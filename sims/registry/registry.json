@@ -1,6 +1,6 @@
 {
   "generatedFrom": "1970-01-01",
-  "digest": "b75010b8673a901e2f6a7222eedf0162b1236288492654c61b360d39580cd451",
+  "digest": "e0dff4f4f3d496a11c16fe51653df1f4ea9b14d97f49757a9410d1b01108336c",
   "entries": [
     {
       "id": "astronomy.orrery",
@@ -334,6 +334,48 @@
           "maximum": 64,
           "step": null,
           "default": 8
+        }
+      ]
+    },
+    {
+      "id": "computing.sorting-visualiser",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.7a6e09350d34.html",
+        "browser": "./browser.de47a449a9b4.js",
+        "grader": "./grader.bfd3a2b565ad.js",
+        "style": "./style.49f248bb988a.css"
+      },
+      "bytes": {
+        "browser": 13313,
+        "grader": 7599,
+        "total": 24068
+      },
+      "defaultHeight": 420,
+      "minHeight": 320,
+      "parameters": [
+        {
+          "name": "size",
+          "type": "number",
+          "label": "numbers",
+          "unit": "",
+          "minimum": 5,
+          "maximum": 14,
+          "step": null,
+          "default": 9
+        },
+        {
+          "name": "seed",
+          "type": "number",
+          "label": "list",
+          "unit": "",
+          "minimum": 0,
+          "maximum": 999,
+          "step": null,
+          "default": 7
         }
       ]
     },
@@ -1030,8 +1072,8 @@
         "grader": 9016,
         "total": 25248
       },
-      "defaultHeight": 460,
-      "minHeight": 360,
+      "defaultHeight": 440,
+      "minHeight": 340,
       "parameters": [
         {
           "name": "length",
@@ -1048,8 +1090,8 @@
           "type": "number",
           "label": "start angle",
           "unit": "rad",
-          "minimum": -1.05,
-          "maximum": 1.05,
+          "minimum": -1.0471975512,
+          "maximum": 1.0471975512,
           "step": null,
           "default": 0.5
         }
