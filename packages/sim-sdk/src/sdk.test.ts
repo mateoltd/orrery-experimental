@@ -595,7 +595,7 @@ describe('defineSim', () => {
       summary: 'A graph of height against time for a thrown ball, with a trail behind it.',
     },
     simulate: (params: { speed: number }) => ({ y: params.speed * 2 }),
-    grade: () => exact('a', 'a', 1),
+    grade: (_state: unknown, _params: unknown, _answer: unknown) => exact('a', 'a', 1),
     render: () => {},
   };
 
@@ -639,7 +639,11 @@ describe('gradeStoredState', () => {
       summary: 'A graph of height against time for a thrown ball, with a trail behind it.',
     },
     simulate: (params: { speed: number }) => params.speed,
-    grade: (state: { answer: number }, params: { speed: number }) =>
+    // THREE ARGUMENTS. The arity check landed with P6-T11's grader-arity enforcement and this fixture was
+    // never updated, so `pnpm test` has been red ever since -- I had been verifying with `pnpm test:sims`,
+    // which does not run this file. A check added in one commit and not exercised by the suite it lives
+    // in is the same failure mode as an unchecked conformance claim.
+    grade: (state: { answer: number }, params: { speed: number }, _answer: unknown) =>
       numeric(state.answer, params.speed * 2, 4),
     render: () => {},
   });
@@ -678,5 +682,53 @@ describe('gradeStoredState', () => {
     expect(() =>
       gradeStoredState(strict.grader, { state: { answer: 'x' }, params: {}, answer: null }),
     ).toThrow(/STATE_INVALID: no numeric answer/);
+  });
+});
+describe('tolerance partial credit', () => {
+  const spec = { maxPoints: 4, abs: 0, rel: 0.02, partialCredit: true } as const;
+
+  it('awards full marks inside the tolerance', () => {
+    expect(tolerance(100, 100.5, spec).points).toBe(4);
+  });
+
+  // THE DEFECT THIS EXISTS FOR.
+  //
+  // Partial credit used to be `4 * (1 - relativeError)`, which never reaches zero: `max(|a|,|b|)`
+  // saturates the relative error at just under 1, so 1000x wrong still scored 0.087 of 4. A guess with a
+  // shape that cannot be right must be worth nothing.
+  it('awards NOTHING for an answer that is wildly out', () => {
+    for (const guess of [190, 900, 9e9, -19_620]) {
+      expect(tolerance(guess, 100, spec).points).toBe(0);
+    }
+  });
+
+  // ...and it is not a cliff either: an answer just outside tolerance still earns most of the marks.
+  // Dividing by the tolerance alone scored every out-of-tolerance answer zero, which is not partial
+  // credit, it is a wall.
+  it('still awards partial credit for a near miss', () => {
+    const near = tolerance(103, 100, spec);
+    expect(near.points).toBeGreaterThan(1);
+    expect(near.points).toBeLessThan(4);
+  });
+
+  it('decays monotonically as the answer gets worse', () => {
+    const points = [101, 102, 103, 104, 105, 106].map(
+      (value) => tolerance(value, 100, spec).points,
+    );
+    const [first, ...rest] = points;
+    for (const current of rest) {
+      expect(current).toBeLessThanOrEqual(first ?? current);
+    }
+  });
+
+  it('treats the tolerance as the unit, so a tighter tolerance earns credit faster', () => {
+    const tight = tolerance(103, 100, { ...spec, rel: 0.005 });
+    const loose = tolerance(103, 100, spec);
+    expect(tight.points).toBeLessThan(loose.points);
+  });
+
+  it('honours a declared band', () => {
+    const narrow = tolerance(103, 100, { ...spec, partialCreditBand: 0.2 });
+    expect(narrow.points).toBe(0);
   });
 });

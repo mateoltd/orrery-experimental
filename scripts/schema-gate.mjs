@@ -169,7 +169,7 @@ function ensureShadowDatabase(url) {
     });
     for (const line of String(ps).split('\n')) {
       const [name, ports] = line.split('\t');
-      if (name && ports && ports.includes(`:${u.port}->`)) {
+      if (name && ports?.includes(`:${u.port}->`)) {
         container = name.trim();
         break;
       }

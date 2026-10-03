@@ -94,6 +94,12 @@ try {
   // `app-build-manifest.json` is Next's own answer: the exact file list each route pulls
   // on first load. Measure that, and the number is comparable to the one Next prints.
   const manifestPath = join(root, 'apps/web/.next/app-build-manifest.json');
+  // SAY WHY, AND SAY WHAT TO DO.
+  //
+  // Without a build the gate measured 1735 KB gzipped -- not a real number at all, just the fallback
+  // directory listing. It did fail, which is the important part, but "1735 KB over a 250 KB budget" reads
+  // like a catastrophic regression when the truth is that nobody had built the app. `pnpm gates` now builds
+  // first so the measurement is reproducible rather than dependent on what happened to be lying around.
   if (!existsSync(manifestPath)) {
     bad('no app-build-manifest.json — cannot measure a per-route budget');
     throw new Error('no manifest');

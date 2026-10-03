@@ -219,12 +219,16 @@ const runManifestScript = async (page, frame, entry, manifest) => {
   // `expect.grade: 4` and no `expect.answer` passed vacuously, having verified nothing at all. The first
   // randomised gold sim did exactly that, and its cell went green while the runner had no idea what the
   // simulation answered.
-  if (declared.grade !== undefined && declared.answer === undefined) {
+  if (
+    declared.grade !== undefined &&
+    declared.answer === undefined &&
+    declared.value === undefined
+  ) {
     return {
       ok: false,
       note:
-        'expect.grade is declared but expect.answer is not, so there is no answer to grade and the ' +
-        'claim is never checked. Declare the answer, or drop the grade claim.',
+        'expect.grade is declared but neither expect.answer nor expect.value is, so there is no ' +
+        'answer to grade and the claim is never checked. Declare the answer, or drop the grade claim.',
     };
   }
 
@@ -246,7 +250,7 @@ const runManifestScript = async (page, frame, entry, manifest) => {
     }
     await page.waitForTimeout(120);
   }
-  if (declared.answer !== undefined && answers.length === 0) {
+  if ((declared.answer !== undefined || declared.value !== undefined) && answers.length === 0) {
     // Through PLAYWRIGHT'S frame API, not `contentDocument`. The frame is a sandboxed opaque origin --
     // that is the entire point of it -- so the parent document cannot see inside, and the first version
     // of this reported "no #sim-submit control" for a sim that has one. This is the same route the matrix's
@@ -322,6 +326,21 @@ const runManifestScript = async (page, frame, entry, manifest) => {
     }
     return JSON.stringify(want) === JSON.stringify(got);
   };
+
+  // `expect.value` for an answer that IS a number, which is most of them. `expect.answer` is for a keyed
+  // object like `{roots: [...]}` or `{quantity, value}`, and there was no way to say "the answer is
+  // 9.38" -- so the first scalar-answer simulation could not declare a checked expectation at all.
+  if (expect.value !== undefined) {
+    if (answers.length === 0) {
+      return { ok: false, note: 'expect.value is declared but the script produced no answer' };
+    }
+    if (!matches(expect.value, answers[0])) {
+      return {
+        ok: false,
+        note: `expect.value was ${JSON.stringify(expect.value)}, the sim answered ${JSON.stringify(answers[0])}`,
+      };
+    }
+  }
 
   if (expect.answer !== undefined) {
     if (answers.length === 0) {

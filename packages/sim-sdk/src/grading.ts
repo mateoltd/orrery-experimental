@@ -36,6 +36,8 @@ export interface ToleranceSpec {
   readonly rel?: number;
   readonly maxPoints: number;
   readonly partialCredit?: boolean;
+  /** Tolerances beyond the boundary over which partial credit decays to zero. Defaults to 2. */
+  readonly partialCreditBand?: number;
 }
 
 const finish = (
@@ -93,6 +95,9 @@ export function withinTolerance(
 }
 
 /** `TOLERANCE` grading: partial credit proportional to how close, when asked for. */
+/** How many tolerances beyond the boundary partial credit survives. Two is a steep, honest slope. */
+const PARTIAL_CREDIT_BAND = 2;
+
 export function tolerance(given: unknown, expected: unknown, spec: ToleranceSpec): Grade {
   const a = asNumber(given);
   const b = asNumber(expected);
@@ -118,8 +123,21 @@ export function tolerance(given: unknown, expected: unknown, spec: ToleranceSpec
     // would award different points for a student who is 10% high and one who is 10% low.
     const scale = Math.max(Math.abs(a), Math.abs(b), 1e-12);
     const relativeError = Math.abs(a - b) / scale;
+    // CREDIT IS MEASURED IN TOLERANCES, NOT IN PERCENT, AND IT ENDS.
+    //
+    // Two defects in one line. `1 - relativeError` is unbounded -- a student 1000x out still earned
+    // 0.087 of 4, because the formula only reaches zero at 100% error and `max(|a|,|b|)` saturated it at
+    // 97.8%. But simply dividing by the tolerance was no better: it made every answer outside tolerance
+    // score zero, which is not partial credit, it is a cliff.
+    //
+    // So credit decays linearly from the tolerance boundary and reaches zero `PARTIAL_CREDIT_BAND`
+    // tolerances further out. The declared tolerance is the unit, the band is the end of it, and a wild
+    // guess scores nothing at all.
+    const toleranceUnit = spec.rel !== undefined && spec.rel > 0 ? spec.rel : 1;
+    const band = spec.partialCreditBand ?? PARTIAL_CREDIT_BAND;
+    const past = (relativeError - toleranceUnit) / (toleranceUnit * band);
     return finish(
-      spec.maxPoints * Math.max(0, 1 - relativeError),
+      spec.maxPoints * Math.max(0, 1 - Math.min(1, past)),
       spec.maxPoints,
       'TOLERANCE',
       `${String(a)} is not within tolerance of ${String(b)}; partial credit from the ${(relativeError * 100).toFixed(1)}% error`,

@@ -20,7 +20,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '../../..');
@@ -57,6 +57,20 @@ const validate = (id: string): { status: number; out: string } => {
 
 afterEach(() => {
   for (const id of created.splice(0)) rmSync(join(SIMS, id), { recursive: true, force: true });
+});
+
+beforeEach(() => {
+  // AN INTERRUPTED RUN LEAVES A SIM BEHIND, AND THE NEXT RUN FAILS CONFUSINGLY.
+  //
+  // `afterEach` is what normally cleans up, so a directory surviving means the run was killed between
+  // the scaffolder writing it and the teardown. The next run then reported
+  // `sims/maths.titration-curve already exists` -- an error about a sim nobody created, pointing at the
+  // wrong thing entirely. Removing anything left over first means the only failures are real ones.
+  for (const entry of readdirSync(SIMS)) {
+    if (entry.startsWith('maths.titration-curve') || entry.startsWith('maths.scaffold-')) {
+      rmSync(join(SIMS, entry), { recursive: true, force: true });
+    }
+  }
 });
 
 const scaffold = (id: string, extra: string[] = []): string => {

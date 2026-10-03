@@ -36,6 +36,8 @@ describe('maths.linear-functions grading', () => {
     expect(near).toBeGreaterThan(0);
     expect(near).toBeLessThan(4);
     expect(far).toBeLessThan(near);
+    // ...but a guess that cannot be right is still worth nothing, however wide the band.
+    expect(grade({ xIntercept: 9000 }).points).toBe(0);
   });
 
   it('GRADES "there is no crossing" AS AN ANSWER, because a flat line has none', () => {

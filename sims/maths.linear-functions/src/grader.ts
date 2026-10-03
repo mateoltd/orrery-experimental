@@ -145,6 +145,12 @@ export default defineSim({
     const judged = tolerance(parsedAnswer.xIntercept, expected, {
       abs: TOLERANCE.absolute,
       rel: TOLERANCE.relative,
+      // A WIDER BAND THAN THE DEFAULT, because this answer is an INTERCEPT READ OFF A GRAPH.
+      //
+      // 2.2 against 2 is 10% out, which is two and a half times the 4% tolerance and so past the
+      // default two-tolerance band. Reading a crossing point off a grid is coarse, and the penalty for
+      // being coarse should be a slope, not a wall.
+      partialCreditBand: 5,
       maxPoints: 4,
       partialCredit: true,
     });
