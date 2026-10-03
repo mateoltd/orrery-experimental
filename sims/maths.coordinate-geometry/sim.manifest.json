@@ -1,0 +1,116 @@
+{
+  "id": "maths.coordinate-geometry",
+  "version": "1.0.0",
+  "title": "Where does the line cross the y-axis?",
+  "summary": "Read a grid with a line through two marked points, and work out where it meets the vertical axis.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["maths"],
+  "tags": ["coordinates", "lines", "graphs"],
+  "ageRange": [11, 16],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A square grid with a line through two marked points, a square marker on the vertical axis, arrow-key controls, and undo and redo buttons.",
+    "reducedMotion": true,
+    "textAlternative": "A square grid running from -10 to 10 in both directions, with a straight line drawn through two marked points. The line is also marked where it crosses the vertical axis. The task is to read off that y-coordinate."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "x1": {
+        "type": "number",
+        "label": "first x",
+        "unit": "",
+        "minimum": -10,
+        "maximum": 10,
+        "default": -6
+      },
+      "y1": {
+        "type": "number",
+        "label": "first y",
+        "unit": "",
+        "minimum": -10,
+        "maximum": 10,
+        "default": -2
+      },
+      "x2": {
+        "type": "number",
+        "label": "second x",
+        "unit": "",
+        "minimum": -10,
+        "maximum": 10,
+        "default": 6
+      },
+      "y2": {
+        "type": "number",
+        "label": "second y",
+        "unit": "",
+        "minimum": -10,
+        "maximum": 10,
+        "default": 4
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 520,
+    "minHeight": 420,
+    "aspectRatio": "4/5"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "x1": -6,
+            "y1": -2,
+            "x2": 6,
+            "y2": 4
+          }
+        }
+      }
+    ],
+    "type": {
+      "answer": "1"
+    },
+    "expect": {
+      "value": 1,
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "TOLERANCE",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0.25,
+      "relative": 0
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You read {answer}; the line crosses the vertical axis at {expected}."
+  }
+}

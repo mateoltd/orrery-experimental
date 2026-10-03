@@ -1,6 +1,6 @@
 {
   "generatedFrom": "1970-01-01",
-  "digest": "3acb35ab5f484f7efbdb472c576e35f59b5ccefb371099eb59fac0d54cfcf85f",
+  "digest": "ebba2a0d8b76263d2d367c06b3c985f230f8a8be0bc8c2c1cd53559a599a7d5a",
   "entries": [
     {
       "id": "astronomy.orrery",
@@ -418,6 +418,68 @@
           "maximum": null,
           "step": null,
           "default": "50000"
+        }
+      ]
+    },
+    {
+      "id": "maths.coordinate-geometry",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.ca1b04bcd78b.html",
+        "browser": "./browser.2bac31cf4b04.js",
+        "grader": "./grader.5ba7cdb9bf82.js",
+        "style": "./style.13aa5dcedc33.css"
+      },
+      "bytes": {
+        "browser": 15698,
+        "grader": 6459,
+        "total": 24591
+      },
+      "defaultHeight": 520,
+      "minHeight": 420,
+      "parameters": [
+        {
+          "name": "x1",
+          "type": "number",
+          "label": "first x",
+          "unit": "",
+          "minimum": -10,
+          "maximum": 10,
+          "step": null,
+          "default": -6
+        },
+        {
+          "name": "y1",
+          "type": "number",
+          "label": "first y",
+          "unit": "",
+          "minimum": -10,
+          "maximum": 10,
+          "step": null,
+          "default": -2
+        },
+        {
+          "name": "x2",
+          "type": "number",
+          "label": "second x",
+          "unit": "",
+          "minimum": -10,
+          "maximum": 10,
+          "step": null,
+          "default": 6
+        },
+        {
+          "name": "y2",
+          "type": "number",
+          "label": "second y",
+          "unit": "",
+          "minimum": -10,
+          "maximum": 10,
+          "step": null,
+          "default": 4
         }
       ]
     },
