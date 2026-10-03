@@ -1,0 +1,115 @@
+{
+  "id": "physics.kinematics",
+  "version": "1.0.0",
+  "title": "Displacement under acceleration",
+  "summary": "Choose a situation, set a time, and calculate how far the object has travelled.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": [
+    "physics"
+  ],
+  "tags": [
+    "kinematics",
+    "motion"
+  ],
+  "ageRange": [
+    13,
+    18
+  ],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A choice of situation, a time in seconds, and a box to work out the distance travelled in.",
+    "reducedMotion": true,
+    "textAlternative": "A situation is chosen, a time in seconds is set, and the task is to work out how far the object has moved."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "t": {
+        "type": "number",
+        "label": "Time",
+        "unit": "s",
+        "minimum": 0.1,
+        "maximum": 5,
+        "default": 2
+      },
+      "scenario": {
+        "type": "enum",
+        "label": "Situation",
+        "enumValues": [
+          "dropped",
+          "thrown",
+          "rolled"
+        ],
+        "default": "dropped"
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": [
+      "dropped",
+      "thrown",
+      "rolled"
+    ]
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 340,
+    "minHeight": 240,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "scenario": "thrown",
+            "t": 2.0
+          }
+        }
+      }
+    ],
+    "type": {
+      "distance": 10.38
+    },
+    "expect": {
+      "value": {
+        "min": 10.3,
+        "max": 10.5
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "NUMERIC",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0.5,
+      "relative": 0.02
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You said {answer} m; it moves {expected} m."
+  }
+}
