@@ -131,13 +131,33 @@ export function isPastDeadline(deadline: Millis, now: Millis, grace: Duration = 
 }
 
 /**
- * The offset a client should apply to its own clock, from a server timestamp and a
- * round trip. Uses the RTT midpoint, so a slow response does not bias the estimate
- * in either direction. `C3`/`RN-10`: this is display-only; the server remains the
- * sole enforcer, so a wrong offset cannot extend or shorten an exam.
+ * THE OFFSET BETWEEN THIS DEVICE'S CLOCK AND THE SERVER'S, from one round trip.
+ *
+ * ## THE SIGN IS `- rttMs / 2`, AND IT WAS `+` UNTIL PF-3
+ *
+ * NTP's estimator is `((T2 - T1) + (T3 - T4)) / 2`, where `T1` is the client send, `T2` the server receive, `T3`
+ * the server send and `T4` the client receive. A single `serverNow` stands in for both `T2` and `T3`, and with
+ * `rtt = T4 - T1` that reduces to:
+ *
+ * ```
+ * offset = serverNow - (T1 + rtt / 2)
+ * ```
+ *
+ * The server reads its clock **after** the request left, so half the round trip has already elapsed by the time
+ * it reports, and that half comes back OFF. The original `+ rttMs / 2` was wrong by `rtt` — twice the intended
+ * correction.
+ *
+ * **WHY IT MATTERS MORE THAN A WRONG NUMBER.** The error is always in the direction that makes a countdown read
+ * **LATE**, and `plans/15` requires the per-question timer to be announced politely and accurately for a
+ * screen-reader user. A student reading a timer that runs long is a student still typing when the paper closed.
+ * `C3`/`RN-10` keep this display-only, so the blast radius is a wrong number on screen and nothing else.
+ *
+ * **THE OLD TEST COULD NOT HAVE CAUGHT IT.** It asserted `clockOffset(serverNow, rtt)` was close to
+ * `serverNow + rtt / 2 - Date.now()` — the implementation's own formula, retyped. A test derived from the code it
+ * checks is evidence of nothing, and it passed with the wrong sign for as long as it existed.
  */
 export function clockOffset(serverNow: Millis, rttMs: number): Duration {
-  return serverNow + rttMs / 2 - Date.now();
+  return serverNow - rttMs / 2 - Date.now();
 }
 
 /**

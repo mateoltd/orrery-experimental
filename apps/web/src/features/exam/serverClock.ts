@@ -43,20 +43,19 @@ export const RESYNC_AFTER_PAUSE_MS = 30_000;
 /**
  * THE OFFSET FROM ONE ROUND TRIP, as a pure function of three timestamps.
  *
- * ## THE SIGN IS `- rtt / 2`, AND `@orrery/clock` HAS IT AS `+`
+ * ## THE SIGN IS `- rtt / 2`, AND `@orrery/clock` ONCE HAD IT AS `+`
  *
  * The NTP offset estimate is `((T2 - T1) + (T3 - T4)) / 2`, and with a single `serverNow` standing in for both
  * server timestamps that reduces to **`serverNow - clientSentAt - rtt / 2`**. The server's clock is read AFTER the
  * request left, so half the round trip has already elapsed and must be subtracted back out.
  *
- * `@orrery/clock`'s `clockOffset` writes `serverNow + rttMs / 2 - Date.now()`. That is wrong by `rtt` -- twice the
- * intended correction -- and it errs in the direction that makes a countdown read **LATE**, which is the
- * direction that costs a student their last answer.
+ * **`clockOffset` was wrong by `rtt`** -- twice the intended correction -- and always in the direction that makes a
+ * countdown read **LATE**. It is now corrected (`PF-3`), and this file **no longer disagrees with it.**
  *
- * **THIS FUNCTION IS NOT A FIX TO THAT MODULE.** It is the pure version, so the formula can be property-tested,
- * and it disagrees with the impure one on purpose. Correcting `clockOffset` changes a P0 primitive with its own
- * tests and its own callers, so it is recorded in the tracker as a defect to be fixed deliberately rather than
- * quietly forked here -- two offsets disagreeing in two packages is worse than one wrong one.
+ * **THE TWO STILL BOTH EXIST, AND THAT IS NOT REDUNDANT.** `clockOffset` calls `Date.now()` internally, which is
+ * right for it: it is the one sanctioned place a clock may read the wall. But it means it cannot be property-tested
+ * and a countdown cannot be replayed. So this is the pure version, the tests here cover the FORMULA, and
+ * `clockOffset` is the impure wrapper around it. One formula, two callers, and the testable one is under test.
  */
 export const offsetFromRoundTrip = (
   clientSentAt: number,

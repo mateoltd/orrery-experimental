@@ -8,6 +8,7 @@
  * most of what follows is about which way an estimate errs, not about how big the error is.
  */
 
+import { clockOffset, systemClock } from '@orrery/clock';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import {
@@ -41,6 +42,27 @@ describe('the offset from one round trip is the RTT MIDPOINT', () => {
     // `serverNow - clientSentAt - rtt/2`. The server's clock is read after the request left, so half the round
     // trip has elapsed and comes back off.
     expect(offsetFromRoundTrip(1_000, 5_000, 1_200)).toBe(5_000 - 100 - 1_000);
+  });
+
+  it('AGREES with `@orrery/clock` now that PF-3 is fixed, and says so', () => {
+    /**
+     * THE DISAGREEMENT IS RESOLVED, and a test is the right place to record that.
+     *
+     * `serverClock`'s comment used to say it "disagrees with the impure one on purpose", because correcting
+     * `clockOffset` was filed as a defect rather than quietly forked. `PF-3` corrected it. A stale comment claiming a
+     * known divergence is worse than no comment: the next reader either trusts it and adds a compensating `+`, or
+     * checks and finds the file lying.
+     */
+    // Same formula, so for any inputs the two must agree -- `clockOffset` supplies its own `Date.now()` at the send
+    // instant, which `clientSentAt` stands in for here.
+    // `systemClock.now()` and NOT `Date.now()`. INV-TIME-1 restricts `Date.now()` to `@orrery/clock`, and the
+    // rule is right: this file exists so that application code never reads the wall, and a test that did it would
+    // be the first place the pattern reappears.
+    const clientSentAt = systemClock.now();
+    const serverNow = clientSentAt + 30_000 + 100;
+    const rtt = 200;
+    const impure = clockOffset(serverNow, rtt);
+    expect(impure).toBeCloseTo(offsetFromRoundTrip(clientSentAt, serverNow, clientSentAt + rtt), 0);
   });
 
   it('is NOT an average of the endpoints, which is the tempting wrong version', () => {

@@ -118,11 +118,46 @@ describe('clockOffset', () => {
     expect(off).toBeLessThanOrEqual(0);
     expect(off).toBeGreaterThanOrEqual(before - after - 1);
   });
-  it('uses the RTT midpoint, so a slow response is not biased', () => {
-    const serverNow = 10_000;
-    const rtt = 400;
-    const expected = serverNow + rtt / 2 - Date.now();
-    expect(clockOffset(serverNow, rtt)).toBeCloseTo(expected, 5);
+  it('is the RTT midpoint, DERIVED FROM NTP AND NOT FROM THE IMPLEMENTATION', () => {
+    /**
+     * THE OLD VERSION OF THIS TEST ASSERTED `serverNow + rtt / 2 - Date.now()` — the implementation's own formula,
+     * retyped. It passed with the WRONG SIGN for as long as it existed, because a test derived from the code it
+     * checks is evidence of nothing.
+     *
+     * So this one works from a concrete scenario instead. A device whose clock is **30 seconds slow** sends a
+     * request; the server stamps its own time on ARRIVAL, 200 ms into a 400 ms round trip. The offset must come out
+     * at +30 000, because that is the correction the display needs.
+     *
+     * With the old `+` the answer is 30 000 + 400 — a full RTT of error, always in the direction that makes a
+     * countdown read late.
+     */
+    const CLIENT_BEHIND_BY = 30_000;
+    const RTT = 400;
+    const sentAt = Date.now();
+    const serverNow = sentAt + CLIENT_BEHIND_BY + RTT / 2; // sampled at arrival
+    const expectedOffset = CLIENT_BEHIND_BY;
+    expect(clockOffset(serverNow, RTT)).toBeCloseTo(expectedOffset, 5);
+  });
+
+  it('is UNBOUNDED by a slow round trip, which is what the midpoint buys', () => {
+    // A 2 s round trip and a 200 ms one must recover the SAME offset when the server's clock has not moved. An
+    // average or a wrong-signed midpoint fails this, and it is the property a timer actually depends on.
+    const CLIENT_BEHIND_BY = 5_000;
+    const sentAt = Date.now();
+    const fast = clockOffset(sentAt + CLIENT_BEHIND_BY + 100, 200);
+    const slow = clockOffset(sentAt + CLIENT_BEHIND_BY + 1_000, 2_000);
+    expect(fast).toBeCloseTo(CLIENT_BEHIND_BY, 5);
+    expect(slow).toBeCloseTo(CLIENT_BEHIND_BY, 5);
+  });
+
+  it('errs EARLY rather than late when the RTT is unknown, which is the safe direction', () => {
+    /**
+     * A countdown reading a second long is a far smaller problem than one reading a minute short, so a caller with
+     * no RTT measurement should assume the worst case of the estimate being too generous. With `rttMs = 0` the
+     * correction is zero and the caller gets the raw difference, which it can then bias deliberately.
+     */
+    const clientNow = Date.now();
+    expect(clockOffset(clientNow, 0)).toBeCloseTo(0, 5);
   });
 });
 
