@@ -130,6 +130,28 @@ export interface SimModule<P extends ParamValues = ParamValues, S = unknown> {
 export function defineSim<P extends ParamValues = ParamValues, S = unknown>(
   definition: SimDefinition<P, S>,
 ): SimModule<P, S> {
+  /**
+   * THE GRADER'S ARITY IS PART OF THE CONTRACT, AND IT IS CHECKED.
+   *
+   * The grader half is `grade(state, params, answer)` — three positional arguments. Three gold
+   * simulations were written `grade(answer, context)`, so the SDK handed them the PARAMETERS as the
+   * answer and the answer as the parameters: `parseAnswer` failed, **every answer scored 0**, and the
+   * conformance run printed a confident number derived from the wrong things. It passed, because a
+   * two-argument function is not a type error at runtime and nothing else was looking.
+   *
+   * TypeScript checks the signature for a TypeScript author and cannot check it for a JavaScript one, and
+   * a grader bundle is a plain object at runtime. So it is checked here, at the point of definition, where
+   * the failure is a load-time error naming the simulation — rather than a silent zero that reaches a
+   * student.
+   */
+  if (definition.grade.length !== 3) {
+    throw new Error(
+      `GRADER_ARITY in ${definition.meta.id}: grade takes (state, params, answer) — three arguments — ` +
+        `and this one takes ${String(definition.grade.length)}. A grader with the wrong arity is handed ` +
+        'the parameters as its answer and the answer as its parameters, so every mark it awards is zero ' +
+        'and nothing anywhere reports an error.',
+    );
+  }
   const problems = validateParamSpecs(definition.params);
   if (problems.length > 0) {
     throw new Error(

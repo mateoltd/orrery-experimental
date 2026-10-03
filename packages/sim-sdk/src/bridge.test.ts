@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { type BridgeHandlers, connectSim, type SimCapabilities } from './bridge.js';
+import { defineSim } from './define.js';
 import { checksumState } from './state.js';
 
 const CAPABILITIES: SimCapabilities = { grading: true, stepper: true, scenarios: [] };
@@ -179,5 +180,52 @@ describe('connectSim', () => {
     connection.dispose();
     t.deliver(initFrame());
     expect(connection.started).toBe(false);
+  });
+});
+
+/**
+ * The grader's arity is checked AT DEFINITION.  (P6-T11)
+ *
+ * Three gold simulations were written `grade(answer, context)` where the contract is
+ * `grade(state, params, answer)`. A two-argument function is not a runtime type error, so the SDK handed
+ * them the parameters as the answer, `parseAnswer` failed, and **every answer scored 0** with nothing
+ * reporting an error anywhere. It is now a load-time failure naming the simulation.
+ */
+describe('defineSim checks the grader signature', () => {
+  const definition = () =>
+    ({
+      meta: {
+        id: 'maths.arity',
+        title: 'Arity',
+        version: '1.0.0',
+        subjects: ['maths'],
+        license: 'CC-BY-4.0',
+        provenance: 'ORIGINAL',
+        protocol: 1,
+      },
+      params: {},
+      controls: { params: false, state: false, scenarios: [] },
+      accessibility: {
+        keyboard: true,
+        screenReaderSummary: 'A screen reader summary long enough to pass the declaration check.',
+        reducedMotion: true,
+        textAlternative: 'A text alternative long enough to pass the declaration check here.',
+        summary: 'A summary long enough to pass the declaration check that defineSim performs.',
+      },
+      grade: () => ({ points: 0, maxPoints: 4 }),
+    }) as never;
+
+  it('REFUSES a grader that takes the wrong number of arguments', () => {
+    expect(() => defineSim(definition())).toThrow(/GRADER_ARITY/u);
+    // The message has to SAY what to do, because the arity is not obvious from a stack trace.
+    expect(() => defineSim(definition())).toThrow(/grade takes \(state, params, answer\)/u);
+  });
+
+  it('accepts a grader that takes all three', () => {
+    const module = defineSim({
+      ...(definition() as unknown as Record<string, unknown>),
+      grade: (_state: unknown, _params: unknown, _answer: unknown) => ({ points: 0, maxPoints: 4 }),
+    } as never);
+    expect(module.grader.grade).toBeTypeOf('function');
   });
 });

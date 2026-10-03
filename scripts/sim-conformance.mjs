@@ -516,6 +516,27 @@ const CELLS = [
     },
   },
   {
+    name: "every registered sim's grader honours grade(state, params, answer)",
+    why: 'a two-argument grader is handed the parameters as its answer and scores every student 0',
+    run: async ({ entry }) => {
+      const grader = join(
+        ROOT,
+        'sims',
+        String(entry.id),
+        'dist',
+        String(entry.bundle.grader).replace(/^\.\//, ''),
+      );
+      if (!existsSync(grader)) return `grader bundle missing: ${String(entry.bundle.grader)}`;
+      const half = (await import(pathToFileURL(grader).href)).default.grader;
+      // Arity, checked per SIM as well as in `defineSim`. The load-time check is the fix; this is the
+      // matrix making it visible for a simulation someone published without building locally.
+      if (typeof half?.grade !== 'function') return 'the bundle exports no grade function';
+      return half.grade.length === 3
+        ? null
+        : `grade takes ${String(half.grade.length)} argument(s), not 3`;
+    },
+  },
+  {
     name: 'the answer is GRADEABLE server-side, with no browser',
     why: 'plans/10 exit: "a sim question is auto-graded server-side from stored state with no browser"',
     run: async ({ page, entry }) => {

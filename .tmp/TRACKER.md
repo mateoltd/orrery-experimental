@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims (re-costed ≈240h: 24 × 10h, the first sims built against a brand-new SDK, template and conformance harness)           | **IN PROGRESS** | `d2c924b` | 5 of 24 built. The `expect.answer` gap is CLOSED — the runner submits through the sim's own control, so the declared field is satisfiable for all 24. | (`maths.projectile-motion`). The declared `conformance.script` is now honoured, which is the machinery 24 sims need; it caught two defects on its first run. OPEN QUESTION: `plans/10` gives a scripted host no way to ask a sim for its answer. |
+| P6-T11 24 gold sims (re-costed ≈240h: 24 × 10h, the first sims built against a brand-new SDK, template and conformance harness)           | **IN PROGRESS** | *(next commit)* | 5 of 24 built. The `expect.answer` gap is CLOSED — the runner submits through the sim's own control, so the declared field is satisfiable for all 24. | (`maths.projectile-motion`). The declared `conformance.script` is now honoured, which is the machinery 24 sims need; it caught two defects on its first run. OPEN QUESTION: `plans/10` gives a scripted host no way to ask a sim for its answer. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -1976,6 +1976,39 @@ the right reason and the wrong message.
 - 5 of 24 gold sims. `pnpm sim:conformance` **75/75 cells** across all five; `pnpm test:sims` 30/30.
 - 1495 unit, 336 db integration, 8/8 container gates, lint 0, typecheck 0, `gate:browser` green,
   playground smoke green, image builds green.
+
+
+#### P6-T11: the grader contract is now ENFORCED, not discovered nineteen more times
+
+Every gold sim so far has found the same class of defect in the grader, and each was found by hand, in
+that sim, because nothing in the platform could see it. That is the wrong place to keep finding it.
+
+**`defineSim` NOW CHECKS THE GRADER'S ARITY, AT DEFINITION.** The contract is
+`grade(state, params, answer)` — three positional arguments. TypeScript checks that for a TypeScript
+author and cannot check it for a JavaScript one, and a grader bundle is a plain object at runtime. So a
+two-argument function is now a **load-time error naming the simulation**, instead of a silent zero that
+reaches a student:
+
+```
+GRADER_ARITY in maths.something: grade takes (state, params, answer) — three arguments — and this
+one takes 2. A grader with the wrong arity is handed the parameters as its answer and the answer
+as its parameters, so every mark it awards is zero and nothing anywhere reports an error.
+```
+
+**AND THE CONFORMANCE MATRIX CHECKS IT PER SIM AS WELL**, so a simulation someone published without
+building locally is still caught — `every registered sim's grader honours grade(state, params, answer)`,
+16 cells now rather than 15 per sim.
+
+**A NEGATIVE CONTROL THAT PROVED NOTHING, RECORDED AS SUCH.** The first attempt at a sim-level negative
+control rewrote the signature as `grade(answer, params, _context)` — which is still THREE parameters, so
+there was nothing for the check to catch and the build passed. The check was right and the control was
+useless. The SDK's own test passes a zero-argument grader and asserts `GRADER_ARITY`, which is the
+control that actually exercises it.
+
+#### P6-T11 evidence
+- 5 of 24 gold sims. `pnpm sim:conformance` **80/80 cells** across all five; `pnpm test:sims` 30/30;
+  sim-sdk 66.
+- 1495 unit, 336 db integration, 8/8 container gates, lint 0, typecheck 0, `gate:browser` green.
 
 
 #### P6-T6 correction (the host could listen and never speak)
