@@ -116,6 +116,10 @@
       "types": "./dist/grading/simulation.d.ts",
       "default": "./dist/grading/simulation.js"
     },
+    "./grading/harness": {
+      "types": "./dist/grading/harness.d.ts",
+      "default": "./dist/grading/harness.js"
+    },
     "./question/fixtures": {
       "types": "./dist/question/fixtures.d.ts",
       "default": "./dist/question/fixtures.js"

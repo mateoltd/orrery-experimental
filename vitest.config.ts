@@ -104,6 +104,20 @@ export default defineConfig({
           functions: 100,
           statements: 100,
         },
+        /**
+         * The `testGrader` harness, at 100% because it is the one surface an author TRUSTS.
+         *
+         * `grade` is allowed to be terse about why it refused -- a code and a flag are right for a program. The
+         * harness translates those into a CAUSE and a FIX, and a mistranslation sends an author to fix the wrong
+         * thing: told to check `partialCredit` on an essay, they find none and file a bug about the tool. The
+         * table's ordering is therefore load-bearing rather than incidental, and every entry needs its case.
+         */
+        'packages/contracts/src/grading/harness.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
       },
     },
   },

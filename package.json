@@ -38,6 +38,7 @@
     "test:integration": "pnpm --filter @orrery/db --filter @orrery/worker test:integration",
     "gate:migrate": "node scripts/migration-corpus-gate.mjs",
     "gate:subjects": "node scripts/subject-tree-gate.mjs",
+    "test:grader": "node scripts/test-grader.mjs",
     "gate:tracker": "node scripts/check-tracker.mjs",
     "test:count": "bash scripts/unit-count.sh"
   },
