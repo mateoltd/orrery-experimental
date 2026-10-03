@@ -2093,9 +2093,12 @@ suite it lives in is the same failure mode as an unchecked conformance claim.
 - 8 of 24 gold sims. `pnpm sim:conformance` **128/128** across all eight; `pnpm test:sims` 59/59.
 - **1562 unit**, 336 db integration, 3 e2e, 8/8 container gates, lint 0, typecheck 0, `pnpm test` 22/22
   tasks, `gate:browser` green, image builds green.
-- **The unit-count helper is `.tmp/unit-count.sh` and it is NOT IN GIT.** Only `.tmp/TRACKER.md` is
-  un-ignored, so every "1562 unit" figure rests on a script that exists on one machine only. It needs to
-  live in `scripts/` before any of these numbers are trustworthy to a reviewer.
+- **The unit-count helper is `scripts/unit-count.sh` and it IS IN GIT.** It was `.tmp/unit-count.sh`,
+  where `.gitignore` admits only `.tmp/TRACKER.md`, so every unit total above rested on a script that
+  existed on one machine — a number in the record nobody else can reproduce is a rumour. It also
+  HARDCODED its package list, which reintroduced the exact failure its own comment describes one level
+  up: a new package would be under-reported forever, silently. The list is discovered now, and every
+  package that matched nothing is named rather than skipped.
 
 #### P6-T11: gold sim 7, the first MULTI-PART answer
 

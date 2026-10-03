@@ -16,7 +16,7 @@
     "test": "turbo run test",
     "test:e2e": "playwright test",
     "audit:deps": "osv-scanner --recursive .",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm run test:count",
     "clean": "turbo run clean && rm -rf node_modules",
     "gate:pinning": "node scripts/pinning-gate.mjs",
     "gate:invariants": "node scripts/invariant-registry.mjs",
@@ -37,7 +37,8 @@
     "test:integration": "pnpm --filter @orrery/db --filter @orrery/worker test:integration",
     "gate:migrate": "node scripts/migration-corpus-gate.mjs",
     "gate:subjects": "node scripts/subject-tree-gate.mjs",
-    "gate:tracker": "node scripts/check-tracker.mjs"
+    "gate:tracker": "node scripts/check-tracker.mjs",
+    "test:count": "bash scripts/unit-count.sh"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
