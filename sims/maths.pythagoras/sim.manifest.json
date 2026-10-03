@@ -1,0 +1,116 @@
+{
+  "id": "maths.pythagoras",
+  "version": "1.0.0",
+  "title": "Pythagoras and triangle facts",
+  "summary": "Look at a triangle drawn to scale and name its longest side and where its right angle is.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["maths"],
+  "tags": ["geometry", "triangles"],
+  "ageRange": [11, 16],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A triangle drawn to scale with its three sides labelled and its angles written beside them.",
+    "reducedMotion": true,
+    "textAlternative": "A triangle with sides 3, 4 and 5. The longest is the side of length 5."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "a": {
+        "type": "number",
+        "label": "Side a",
+        "unit": "",
+        "minimum": 1,
+        "maximum": 20,
+        "default": 3
+      },
+      "b": {
+        "type": "number",
+        "label": "Side b",
+        "unit": "",
+        "minimum": 1,
+        "maximum": 20,
+        "default": 4
+      },
+      "c": {
+        "type": "number",
+        "label": "Side c",
+        "unit": "",
+        "minimum": 1,
+        "maximum": 30,
+        "default": 5
+      },
+      "giveLengths": {
+        "type": "boolean",
+        "label": "Give the lengths",
+        "default": true
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 320,
+    "minHeight": 240,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "a": 3,
+            "b": 4,
+            "c": 5
+          }
+        }
+      }
+    ],
+    "type": {
+      "longest": "c"
+    },
+    "expect": {
+      "answer": {
+        "name": {
+          "in": ["c"]
+        }
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "SET",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0.01,
+      "relative": 0.005
+    },
+    "partialCredit": false,
+    "rationaleTemplate": "You named {answer.name}; the longest side is {expected.name}."
+  }
+}

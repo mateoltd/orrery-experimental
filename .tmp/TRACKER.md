@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims (re-costed ≈240h: 24 × 10h, the first sims built against a brand-new SDK, template and conformance harness)           | **IN PROGRESS** | `9e3ca0c` | 4 of 24 built. The `expect.answer` gap is CLOSED — the runner submits through the sim's own control, so the declared field is satisfiable for all 24. | (`maths.projectile-motion`). The declared `conformance.script` is now honoured, which is the machinery 24 sims need; it caught two defects on its first run. OPEN QUESTION: `plans/10` gives a scripted host no way to ask a sim for its answer. |
+| P6-T11 24 gold sims (re-costed ≈240h: 24 × 10h, the first sims built against a brand-new SDK, template and conformance harness)           | **IN PROGRESS** | *(next commit)* | 5 of 24 built. The `expect.answer` gap is CLOSED — the runner submits through the sim's own control, so the declared field is satisfiable for all 24. | (`maths.projectile-motion`). The declared `conformance.script` is now honoured, which is the machinery 24 sims need; it caught two defects on its first run. OPEN QUESTION: `plans/10` gives a scripted host no way to ask a sim for its answer. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -1939,6 +1939,43 @@ because the per-item tolerance a teacher sets in P7 belongs to the grading servi
 #### P6-T11 evidence
 - 4 of 24 gold sims. `pnpm sim:conformance` **60/60 cells** across all four; `pnpm test:sims` 22/22.
 - 1495 unit, 336 db integration, 8/8 container gates, lint 0, typecheck 0, `gate:browser` green.
+
+
+#### P6-T11: gold sim 5, and the first simulation that needs SET grading
+
+**`maths.pythagoras` — "which side is the longest?" has THREE answers, and with sides 6, 6 and 5 it has
+TWO correct ones.** The rule, stated precisely: **the student must name a non-empty subset of the longest
+sides.** Naming one of two tied sides is a complete answer; naming all three is not a better answer than
+naming one, it is not an answer. `plans/20` requires set grading in P7, so building it here means the
+SDK's set helpers are exercised by a simulation rather than only by their own tests.
+
+**SLICING THE EXPECTED SET TO THE STUDENT'S SET SIZE COMPARED "b" AGAINST "a".** The first attempt at
+"a non-empty subset" shortened the expected set and called `setMatch` — so with sides 6, 6, 5, answering
+"a" scored 4 and answering **"b" scored 0**. Both are correct answers. The rule is now plain containment,
+and `setMatch` is kept only for what it is good at: making the comparison order-independent.
+
+**THE TEST'S PREMISE WAS WRONG BEFORE THE CODE WAS.** It used 5, 5, 7.07 — an isosceles *right* triangle,
+where the hypotenuse is longest on its own and the tie does not exist. The cases that did not check the
+tie passed for the wrong reason; the one that did, failed. A test written about a case you have not
+checked is not a test.
+
+**AN ARRAY-VALUED `name` PARSED AS AN EMPTY SET.** The sim sends `{name: ['a','b']}` when a student typed
+more than one side, and the parser read only a string — so a correct two-answer reply scored 0 with "Name a
+side" as its feedback.
+
+**`isRightAngleAt`'s PARAMETER WAS IGNORED**, so `rightAngles` reported a 90° angle for every side of any
+right triangle, and three for an isosceles one. Found by the linter's unused-parameter rule, which is the
+fourth time in this phase that a "style" warning has been describing a real bug.
+
+**THE MANIFEST NEEDED A NEW FIELD, SO IT GOT ONE PROPERLY.** `conformance.type` — what a *student* would
+enter — is now declared in the Zod mirror **and** the JSON Schema. Both are strict by design
+(`additionalProperties: false`), so a field the runner needs must be in both or a manifest is rejected for
+the right reason and the wrong message.
+
+#### P6-T11 evidence
+- 5 of 24 gold sims. `pnpm sim:conformance` **75/75 cells** across all five; `pnpm test:sims` 30/30.
+- 1495 unit, 336 db integration, 8/8 container gates, lint 0, typecheck 0, `gate:browser` green,
+  playground smoke green, image builds green.
 
 
 #### P6-T6 correction (the host could listen and never speak)

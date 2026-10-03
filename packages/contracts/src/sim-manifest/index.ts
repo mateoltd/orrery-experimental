@@ -157,6 +157,19 @@ export const conformanceSchema = z.object({
       }),
     )
     .min(1),
+  /**
+   * What a STUDENT would enter, keyed by the sim's own field name (`{ intercept: 2 }`).
+   *
+   * Deliberately separate from `expect`. The two answer different questions: one is the INPUT, the other
+   * is the claim about the OUTPUT. A simulation that computes its own answer has nothing to type, and one
+   * that asks the student for a number has nothing to submit without this — so the conformance runner
+   * fills these in before activating the submit control.
+   *
+   * Putting the expected answer here instead would mean typing the expectation into the field and then
+   * asserting the simulation reports it, which is a test that cannot fail for the reason anyone would
+   * write it. That mistake is worth a field of its own to avoid.
+   */
+  type: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
   expect: z.object({
     answer: z.record(z.string(), z.unknown()).optional(),
     grade: z.number().min(0).optional(),

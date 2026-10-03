@@ -433,6 +433,13 @@
             }
           }
         },
+        "type": {
+          "description": "What a STUDENT would ENTER, keyed by the simulation's own field name. Deliberately separate from `expect`: this is the input, that is the claim about the output.",
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string", "number", "boolean", "null"]
+          }
+        },
         "capturesPath": {
           "type": "string",
           "pattern": "^\\./"
