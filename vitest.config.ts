@@ -67,6 +67,21 @@ export default defineConfig({
           functions: 100,
           statements: 100,
         },
+        /**
+         * `answerFixtures` is held to the same floor, and the reason is specific rather than tidy.
+         *
+         * This file is DATA -- a table of marks a human wrote down -- and data has a coverage hazard that code
+         * does not: a row nothing reads is a row nobody checked. Every branch in it is either a per-method rule
+         * being derived, an edge of that derivation (`key` of no options, a method outside the six), or the
+         * gap detector that reports a missing fixture. An uncovered one means either a rule in `plans/07` §3
+         * that no fixture exercises, or a completeness check that has never reported a gap.
+         */
+        'packages/contracts/src/question/fixtures.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
       },
     },
   },

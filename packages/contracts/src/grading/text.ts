@@ -297,13 +297,23 @@ export function matchShortText(
  * is counted as correct. The first version treated it as incorrect, which meant a student repeating one item
  * twice lost the mark for a list they had otherwise ordered perfectly.
  *
- * ## AND THE PAIR COUNT COMES FROM THE RESPONSE'S OWN LENGTH
+ * ## AND THE PAIR COUNT COMES FROM THE RESPONSE'S OWN LENGTH, WHICH HAD A HOLE IN IT
  *
- * A response with one item has no pairs at all, and `0 / 0` is NaN. One item is trivially in order, so the
- * fraction is 1 -- the same reasoning as an empty key in `diffTokens`, and for the same reason.
+ * A response with one item has no pairs at all and `0 / 0` is NaN, so one item is trivially in order and the
+ * fraction is 1 -- the same reasoning as an empty key in `diffTokens`.
+ *
+ * **THE ORIGINAL GUARD WAS `length <= 1`, WHICH ALSO CAUGHT ZERO ITEMS, AND THAT SCORED A BLANK AS FULL
+ * MARKS.** `orderingCredit` is a pure function, so nothing about it said "a blank is handled elsewhere", and the
+ * caller had no reason to check. The first version to reach `grade()` therefore marked a student who submitted
+ * an empty ordering as CORRECT on every ordering question they were asked -- and the test that found it was an
+ * unrelated one about unreachable switch arms, which happened to hand the function an empty array.
+ *
+ * So the two cases are separated: an empty response scores NOTHING, and only a single-item response is trivially
+ * in order. A blank is not an ordering; it is the absence of one.
  */
 export function orderingCredit(key: readonly string[], response: readonly string[]): number {
-  if (response.length <= 1) return 1;
+  if (response.length === 0) return 0;
+  if (response.length === 1) return 1;
   let correctPairs = 0;
   let counted = 0;
   for (let index = 0; index < response.length - 1; index += 1) {

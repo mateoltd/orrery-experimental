@@ -32,6 +32,7 @@
 
 import type { QuestionSpec, QuestionType } from '../question/index.js';
 import { applyMethod, shareFor } from './methods.js';
+import { matchShortText, misorderedPairs, orderingCredit } from './text.js';
 
 /**
  * THE GRADER'S OWN VERSION, and the reason regrades are auditable.
@@ -148,6 +149,79 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /**
+ * THE ANSWER KEY, OR `null` IF IT CANNOT BE READ.  (`plans/07` §4, `total`)
+ *
+ * ## EVERY HANDLER READS `spec.key`, AND A MISSING KEY IS A THROW IN FIVE PLACES
+ *
+ * `key` is required by `QuestionSpec`, so none of this is reachable from typed code. But `grade` reads specs
+ * out of JSON columns written by authoring tools, and the totality requirement is about RUNTIME input, not
+ * about the type: "`grade` must return a `GradeOutput` for every `(spec, response)` pair, including malformed,
+ * missing, and hostile inputs."
+ *
+ * A bank row written by an older build, a half-finished draft saved as a question, or a hand-edited fixture
+ * each produce a record with no `key`, and `new Set(spec.key.choiceIds)` throws a `TypeError` from inside the
+ * auto-grade loop -- where one unreadable question takes the submission down with it and nothing lands in the
+ * attempt log to explain why.
+ *
+ * So the read is done once, here, and each handler refuses on `null`. A missing key is NOT scored as zero: an
+ * absent key is a question nobody knows the answer to, which is a different fact from a student answering
+ * wrongly, and `OUT_OF_RANGE_KEY` is the flag that says so.
+ */
+const readKey = (spec: { key?: unknown }): Record<string, unknown> | null =>
+  isRecord(spec.key) ? spec.key : null;
+
+/**
+ * THE KEY, AND THE ONE FIELD INSIDE IT THAT THE TYPE ACTUALLY NEEDS -- OR A REFUSAL.
+ *
+ * ## A RECORD IS NOT A VALID KEY, AND THE DIFFERENCE WAS WORTH A STUDENT'S MARK
+ *
+ * The first version checked only that `spec.key` was an object. `single_choice` with `key: {choiceIds: null}`
+ * passes that check, and then `asString(undefined)` returned `null`, so `given === null` was false for every
+ * real answer and the question marked EVERY student wrong -- with `points: 0` and **no flag at all**, which is
+ * the worst of the available outcomes: a wrong mark, silently attributed to the students rather than to the
+ * question that caused it.
+ *
+ * So the requirement is stated per type: `choiceId` a string, `value` a boolean or a finite number, `text` a
+ * string, `choiceIds` and `itemIds` arrays of strings. A key that fails is refused through the same door as a
+ * missing one, because to a marker both mean the same thing: nobody knows what this question's answer is.
+ *
+ * The parameter asks only for the two fields this function reads, rather than being `Record<string, unknown>`
+ * or `unknown`. A typed `QuestionSpec` satisfies `{key?: unknown; points?: unknown}` without a cast, whereas it
+ * does NOT satisfy a `Record<string, unknown>` -- an interface has no index signature -- so the alternatives
+ * were either a cast at five call sites or a re-check of something `grade` has already proved.
+ */
+const readTypedKey = <T>(
+  spec: { key?: unknown; points?: unknown },
+  type: string,
+  field: string,
+  read: (key: Record<string, unknown>) => T | null,
+): { key: Record<string, unknown>; value: T } | GradeOutput => {
+  const key = readKey(spec);
+  // `grade` has already proved the spec is a record, and `points` has already been read as a number for
+  // `maxPoints`, so `?? 0` is for a spec whose `points` is missing or non-finite -- not for a missing object.
+  const maxPoints = asNumber(spec.points) ?? 0;
+  if (key === null) return unusableKey(maxPoints, type);
+  const value = read(key);
+  if (value === null) return unusableKey(maxPoints, type, field);
+  return { key, value };
+};
+
+/** The refusal every handler returns when the key is unreadable. One place, so the wording cannot drift. */
+const unusableKey = (maxPoints: number, type: string, field?: string): GradeOutput =>
+  emit(
+    0,
+    maxPoints,
+    why(
+      'MANUAL_REQUIRES_HUMAN',
+      field === undefined
+        ? 'This question has no readable answer key, so it was not scored.'
+        : `This question's answer key has no readable "${field}", so it was not scored.`,
+      field === undefined ? { type } : { type, field },
+    ),
+    ['NEEDS_HUMAN', 'OUT_OF_RANGE_KEY'],
+  );
+
+/**
  * A STRING, OR NOTHING.
  *
  * `String(value)` on a number would turn a student who answered `5` into `"5"` and mark them right for the
@@ -158,6 +232,22 @@ const asString = (value: unknown): string | null => (typeof value === 'string' ?
 /** A FINITE NUMBER. `NaN` and `Infinity` are rejected: both poison every arithmetic result downstream. */
 const asNumber = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null;
+
+/**
+ * AN ARRAY OF STRINGS THAT IS ALL STRINGS, or nothing.
+ *
+ * The difference from `asStringArray` matters and is not a subtlety. For a RESPONSE, dropping the entries that
+ * are not strings is the right recovery, because a browser sent them and half a list beats none. For an ANSWER
+ * KEY there is no recovery to make: a key whose list contains a number is a key nobody wrote correctly, and
+ * dropping the bad entry would quietly remove an option from the question. So the key reader refuses instead.
+ */
+const asStrictStringArray = (value: unknown): readonly string[] | null => {
+  if (!Array.isArray(value)) return null;
+  for (const entry of value) {
+    if (typeof entry !== 'string') return null;
+  }
+  return value as readonly string[];
+};
 
 /** AN ARRAY OF STRINGS, or nothing. Elements that are not strings are dropped rather than stringified. */
 const asStringArray = (value: unknown): string[] | null => {
@@ -265,19 +355,25 @@ const why = (
 const isAutoGradable = (spec: QuestionSpec): boolean => spec.gradingMode === 'AUTO';
 
 /**
- * THE AUTO-GRADABLE TYPES.
+ * THE AUTO-GRADABLE TYPES, and now SIX of them.
  *
- * Only four of the ten need an arithmetic handler here: `single_choice`, `multi_select`, `true_false` and
- * `numeric`. `ordering`, `short_text` and `simulation` arrive with P7-T4, which is where the plan puts the
- * "remaining graders" -- and a handler for them now would be duplicated work with a second set of fixtures to
- * review. They fall through to `NOT_YET_IMPLEMENTED`, which is a COMPILE ERROR to add elsewhere and a visible
- * `NEEDS_HUMAN` flag here.
+ * `ordering` and `short_text` were listed here as "arrive with P7-T4" while `grade()` had no case for either,
+ * so a short-text or ordering question marked AUTO fell through to `UNKNOWN_QUESTION_TYPE` and a visible
+ * `NEEDS_HUMAN` flag -- correct behaviour, WRONG REASON, and it made the P7 exit criterion ("all auto-grades
+ * match the hand-computed fixtures") unreachable for two of the ten types. The fixture table is what found it.
+ *
+ * `simulation` is the sixth gap and it is DIFFERENT ON PURPOSE. Its grade comes from a sandboxed bundle
+ * returning a promise, so it cannot be reached from a function whose contract is pure, total and synchronous
+ * without lying about one of those three words. It stays out of `HANDLED` and is graded through
+ * `./simulation.ts`, at the worker boundary.
  */
 export const HANDLED: readonly QuestionType[] = [
   'single_choice',
   'multi_select',
   'true_false',
   'numeric',
+  'short_text',
+  'ordering',
 ];
 
 /** The response shapes each handler reads. Declared per type so a handler cannot read the wrong field. */
@@ -287,11 +383,13 @@ const gradeSingleChoice = (
   spec: ResponseOf<'single_choice'>,
   response: Record<string, unknown>,
 ): GradeOutput => {
+  const read = readTypedKey(spec, 'single_choice', 'choiceId', (key) => asString(key.choiceId));
+  if (!('key' in read)) return read;
   const given = asString(response.choiceId);
   if (given === null) {
     return malformed(spec.points, why('UNPARSEABLE', 'No option was chosen.'));
   }
-  const correct = given === spec.key.choiceId;
+  const correct = given === read.value;
   return emit(
     correct ? spec.points : 0,
     spec.points,
@@ -322,6 +420,11 @@ const gradeMultiSelect = (
   spec: ResponseOf<'multi_select'>,
   response: Record<string, unknown>,
 ): GradeOutput => {
+  const read = readTypedKey(spec, 'multi_select', 'choiceIds', (key) =>
+    asStrictStringArray(key.choiceIds),
+  );
+  if (!('key' in read)) return read;
+  const keyIds = read.value;
   const chosen = asStringArray(response.choiceIds);
   if (chosen === null) {
     return malformed(spec.points, why('UNPARSEABLE', 'No set of options was returned.'));
@@ -339,15 +442,43 @@ const gradeMultiSelect = (
    * The arithmetic lives in `./methods.ts` and was INLINE here first. Two copies of six formulas is two places
    * for them to disagree, and the inline one had already drifted from the fixtures before it was replaced.
    */
-  const key = new Set(spec.key.choiceIds);
+  const keySet = new Set(keyIds);
   const applied = applyMethod(method, {
     selected: new Set(chosen),
-    key,
+    key: keySet,
     // `M` IS THE FULL OPTION LIST, and the size clauses are meaningless without it: a distractor the student
     // did not tick is invisible in `selected`, so the pool size cannot be recovered from either set.
-    optionCount: spec.choices.length,
+    optionCount: Array.isArray(spec.choices) ? spec.choices.length : 0,
   });
-  const raw = applied.rawCount * shareFor(key, spec.points);
+  const raw = applied.rawCount * shareFor(keySet, spec.points);
+
+  /**
+   * AN UNKNOWN SCORING METHOD IS REFUSED, NOT GUESSED.
+   *
+   * The method name arrives in a JSON column, so `PROP` (published in `plans/07` §3's table and implemented
+   * nowhere), a typo, or a name from a newer bank can all arrive here. None of them can be computed, and the
+   * tempting fallbacks are both wrong: scoring it `NC` invents a policy, and scoring it zero invents a mark.
+   *
+   * So the response is reported as needing a human, with the counts the student actually produced so a marker
+   * can see the shape of the answer, and the check runs BEFORE the blank check -- a blank response on a
+   * question whose method we cannot compute is still an uncomputable question.
+   */
+  if (applied.unknownMethod !== undefined) {
+    return emit(
+      0,
+      spec.points,
+      why(
+        'MANUAL_REQUIRES_HUMAN',
+        `The scoring method "${applied.unknownMethod}" is not one this grader can apply, so no mark was computed.`,
+        {
+          method: applied.unknownMethod,
+          correctCount: applied.correctCount,
+          incorrectCount: applied.incorrectCount,
+        },
+      ),
+      ['NEEDS_HUMAN'],
+    );
+  }
 
   if (chosen.length === 0) {
     // BLANK IS NOT INCORRECT, and it is not "no correct options selected" either: a student who answered
@@ -377,7 +508,7 @@ const gradeMultiSelect = (
     );
   }
 
-  const exact = applied.correctCount === key.size && applied.incorrectCount === 0;
+  const exact = applied.correctCount === keySet.size && applied.incorrectCount === 0;
   const code: RationaleCode = exact
     ? 'CORRECT'
     : raw > 0 && raw < spec.points
@@ -415,10 +546,14 @@ const gradeTrueFalse = (
   spec: ResponseOf<'true_false'>,
   response: Record<string, unknown>,
 ): GradeOutput => {
+  const read = readTypedKey(spec, 'true_false', 'value', (key) =>
+    typeof key.value === 'boolean' ? key.value : null,
+  );
+  if (!('key' in read)) return read;
   if (typeof response.value !== 'boolean') {
     return malformed(spec.points, why('UNPARSEABLE', 'No true/false answer was returned.'));
   }
-  const correct = response.value === spec.key.value;
+  const correct = response.value === read.value;
   return emit(
     correct ? spec.points : 0,
     spec.points,
@@ -449,6 +584,9 @@ const gradeNumeric = (
   spec: ResponseOf<'numeric'>,
   response: Record<string, unknown>,
 ): GradeOutput => {
+  const read = readTypedKey(spec, 'numeric', 'value', (key) => asNumber(key.value));
+  if (!('key' in read)) return read;
+  const expected = read.value;
   const value = asNumber(response.value);
   if (value === null) {
     return malformed(spec.points, why('UNPARSEABLE', 'No number was returned.'));
@@ -469,17 +607,28 @@ const gradeNumeric = (
    * gets a bound of zero and therefore requires exact equality -- which is the correct reading of "no
    * tolerance" and the opposite of treating the absence as unlimited.
    */
-  const absolute = spec.tolerance.absolute ?? 0;
-  const relative = (spec.tolerance.relative ?? 0) * Math.abs(spec.key.value);
+  /**
+   * THE KEY'S VALUE AND THE TOLERANCE, BOTH READ AS UNTRUSTED.
+   *
+   * `expected` is coerced to a number with a fallback of 0 rather than read as `spec.key.value`, because a key
+   * whose value is a string would make every `Math.abs` below compare against NaN and quietly mark everything
+   * wrong. `tolerance` is checked as a record because `plans/07` §4's totality is about runtime input, and this
+   * spec came out of a JSON column.
+   */
+  const tolerance = isRecord((spec as { tolerance?: unknown }).tolerance)
+    ? (spec as { tolerance: { absolute?: number; relative?: number } }).tolerance
+    : {};
+  const absolute = tolerance.absolute ?? 0;
+  const relative = (tolerance.relative ?? 0) * Math.abs(expected);
   const bound = Math.max(absolute, relative);
-  const within = Math.abs(value - spec.key.value) <= bound;
+  const within = Math.abs(value - expected) <= bound;
   if (!within) {
     return emit(
       0,
       spec.points,
       why('INCORRECT', 'Outside the allowed tolerance.', {
         given: value,
-        expected: spec.key.value,
+        expected,
         bound,
       }),
       [],
@@ -491,7 +640,7 @@ const gradeNumeric = (
     return emit(
       spec.points,
       spec.points,
-      why('CORRECT', 'Within tolerance.', { given: value, expected: spec.key.value }),
+      why('CORRECT', 'Within tolerance.', { given: value, expected }),
       [],
     );
   }
@@ -597,6 +746,104 @@ export const significantFigures = (raw: string): number => {
   return digits === '' ? 0 : digits.length;
 };
 
+/**
+ * `short_text` -- DELEGATES, AND PUTS THE TOKEN DIFF IN THE RATIONALE.
+ *
+ * The matching itself lives in `./text.ts` and is already covered there. What is added here is the SHAPE:
+ * `plans/07` section 3.4 requires the rationale to show a diff "because a teacher must never be asked to trust an
+ * opaque score", and a diff that is not in the `GradeOutput` is a diff nobody sees.
+ *
+ * `REGEX_SET` is the one matcher that can be broken by the AUTHOR rather than the student -- a pattern that
+ * does not compile matches nothing -- so it raises `NEEDS_HUMAN`. Reporting that as a plain zero would mark a
+ * student's paper wrong for a typo in a question bank.
+ */
+const gradeShortText = (
+  spec: ResponseOf<'short_text'>,
+  response: Record<string, unknown>,
+): GradeOutput => {
+  const read = readTypedKey(spec, 'short_text', 'text', (key) => asString(key.text));
+  if (!('key' in read)) return read;
+  const text = asString(response.text);
+  if (text === null) {
+    return malformed(spec.points, why('UNPARSEABLE', 'No text was returned.'));
+  }
+  const verdict = matchShortText(read.value, text, {
+    matcher: spec.matcher,
+    ...(spec.matchers ?? {}),
+  });
+  const flags: GradeFlag[] = [];
+  if ((verdict.invalidPatterns ?? []).length > 0) flags.push('NEEDS_HUMAN');
+  return emit(
+    verdict.correct ? spec.points : 0,
+    spec.points,
+    verdict.correct
+      ? why('CORRECT', `Matched with ${verdict.matcher}.`, { matcher: verdict.matcher })
+      : why('INCORRECT', `No ${verdict.matcher} match.`, {
+          matcher: verdict.matcher,
+          matched: verdict.diff.matched.join(' '),
+          missing: verdict.diff.missing.join(' '),
+          extra: verdict.diff.extra.join(' '),
+          ...(verdict.invalidPatterns === undefined
+            ? {}
+            : { invalidPatterns: verdict.invalidPatterns.join(' ') }),
+        }),
+    flags,
+  );
+};
+
+/**
+ * `ordering` -- THE FRACTION OF CORRECTLY ORDERED ADJACENT PAIRS, times the question's points.
+ *
+ * ## WHY ADJACENCY AND NOT "MATCHES THE KEY SOMEWHERE"
+ *
+ * The thing being assessed by an ordering question is the SEQUENCE, so a response that contains every item in
+ * the right order but with two adjacent items transposed is not correct -- and a method that only checked
+ * membership would mark it correct. Counting correct transitions measures what was taught.
+ *
+ * `misorderedPairs` names the specific transitions in the rationale for the same reason the token diff is in
+ * the short-text one: a marker looking at "3 of 4" needs to be told WHICH pair to look at.
+ *
+ * And a response that is not a permutation of the key is NOT this function's problem -- unknown items are
+ * skipped by the pair count, so the score is bounded by construction rather than by a check that could be
+ * forgotten.
+ */
+const gradeOrdering = (
+  spec: ResponseOf<'ordering'>,
+  response: Record<string, unknown>,
+): GradeOutput => {
+  const read = readTypedKey(spec, 'ordering', 'itemIds', (key) => asStrictStringArray(key.itemIds));
+  if (!('key' in read)) return read;
+  const keyIds = read.value;
+  const given = asStringArray(response.itemIds);
+  if (given === null) {
+    return malformed(spec.points, why('UNPARSEABLE', 'No ordering was returned.'));
+  }
+  /**
+   * A BLANK IS REPORTED AS A BLANK, not as a wrong ordering.
+   *
+   * `orderingCredit` scores an empty response zero, which stops it being marked correct -- but "the student
+   * ordered nothing" and "the student ordered it wrongly" are different events, and only the first of those is
+   * something a marker or a re-sit decision needs to see. `BLANK` is in the closed rationale set for exactly
+   * this, and the distinction survives into the attempt total rather than being flattened to a zero here.
+   */
+  if (given.length === 0) {
+    return emit(0, spec.points, why('BLANK', 'No ordering was returned.'));
+  }
+  const fraction = orderingCredit(keyIds, given);
+  const correct = fraction >= 1;
+  const wrongPairs = misorderedPairs(keyIds, given);
+  return emit(
+    spec.points * fraction,
+    spec.points,
+    correct
+      ? why('CORRECT', 'Every adjacent pair is in order.')
+      : why('PARTIAL', `${wrongPairs.length} adjacent pair(s) out of order.`, {
+          fraction,
+          misordered: wrongPairs.join(' '),
+        }),
+  );
+};
+
 // ───────────────────────────────────────────────────────────── the entry point
 
 /**
@@ -653,6 +900,10 @@ export function grade(input: GradeInput): GradeOutput {
       return gradeTrueFalse(spec as ResponseOf<'true_false'>, response);
     case 'numeric':
       return gradeNumeric(spec as ResponseOf<'numeric'>, response);
+    case 'short_text':
+      return gradeShortText(spec as ResponseOf<'short_text'>, response);
+    case 'ordering':
+      return gradeOrdering(spec as ResponseOf<'ordering'>, response);
     /**
      * THE DEFAULT, AND IT IS WHAT ANSWERS "no auto-grader is registered for this type".
      *
@@ -675,7 +926,10 @@ export function grade(input: GradeInput): GradeOutput {
           {
             type: String((spec as { type?: unknown }).type ?? 'unknown'),
             // NAMED, so a report of ungraded questions says which task owns them.
-            planned: 'P7-T4',
+            // `simulation` is the only remaining entry, and it names a FILE rather than a task number,
+            // because its handler exists: the grade comes from a sandboxed bundle as a promise, so it cannot
+            // be reached from a synchronous pure function without breaking one of those words.
+            planned: 'grading/simulation.ts',
           },
         ),
         ['UNKNOWN_TYPE', 'NEEDS_HUMAN'],

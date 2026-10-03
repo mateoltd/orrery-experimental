@@ -288,7 +288,7 @@ describe('defaults and the grader boundary', () => {
     await dispatchToSim(
       input({
         spec: { ...SPEC, params: undefined },
-        loadGrader: async () => (state: unknown, params: unknown) => {
+        loadGrader: async () => (_state: unknown, params: unknown) => {
           seen = params;
           return { points: 1 };
         },

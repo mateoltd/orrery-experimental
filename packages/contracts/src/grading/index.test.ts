@@ -481,20 +481,36 @@ describe('manual questions', () => {
     expect(result.correct).toBe(false);
   });
 
-  it('defers the types P7-T4 will implement, naming the task that owns them', () => {
-    const ordering: QuestionSpec = {
+  it('still defers `simulation`, naming the boundary that grades it instead', () => {
+    /**
+     * THIS TEST INVERTED WHEN P7-T5 LANDED, and the inversion is the interesting part.
+     *
+     * It used to assert that an `ordering` question returned `UNKNOWN_QUESTION_TYPE` with
+     * `rationale.detail.planned === 'P7-T4'` -- a deliberate placeholder recording which task owned the gap.
+     * P7-T5's fixture table found that P7-T4 had added the matchers but never the dispatch, so `ordering` and
+     * `short_text` questions marked AUTO were falling through to a human. The safe failure hid it: no test
+     * asserted that a *correct* ordering response was marked correct.
+     *
+     * `simulation` is the one type that legitimately stays unhandled, and the reason is a word in `grade()`'s
+     * contract. Its grade comes from a sandboxed bundle and is a PROMISE; `grade` is pure, total and
+     * SYNCHRONOUS. Dispatching it here would mean breaking one of those three, so it is graded at the worker
+     * boundary in `./simulation.ts` and this test names that rather than pretending a task number will do.
+     */
+    const simulation: QuestionSpec = {
       ...common,
       id: 'q6',
-      type: 'ordering',
-      items: [{ id: 'i1', text: 'one' }],
-      key: { itemIds: ['i1'] },
-    };
-    const result = g(ordering, { itemIds: ['i1'] });
+      type: 'simulation',
+      simId: 'mechanics.newtons-cradle',
+      simVersion: '1.0.0',
+      params: {},
+      scoringSurface: 'ENDPOINT_ONLY',
+    } as QuestionSpec;
+    const result = g(simulation, { state: null, trace: [] });
     expect(result.rationale.code).toBe('UNKNOWN_QUESTION_TYPE');
     expect(result.flags).toContain('UNKNOWN_TYPE');
     expect(result.flags).toContain('NEEDS_HUMAN');
-    // NAMED, so a report of "ungraded questions" says which task owns them rather than leaving it a mystery.
-    expect(result.rationale.detail.planned).toBe('P7-T4');
+    // NAMED, so a report of "ungraded questions" says WHERE it is graded rather than leaving it a mystery.
+    expect(result.rationale.detail.planned).toBe('grading/simulation.ts');
   });
 });
 
@@ -617,10 +633,41 @@ describe('branch coverage for guards against MALFORMED AUTHORING', () => {
       key: { choiceId: 'a' },
     } as QuestionSpec;
     // Force the mismatch by stubbing HANDLED membership: a type that IS handled, presented as one that is not.
+    /**
+     * `lying` used to be built by relabelling a `single_choice` spec as `ordering`. That worked while
+     * `ordering` was undispatched, and stopped working the moment it was wired up -- correctly, because the
+     * relabelled spec carries `key: {choiceId: 'a'}`, which is a record but has no `itemIds`, so it is now
+     * REFUSED as an unreadable key rather than read as an ordering.
+     *
+     * A probe that keeps passing by way of a defect is worse than no probe, so the blank check below uses a
+     * real ordering spec with a real key.
+     */
+    const properOrdering = {
+      ...common,
+      id: 'q9',
+      type: 'ordering',
+      items: [{ id: 'i1', text: 'one' }],
+      key: { itemIds: ['i1'] },
+    } as QuestionSpec;
     const lying = { ...impossible, type: 'ordering' } as unknown as QuestionSpec;
     const result = g(lying, { itemIds: [] });
-    // Reported as UNKNOWN_QUESTION_TYPE by the guard, never as a wrong answer.
-    expect(['UNKNOWN_QUESTION_TYPE', 'INCORRECT']).toContain(result.rationale.code);
+    expect(result.flags).toContain('OUT_OF_RANGE_KEY');
+    /**
+     * `ordering` NO LONGER WORKS as the "impossible" type, because P7-T5 wired it up -- so this assertion had
+     * to change too, and it is the second place the same gap surfaced.
+     *
+     * The point of the arm is that a type which passes the guard but has no case is NOT silently marked wrong,
+     * so the honest probe is `simulation`: handled by no case, never dispatched, and therefore reported as
+     * unknown rather than scored.
+     */
+    const alsoUnknown = { ...impossible, type: 'simulation' } as unknown as QuestionSpec;
+    const result2 = g(alsoUnknown, { state: null, trace: [] });
+    expect(result2.rationale.code).toBe('UNKNOWN_QUESTION_TYPE');
+    // An EMPTY ordering response is a BLANK, not a correct answer -- see the note on `orderingCredit`.
+    const blank = g(properOrdering, { itemIds: [] });
+    expect(blank.rationale.code).toBe('BLANK');
+    expect(blank.points).toBe(0);
+    expect(blank.correct).toBe(false);
   });
 });
 
@@ -654,7 +701,9 @@ describe('the last four branches', () => {
     } as QuestionSpec;
     const result = g(spec, { answer: 2.04 });
     expect(result.rationale.detail.type).toBe('simulation');
-    expect(result.rationale.detail.planned).toBe('P7-T4');
+    // A FILE, not a task number: the simulation handler exists, at a worker boundary, and this is the
+    // truthful place to send someone looking for it.
+    expect(result.rationale.detail.planned).toBe('grading/simulation.ts');
     expect(result.rationale.explanation).toContain('simulation');
   });
 
@@ -696,7 +745,9 @@ describe('a spec with no discriminant at all', () => {
     const result = g(typeless, { anything: true });
     expect(result.rationale.code).toBe('UNKNOWN_QUESTION_TYPE');
     expect(result.rationale.detail.type).toBe('unknown');
-    expect(result.rationale.detail.planned).toBe('P7-T4');
+    // A FILE, not a task number: the simulation handler exists, at a worker boundary, and this is the
+    // truthful place to send someone looking for it.
+    expect(result.rationale.detail.planned).toBe('grading/simulation.ts');
     expect(result.flags).toContain('NEEDS_HUMAN');
     expect(result.flags).toContain('UNKNOWN_TYPE');
     expect(result.points).toBe(0);
@@ -740,5 +791,94 @@ describe('rawPoints is normalised without being clamped', () => {
     );
     expect(Number.isNaN(result.rawPoints)).toBe(false);
     expect(Number.isFinite(result.points)).toBe(true);
+  });
+});
+
+describe('short_text and ordering through `grade`, which P7-T5 had to wire up', () => {
+  const shortText = {
+    ...common,
+    id: 'st1',
+    type: 'short_text',
+    key: { text: 'photosynthesis' },
+    matcher: 'EXACT',
+  } as QuestionSpec;
+  const ordering = {
+    ...common,
+    id: 'or1',
+    type: 'ordering',
+    items: [
+      { id: 'i1', text: 'one' },
+      { id: 'i2', text: 'two' },
+      { id: 'i3', text: 'three' },
+    ],
+    key: { itemIds: ['i1', 'i2', 'i3'] },
+  } as QuestionSpec;
+
+  it('marks a short-text answer CORRECT and puts the matcher in the rationale', () => {
+    const result = g(shortText, { text: 'Photosynthesis' });
+    expect(result.rationale.code).toBe('CORRECT');
+    expect(result.points).toBe(common.points);
+    expect(result.rationale.detail.matcher).toBe('EXACT');
+  });
+
+  it('reports a short-text response with no text as MALFORMED, not as wrong', () => {
+    /**
+     * THE POINT OF THE `MALFORMED` FLAG, on the one path that was previously unreachable.
+     *
+     * An empty textarea that never received input and a textarea whose contents failed to serialise look
+     * identical in the response object. Reporting the second as an incorrect answer puts a platform fault into
+     * a student's mark, and averaging it into their total is how it disappears.
+     */
+    const result = g(shortText, {});
+    expect(result.rationale.code).toBe('UNPARSEABLE');
+    expect(result.flags).toContain('MALFORMED_RESPONSE');
+    expect(result.points).toBe(0);
+  });
+
+  it('names a bad REGEX pattern as NEEDS_HUMAN rather than marking the student wrong', () => {
+    const broken = {
+      ...shortText,
+      matcher: 'REGEX_SET',
+      matchers: { patterns: ['(unclosed'] },
+    } as QuestionSpec;
+    const result = g(broken, { text: 'photosynthesis' });
+    expect(result.points).toBe(0);
+    expect(result.flags).toContain('NEEDS_HUMAN');
+    // The mark is zero, but the flag says a HUMAN must look, which is the difference between a wrong answer
+    // and a broken question.
+    expect(result.flags).not.toContain('MALFORMED_RESPONSE');
+  });
+
+  it('marks a fully ordered response CORRECT', () => {
+    const result = g(ordering, { itemIds: ['i1', 'i2', 'i3'] });
+    expect(result.rationale.code).toBe('CORRECT');
+    expect(result.points).toBe(common.points);
+  });
+
+  it('reports an ordering response with no itemIds as MALFORMED', () => {
+    const result = g(ordering, {});
+    expect(result.rationale.code).toBe('UNPARSEABLE');
+    expect(result.flags).toContain('MALFORMED_RESPONSE');
+  });
+
+  it('reports an EMPTY ordering as BLANK, and never as correct', () => {
+    /**
+     * THE BUG THIS CAUGHT. `orderingCredit` guarded `length <= 1`, so an empty response was "trivially in
+     * order" and scored FULL MARKS. A student who submitted nothing would have scored 100% on every ordering
+     * question in the paper, and the only reason it was found is that an unrelated test about unreachable
+     * switch arms happened to pass an empty array.
+     */
+    const result = g(ordering, { itemIds: [] });
+    expect(result.points).toBe(0);
+    expect(result.correct).toBe(false);
+    expect(result.rationale.code).toBe('BLANK');
+  });
+
+  it('names the mis-ordered pairs in the rationale, so a marker is not given an opaque fraction', () => {
+    const result = g(ordering, { itemIds: ['i2', 'i1', 'i3'] });
+    expect(result.rationale.code).toBe('PARTIAL');
+    expect(result.points).toBeGreaterThan(0);
+    expect(result.points).toBeLessThan(common.points);
+    expect(String(result.rationale.detail.misordered)).not.toBe('');
   });
 });

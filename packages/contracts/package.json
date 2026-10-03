@@ -104,6 +104,22 @@
       "types": "./dist/grading/index.d.ts",
       "default": "./dist/grading/index.js"
     },
+    "./grading/methods": {
+      "types": "./dist/grading/methods.d.ts",
+      "default": "./dist/grading/methods.js"
+    },
+    "./grading/text": {
+      "types": "./dist/grading/text.d.ts",
+      "default": "./dist/grading/text.js"
+    },
+    "./grading/simulation": {
+      "types": "./dist/grading/simulation.d.ts",
+      "default": "./dist/grading/simulation.js"
+    },
+    "./question/fixtures": {
+      "types": "./dist/question/fixtures.d.ts",
+      "default": "./dist/question/fixtures.js"
+    },
     "./seed-banks": {
       "types": "./dist/seed-banks/index.d.ts",
       "default": "./dist/seed-banks/index.js"

@@ -80,6 +80,14 @@ export interface MethodResult {
   readonly zeroedBySize: boolean;
   /** True when the score is negative, which section 3.2 says to store rather than clamp. */
   readonly negative: boolean;
+  /**
+   * SET WHEN THE REQUESTED METHOD IS NOT ONE OF THE SIX, and the only field on this interface that describes a
+   * failure rather than a score. Absent on every real result.
+   *
+   * It exists because `applyMethod` indexes a `Record` by a name that arrived in a JSON column, and the
+   * alternative to this field was a `TypeError` thrown from inside the grader.
+   */
+  readonly unknownMethod?: string;
 }
 
 /** THE PER-OPTION SHARE: what one correct option is worth in marks. A zero-option key is worth nothing. */
@@ -97,7 +105,7 @@ const tally = (input: MethodInput): { correct: number; incorrect: number } => {
 };
 
 const result = (
-  input: MethodInput,
+  _input: MethodInput,
   rawCount: number,
   counts: { correct: number; incorrect: number },
   zeroedBySize: boolean,
@@ -210,9 +218,33 @@ const BY_METHOD: Readonly<Record<Method, (input: MethodInput) => MethodResult>> 
  *
  * The lookup is on a `Record` keyed by `Method`, so a method added to the union without a handler is a
  * COMPILE error here rather than an `undefined` at grading time.
+ *
+ * ## AND IT IS TOTAL, WHICH THE ONE-LINE VERSION WAS NOT
+ *
+ * `BY_METHOD[method](input)` throws a `TypeError` for any name outside the six -- and `method` is read from a
+ * JSON column written by an authoring tool, so a typo, a bank imported from another system, or a method added
+ * by a LATER version of the schema all reach it as ordinary data.
+ *
+ * That broke `plans/07` §4's totality at the one place it matters most: instead of a `GradeOutput` saying "a
+ * human must look", the grader threw, and the throw happened inside the auto-grade loop rather than at an
+ * input boundary. The counts are still tallied and returned so the caller can report what the student chose;
+ * only the score is withheld, because inventing one would be worse than refusing.
  */
-export const applyMethod = (method: Method, input: MethodInput): MethodResult =>
-  BY_METHOD[method](input);
+export const applyMethod = (method: Method, input: MethodInput): MethodResult => {
+  const handler: ((input: MethodInput) => MethodResult) | undefined = BY_METHOD[method];
+  if (handler === undefined) {
+    const counts = tally(input);
+    return {
+      rawCount: 0,
+      correctCount: counts.correct,
+      incorrectCount: counts.incorrect,
+      zeroedBySize: false,
+      negative: false,
+      unknownMethod: String(method),
+    };
+  }
+  return handler(input);
+};
 
 /**
  * `selectAllScore(options, correct)` -- section 3.3's publish-time guard, as a pure function.

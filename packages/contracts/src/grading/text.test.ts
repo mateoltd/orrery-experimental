@@ -254,10 +254,21 @@ describe('ORDERING: credit as the fraction of correctly-ordered adjacent pairs',
     expect(orderingCredit(['a', 'b'], ['a', 'a'])).toBe(1);
   });
 
-  it('gives full credit to a response of one item, rather than NaN', () => {
+  it('gives full credit to a response of ONE item, and NOTHING to a response of none', () => {
     // `0 / 0` is NaN, and a one-item list is trivially in order.
     expect(orderingCredit(['a', 'b', 'c'], ['b'])).toBe(1);
-    expect(orderingCredit(['a', 'b'], [])).toBe(1);
+
+    /**
+     * AND THE EMPTY CASE IS NOT THE SAME CASE.
+     *
+     * The assertion here used to be `orderingCredit(['a','b'], []) === 1`, sharing one `length <= 1` guard
+     * with the single-item case. That granted FULL MARKS to a student who submitted no ordering at all, and
+     * nothing in the function said so -- it was a pure helper, so a blank was assumed to be handled upstream.
+     *
+     * Two cases that look adjacent are not: one item is trivially in order, and zero items is not an ordering.
+     */
+    expect(orderingCredit(['a', 'b'], [])).toBe(0);
+    expect(orderingCredit([], [])).toBe(0);
   });
 
   it('ignores pairs containing an item the key does not have, rather than counting them wrong', () => {
