@@ -96,6 +96,10 @@
       "types": "./dist/blueprint/index.d.ts",
       "default": "./dist/blueprint/index.js"
     },
+    "./question": {
+      "types": "./dist/question/index.d.ts",
+      "default": "./dist/question/index.js"
+    },
     "./seed-banks": {
       "types": "./dist/seed-banks/index.d.ts",
       "default": "./dist/seed-banks/index.js"
