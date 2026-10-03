@@ -9,10 +9,8 @@ import { describe, expect, it } from 'vitest';
 import sim from '../src/grader.js';
 
 const grade = (answer: unknown, params: Record<string, unknown> = { p: 101.3, v: 22.4, n: 1 }) =>
-  sim.grader.grade(answer, {
-    params,
-    tolerance: { absolute: 1, relative: 0.005 },
-  } as never);
+  // `grade(state, params, answer)` -- the SDK's real signature, and the one `gradeStoredState` calls.
+  sim.grader.grade(null, params, answer);
 
 describe('chem.ideal-gas-law grading', () => {
   it('awards full marks for the temperature in kelvin', () => {

@@ -47,6 +47,20 @@ const paramsOf = (raw: Readonly<Record<string, unknown>>): LineParams => {
   };
 };
 
+/**
+ * The tolerance is THIS SIM'S, declared once here rather than passed in.
+ *
+ * `defineSim`'s grader half is `grade(state, params, answer)` -- three positional arguments, and no
+ * context object. The first three gold sims were written as `grade(answer, context)`, so the SDK handed
+ * them the PARAMETERS as the answer and the answer as the parameters: `parseAnswer` failed, every answer
+ * scored 0, and the conformance cell that graded in bare Node printed a confident number derived from
+ * the wrong things. It passed for the projectile sim because that one had the right signature.
+ *
+ * The per-item tolerance a teacher sets in P7 is applied by the grading service, not by the simulation.
+ * What belongs here is the simulation's own default, and it is the same number the manifest declares.
+ */
+const TOLERANCE = { absolute: 0.1, relative: 0.02 } as const;
+
 export default defineSim({
   meta: {
     id: 'maths.linear-functions',
@@ -76,7 +90,7 @@ export default defineSim({
     summary:
       'Change the gradient and intercept of a line, then report where it crosses the x-axis.',
   },
-  grade(answer, context) {
+  grade(_state: unknown, params: LineParams, answer: unknown) {
     const parsedAnswer = parseAnswer(answer);
     if (parsedAnswer === null) {
       return {
@@ -86,8 +100,12 @@ export default defineSim({
         feedback: 'Enter a number for the x-intercept.',
       };
     }
-    const params = paramsOf(context.params ?? {});
-    const expected = xIntercept(params);
+    // The parameters arrive RAW from `clampParams`, and `paramsOf` is the coercion that turns them into
+    // the model's own types. Dropping it — which the signature change briefly did — leaves `solveFor`
+    // undefined on a params record that did not set it, and the grader then reports that the student was
+    // asked for a quantity they answered by name.
+    const resolved = paramsOf(params as unknown as Record<string, unknown>);
+    const expected = xIntercept(resolved);
 
     // "There is no crossing" is an answer, and it is graded as one. A student who correctly says the line
     // is horizontal should not be marked wrong for declining to enter a number.
@@ -97,14 +115,14 @@ export default defineSim({
           points: 4,
           max: 4,
           code: 'CORRECT',
-          feedback: `Correct: with a gradient of ${format(params.m)} the line is flat, so it never crosses the x-axis.`,
+          feedback: `Correct: with a gradient of ${format(resolved.m)} the line is flat, so it never crosses the x-axis.`,
         };
       }
       return {
         points: 0,
         max: 4,
         code: 'SHOULD_BE_NULL',
-        feedback: `This line is flat (gradient ${format(params.m)}), so it never crosses the x-axis. Leave the answer empty.`,
+        feedback: `This line is flat (gradient ${format(resolved.m)}), so it never crosses the x-axis. Leave the answer empty.`,
       };
     }
     if (parsedAnswer.xIntercept === null) {
@@ -125,8 +143,8 @@ export default defineSim({
     // at all -- so a correct answer was marked wrong and the feedback said "the line crosses at x = 2"
     // about an answer of 2. Two spellings of one concept, and the mismatch is silent in both directions.
     const judged = tolerance(parsedAnswer.xIntercept, expected, {
-      abs: context.tolerance?.absolute,
-      rel: context.tolerance?.relative,
+      abs: TOLERANCE.absolute,
+      rel: TOLERANCE.relative,
       maxPoints: 4,
       partialCredit: true,
     });

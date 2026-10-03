@@ -11,19 +11,18 @@ import sim, { type LineAnswer } from '../src/grader.js';
 // calling `grade` on it directly fails with "default.grade is not a function", which is the shape every
 // simulator author will hit first.
 
+// The parameters the SIM was given, not a tolerance: `grade(state, params, answer)` has no tolerance
+// argument, because the tolerance belongs to the simulation rather than to the caller. See the note on
+// `TOLERANCE` in the grader.
 const params = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
   m: 2,
   c: -4,
   span: 5,
-  tolerance: { absolute: 0.1, relative: 0.02 },
   ...over,
 });
 
 const grade = (answer: unknown, over: Record<string, unknown> = {}) =>
-  sim.grader.grade(answer, {
-    params: params(over),
-    tolerance: { absolute: 0.1, relative: 0.02 },
-  } as never);
+  sim.grader.grade(null, params(over), answer);
 
 describe('maths.linear-functions grading', () => {
   it('awards full marks for the x-intercept', () => {

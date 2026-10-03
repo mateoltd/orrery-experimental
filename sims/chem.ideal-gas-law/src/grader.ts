@@ -33,6 +33,20 @@ const paramsOf = (raw: Readonly<Record<string, unknown>>): GasParams => {
   return { p: read(raw.p, 101.3), v: read(raw.v, 22.4), n: read(raw.n, 1) };
 };
 
+/**
+ * The tolerance is THIS SIM'S, declared once here rather than passed in.
+ *
+ * `defineSim`'s grader half is `grade(state, params, answer)` -- three positional arguments, and no
+ * context object. The first three gold sims were written as `grade(answer, context)`, so the SDK handed
+ * them the PARAMETERS as the answer and the answer as the parameters: `parseAnswer` failed, every answer
+ * scored 0, and the conformance cell that graded in bare Node printed a confident number derived from
+ * the wrong things. It passed for the projectile sim because that one had the right signature.
+ *
+ * The per-item tolerance a teacher sets in P7 is applied by the grading service, not by the simulation.
+ * What belongs here is the simulation's own default, and it is the same number the manifest declares.
+ */
+const TOLERANCE = { absolute: 1.0, relative: 0.005 } as const;
+
 export default defineSim({
   meta: {
     id: 'chem.ideal-gas-law',
@@ -61,7 +75,7 @@ export default defineSim({
     summary:
       'Set the pressure, volume and amount of a gas, then calculate its temperature in kelvin.',
   },
-  grade(answer, context) {
+  grade(_state: unknown, params: GasParams, answer: unknown) {
     const parsed = parseAnswer(answer);
     if (parsed === null) {
       return {
@@ -71,23 +85,27 @@ export default defineSim({
         feedback: 'Enter a temperature in kelvin.',
       };
     }
-    const params = paramsOf(context.params ?? {});
-    const expected = temperature(params);
+    // The parameters arrive RAW from `clampParams`, and `paramsOf` is the coercion that turns them into
+    // the model's own types. Dropping it — which the signature change briefly did — leaves `solveFor`
+    // undefined on a params record that did not set it, and the grader then reports that the student was
+    // asked for a quantity they answered by name.
+    const resolved = paramsOf(params as unknown as Record<string, unknown>);
+    const expected = temperature(resolved);
 
     // A student who answers in Celsius is not wrong so much as answering a different question, and 100 °C
     // is 373 K. Accepted only if it is unambiguously a Celsius reading, and then told what it converts
     // to — because silently converting for them teaches them the field ignores their unit.
     const asCelsius = parsed.kelvin + 273.15;
     const judged = tolerance(parsed.kelvin, expected, {
-      abs: context.tolerance?.absolute,
-      rel: context.tolerance?.relative,
+      abs: TOLERANCE.absolute,
+      rel: TOLERANCE.relative,
       maxPoints: 4,
       partialCredit: true,
     });
     const kelvinJudged = judged;
     const celsiusJudged = tolerance(asCelsius, expected, {
-      abs: context.tolerance?.absolute,
-      rel: context.tolerance?.relative,
+      abs: TOLERANCE.absolute,
+      rel: TOLERANCE.relative,
       maxPoints: 4,
       partialCredit: true,
     });
@@ -97,7 +115,7 @@ export default defineSim({
         points: 4,
         max: 4,
         code: 'CORRECT',
-        feedback: `Correct: ${describeGas(params)}`,
+        feedback: `Correct: ${describeGas(resolved)}`,
       };
     }
     if (celsiusJudged.points > kelvinJudged.points) {
@@ -115,7 +133,7 @@ export default defineSim({
       max: 4,
       code: kelvinJudged.points > 0 ? 'CLOSE' : 'WRONG',
       feedback:
-        `You said ${format(parsed.kelvin)} K. ${describeGas(params)} ` +
+        `You said ${format(parsed.kelvin)} K. ${describeGas(resolved)} ` +
         `Rearranged, T = PV/nR, with R = ${R} J/(mol·K).`,
     };
   },

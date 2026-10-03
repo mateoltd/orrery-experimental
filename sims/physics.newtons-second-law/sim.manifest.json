@@ -1,0 +1,127 @@
+{
+  "id": "physics.newtons-second-law",
+  "version": "1.0.0",
+  "title": "Newton's second law",
+  "summary": "Choose a force and a mass, say which quantity you want, and calculate it from F = ma.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["physics"],
+  "tags": ["forces", "motion"],
+  "ageRange": [13, 18],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A block with a force arrow on it, a choice of which quantity to find, and a box to answer in.",
+    "reducedMotion": true,
+    "textAlternative": "With a net force of 24 newtons acting with an acceleration of 6 metres per second squared, the mass is 4 kg."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "force": {
+        "type": "number",
+        "label": "Net force",
+        "unit": "N",
+        "minimum": 0,
+        "maximum": 60,
+        "default": 12
+      },
+      "mass": {
+        "type": "number",
+        "label": "Mass",
+        "unit": "kg",
+        "minimum": 0.5,
+        "maximum": 20,
+        "default": 3
+      },
+      "solveFor": {
+        "type": "enum",
+        "label": "Find the",
+        "enumValues": ["acceleration", "force", "mass"],
+        "default": "acceleration"
+      },
+      "showArrow": {
+        "type": "boolean",
+        "label": "Show the force arrow",
+        "default": true
+      },
+      "accel": {
+        "type": "number",
+        "label": "Acceleration",
+        "unit": "m/s\u00b2",
+        "minimum": 0.5,
+        "maximum": 20,
+        "default": 4
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 320,
+    "minHeight": 240,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "force": 24,
+            "mass": 9,
+            "accel": 6,
+            "solveFor": "mass"
+          }
+        }
+      }
+    ],
+    "type": {
+      "value": 4
+    },
+    "expect": {
+      "answer": {
+        "quantity": {
+          "in": ["mass"]
+        },
+        "value": {
+          "min": 3.9,
+          "max": 4.1
+        }
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "TOLERANCE",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0.1,
+      "relative": 0.01
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You reported {answer.quantity} = {answer.value}; the {expected.quantity} is {expected.value}."
+  }
+}

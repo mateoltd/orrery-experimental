@@ -107,7 +107,7 @@ const captureState = async (page) => {
  * Shared by the matrix cell and the manifest's `expect.grade`, so the declared grade and the graded grade
  * come from the same call rather than from two implementations that can drift.
  */
-const gradeInNode = async (entry, answer, state = null) => {
+const gradeInNode = async (entry, answer, state = null, params = null) => {
   // From the sim's OWN dist, because the registry's bundle paths are relative to that directory.
   const grader = join(
     ROOT,
@@ -124,7 +124,12 @@ const gradeInNode = async (entry, answer, state = null) => {
   try {
     return await gradeStoredState(half.grader, {
       state,
-      params: entry.parameters,
+      // The parameters the SIM WAS RUN WITH, not the registry's defaults. Those differ as soon as a
+      // declared `setParams` step changes anything — and the first Newton manifest hit it: `expect.grade`
+      // was 4 and the grader awarded 0, because the grader was asked about force 12 N on 3 kg while the
+      // script had set 24 N on 4 kg. A wrong answer for the right reason, which is the hardest kind to
+      // see.
+      params: params ?? defaultParams(entry),
       answer,
     });
   } catch {
@@ -198,6 +203,33 @@ const runManifestScript = async (page, frame, entry, manifest) => {
   // Every gold sim exposes `#sim-submit`, and one without it now fails with a sentence saying so, rather
   // than an `expect.answer` that quietly never arrives.
   const declared = manifest?.conformance?.expect ?? {};
+  // `conformance.type` is what a STUDENT would enter, kept separate from `conformance.expect` because
+  // they answer different questions: one is the input, the other is the claim about the output. Typing
+  // `expect.answer` into the field and then asserting the sim reports it would be a test that cannot
+  // fail for the reason anyone would write it.
+  //
+  // It exists because two shapes of simulation need different things from a scripted host: one that
+  // COMPUTES its answer has nothing to type, and one that asks the student for a number has nothing to
+  // submit without it. The first Newton manifest hit exactly this -- `expect.answer.value` wanted 6 and
+  // the sim answered `null`, because the field was empty.
+  const typed = manifest?.conformance?.type;
+  if (typed !== null && typed !== undefined) {
+    for (const [key, value] of Object.entries(typed)) {
+      // Through Playwright's frame API, not `contentDocument` — the same reason the submit click does:
+      // the frame is a sandboxed opaque origin and the parent cannot see inside it. Reaching for
+      // `contentDocument` here silently did nothing at all, and the sim answered `null` with no error
+      // anywhere to say why.
+      const selector = `#sim-${key}`;
+      if ((await frame.locator(selector).count()) === 0) {
+        return {
+          ok: false,
+          note: `conformance.type names "${key}", but the sim has no ${selector} field`,
+        };
+      }
+      await frame.locator(selector).fill(value === null ? '' : String(value));
+    }
+    await page.waitForTimeout(120);
+  }
   if (declared.answer !== undefined && answers.length === 0) {
     // Through PLAYWRIGHT'S frame API, not `contentDocument`. The frame is a sandboxed opaque origin --
     // that is the entire point of it -- so the parent document cannot see inside, and the first version
@@ -244,6 +276,12 @@ const runManifestScript = async (page, frame, entry, manifest) => {
     if (typeof want === 'number' && typeof got === 'number') {
       return Math.abs(want - got) <= tolerance;
     }
+    // `{ in: [...] }` -- "the answer is one of these". Added for ENUM-valued answers, where the exact
+    // value is an implementation detail but WHICH quantity was answered is the whole point: the first
+    // Newton manifest declared `quantity: {in: ['mass']}` and the runner could not express it.
+    if (want !== null && typeof want === 'object' && Array.isArray(want.in)) {
+      return want.in.some((candidate) => JSON.stringify(candidate) === JSON.stringify(got));
+    }
     if (want !== null && typeof want === 'object' && ('min' in want || 'max' in want)) {
       if (typeof got !== 'number' || !Number.isFinite(got)) return false;
       const low = want.min ?? Number.NEGATIVE_INFINITY;
@@ -274,7 +312,12 @@ const runManifestScript = async (page, frame, entry, manifest) => {
     // From the sim's OWN state, because the claim under test is "graded from stored state" -- grading a
     // `null` state exercises the grader's refusal path, which is a different thing entirely.
     const stored = await captureState(page);
-    const graded = await gradeInNode(entry, answers[0], stored?.state ?? null);
+    const graded = await gradeInNode(
+      entry,
+      answers[0],
+      stored?.state ?? null,
+      scriptedParams(entry, manifest),
+    );
     if (graded === null) return { ok: false, note: 'the grader returned nothing in bare Node' };
     const points =
       typeof graded.points === 'number' ? graded.points : (graded.earned ?? graded.score);
@@ -305,6 +348,39 @@ const runManifestScript = async (page, frame, entry, manifest) => {
 
   return { ok: true, note: `${String(steps.length)} declared steps run` };
 };
+
+/**
+ * The parameters a sim was actually RUN WITH, for grading in Node.
+ *
+ * The registry carries each sim's declared DEFAULTS. A conformance script that calls `setParams` changes
+ * them, and a grader asked about the defaults will disagree with the screen for reasons that have nothing
+ * to do with the student's answer. Merged here rather than in each caller, so the two grading paths cannot
+ * drift.
+ */
+const scriptedParams = (entry, manifest) => {
+  const merged = new Map();
+  for (const parameter of entry.parameters ?? []) {
+    merged.set(parameter.name, parameter.default);
+  }
+  for (const step of manifest?.conformance?.script ?? []) {
+    if (step.command !== 'setParams') continue;
+    const supplied = step.args?.params ?? step.args ?? {};
+    if (typeof supplied !== 'object' || supplied === null) continue;
+    for (const [name, value] of Object.entries(supplied)) merged.set(name, value);
+  }
+  // A RECORD, not the registry's array of `{name, default}`. `gradeStoredState` runs the parameters
+  // through `clampParams`, which reads them by name — given the array, every value came back
+  // `undefined`, every parameter fell to its fallback, and the grader confidently reported that the
+  // student had been asked for the acceleration. Two shapes for one concept, and only one of them
+  // reaches the grader.
+  return Object.fromEntries(merged);
+};
+
+/** The registry's declared defaults, in the shape the grader actually reads. */
+const defaultParams = (entry) =>
+  Object.fromEntries(
+    (entry.parameters ?? []).map((parameter) => [parameter.name, parameter.default]),
+  );
 
 const CELLS = [
   {
