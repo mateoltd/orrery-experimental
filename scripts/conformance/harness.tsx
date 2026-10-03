@@ -16,6 +16,7 @@
  * have nothing to enforce.
  */
 
+import type { SeedPolicy } from '@orrery/sim-sdk/protocol';
 import { checksumState } from '@orrery/sim-sdk/state';
 import { createRoot } from 'react-dom/client';
 import { SimulationFrame } from '../../apps/web/src/features/sim/SimulationFrame';
@@ -33,6 +34,26 @@ interface HarnessConfig {
   /** A saved state to restore, when a cell is testing save/restore. Omitted otherwise. */
   readonly initialState?: unknown;
   readonly mode: 'lesson' | 'graded' | 'preview';
+  /**
+   * HOW THE HOST SHOULD DERIVE THE SEED, AND FOR WHOM.
+   *
+   * ## WHY THIS WAS PINNED, AND WHY THAT WAS THE WHOLE PROBLEM
+   *
+   * The seed policy was hardcoded to `{ kind: 'FIXED', seed: 'conformance-seed' }`. That is exactly right for
+   * a determinism cell -- two mounts of the same simulation must agree -- and it meant `deriveSeed`'s
+   * `PER_STUDENT` branch NEVER RAN IN A BROWSER.
+   *
+   * That branch is the anti-collusion claim: two students in one cohort must not get the same paper, and the
+   * same student must get the same paper on a re-sit, because a teacher asking "what did they actually get?"
+   * needs an answer. `hostBridge.ts` takes it seriously enough to throw `SEED_IDENTITY_MISSING` rather than
+   * fall back, with the comment that a cohort sharing one paper is the failure nobody notices until the
+   * results come in. None of that was exercised against a real frame.
+   *
+   * The default is unchanged, so every cell that does not care about seeding behaves exactly as before. A
+   * spread of `{}` instead would hand the host `undefined` and change the mount for all twenty-three sims.
+   */
+  readonly seedPolicy?: SeedPolicy;
+  readonly identity?: { attemptId?: string; userId?: string; assignmentId?: string };
 }
 
 /** Everything the harness saw, for the runner to read from the page. */
@@ -129,7 +150,8 @@ createRoot(mountPoint).render(
     // carries nothing -- which is exactly what a real first visit looks like.
     {...(config.initialState === undefined ? {} : { initialState: config.initialState })}
     mode={config.mode}
-    seedPolicy={{ kind: 'FIXED', seed: 'conformance-seed' }}
+    seedPolicy={config.seedPolicy ?? { kind: 'FIXED', seed: 'conformance-seed' }}
+    {...(config.identity === undefined ? {} : { identity: config.identity })}
     defaultHeight={config.defaultHeight}
     minHeight={config.minHeight}
     textAlternative={config.textAlternative}

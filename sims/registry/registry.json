@@ -1,6 +1,6 @@
 {
   "generatedFrom": "1970-01-01",
-  "digest": "e0dff4f4f3d496a11c16fe51653df1f4ea9b14d97f49757a9410d1b01108336c",
+  "digest": "af1dc521831e62564a1d07a4d1f5b168eb62a3e14c42b5bc53dfa5d9843f0e0b",
   "entries": [
     {
       "id": "astronomy.orrery",
@@ -656,15 +656,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.77e071b1b264.html",
-        "browser": "./browser.f3597ff6bbc5.js",
+        "page": "./sim.c66966a0ef6c.html",
+        "browser": "./browser.3cbe36549bf1.js",
         "grader": "./grader.525ea63d2246.js",
         "style": "./style.13aa5dcedc33.css"
       },
       "bytes": {
-        "browser": 14140,
+        "browser": 14271,
         "grader": 7928,
-        "total": 24497
+        "total": 24628
       },
       "defaultHeight": 480,
       "minHeight": 380,
@@ -874,15 +874,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.5720fd6cfb6e.html",
-        "browser": "./browser.da9be7f66044.js",
+        "page": "./sim.eccccbb601a2.html",
+        "browser": "./browser.95182842e096.js",
         "grader": "./grader.aa697849caf1.js",
         "style": "./style.50e3936ad9ed.css"
       },
       "bytes": {
-        "browser": 10861,
+        "browser": 10888,
         "grader": 5669,
-        "total": 17324
+        "total": 17351
       },
       "defaultHeight": 260,
       "minHeight": 240,

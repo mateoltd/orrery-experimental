@@ -96,6 +96,43 @@ export function startSim(
   });
 
   let params = paramsFrom({});
+  /**
+   * THE SEED THE HOST CHOSE FOR THIS MOUNT, OR NULL.
+   *
+   * ## WHY THIS SIMULATION WAS GIVING A WHOLE COHORT THE SAME ESTIMATE
+   *
+   * This is a `randomised: true` simulation whose content is entirely a function of its seed, and it read the
+   * seed ONLY from the manifest's parameter default. `sim:init` carries a per-student `seed` that the host
+   * derives from the attempt, and it was ignored -- so under a `PER_STUDENT` policy every student in a cohort
+   * was handed the same Monte Carlo estimate. Nothing crashed, the answer was correct, and the picture was
+   * plausible; a class simply received one paper.
+   *
+   * ## WHY IT IS HELD SEPARATELY RATHER THAN WRITTEN INTO `params`
+   *
+   * Three attempts, in order, and each failed in a way worth recording:
+   *
+   * 1. Apply it in the transport listener on `sim:init`. WRONG: `sim:init` carries `params` too, and the
+   *    bridge dispatches those through `onSetParams` immediately afterwards, overwriting the seed a moment
+   *    later. The two students came back identical and the cell said they shared a paper.
+   * 2. Apply it in `onSetParams`, which is handed `frame.seed`. ALSO WRONG: the bridge routes BOTH `sim:init`
+   *    and `sim:setParams` through that one handler, so the host's FIXED seed overrode the manifest default on
+   *    every mount and the simulation's own conformance expectation stopped matching.
+   *
+   * What is actually wanted is precedence, and precedence needs both facts: the host's choice, and whether an
+   * AUTHOR has since overridden it. So the seed is held here, and a `sim:setParams` clears it -- because a
+   * parameter change is a deliberate instruction and outranks whatever the host chose at mount time.
+   */
+  let hostSeed: string | null = null;
+
+  /**
+   * THE SEED IN FORCE: the host's if it chose one and no author has overridden it, otherwise the manifest's.
+   *
+   * Four places read the seed -- the drawing, the convergence series, the captured state and the value the
+   * server-side grader is told -- and each was reading `params.seed` directly. That is four chances to
+   * disagree about which question the student is looking at, and the grader is handed the answer key rather
+   * than the question, so a disagreement there marks a correct answer wrong with no visible symptom.
+   */
+  const seedInForce = (): string => hostSeed ?? params.seed;
 
   const canvas = document_.createElement('canvas');
   canvas.id = 'sim-canvas';
@@ -148,7 +185,7 @@ export function startSim(
      * student to do the visual bookkeeping across 2,000 of them — and that bookkeeping is the part of this
      * exercise that is genuinely hard, so it should be done once, not per dot.
      */
-    const points = sample(params.seed, params.dropped);
+    const points = sample(seedInForce(), params.dropped);
     context.fillStyle = 'rgba(11, 107, 138, 0.6)';
     for (const point of points) {
       if (!point.inside) continue;
@@ -190,10 +227,10 @@ export function startSim(
    */
   const refresh = (): void => {
     draw();
-    const points = sample(params.seed, params.dropped);
+    const points = sample(seedInForce(), params.dropped);
     const inside = countInside(points);
     const band = toleranceFor(params.dropped);
-    const series = convergence(params.seed, params.dropped);
+    const series = convergence(seedInForce(), params.dropped);
     const trend = series.map((row) => `${String(row.n)}: ${format(row.estimate)}`).join('  ');
     readout.textContent =
       `${String(inside)} of ${String(params.dropped)} inside · estimate ${format(estimatePi(points))} ` +
@@ -284,7 +321,7 @@ export function startSim(
       params = clamp({
         samples: Number(s.samples),
         dropped: Number(s.dropped),
-        seed: typeof s.seed === 'string' && s.seed !== '' ? s.seed : params.seed,
+        seed: typeof s.seed === 'string' && s.seed !== '' ? s.seed : seedInForce(),
       });
       answerBox.value = typeof s.answer === 'string' ? s.answer : '';
       refresh();
@@ -294,7 +331,16 @@ export function startSim(
       dropped: params.dropped,
       // THE SEED IS IN THE STATE. That is the design of this simulation, and `validateState` refuses a state
       // without one.
-      seed: params.seed,
+      seed: seedInForce(),
+      /**
+       * WHETHER THE SEED CAME FROM THE HOST, carried beside the value rather than inferred from it.
+       *
+       * The value alone cannot distinguish "the host chose this" from "the manifest default happened to be
+       * this" -- and while the per-student bug was live they were equal, so a simulation that ignored the host
+       * looked exactly like one that honoured it. A harness reading only the value would have called that
+       * correct.
+       */
+      seedFromHost: hostSeed !== null,
       answer: answerBox.value,
     }),
   };
@@ -305,8 +351,24 @@ export function startSim(
     },
     subscribe: (handler: (frame: unknown, source: unknown) => void): (() => void) => {
       const listener = (event: MessageEvent): void => {
-        const type = (event.data as { type?: unknown } | null)?.type;
+        const data = event.data as { type?: unknown; seed?: unknown } | null;
+        const type = data?.type;
         if (typeof type === 'string') received.push(type);
+        /**
+         * PRECEDENCE, IN ONE PLACE.
+         *
+         * `sim:init` sets the host's seed; a later `sim:setParams` clears it. Both frames pass through the
+         * transport listener, which is the only place that can tell them apart -- `onSetParams` receives the
+         * two identically.
+         */
+        if (type === 'sim:init' && typeof data?.seed === 'string' && data.seed !== '') {
+          hostSeed = data.seed;
+        } else if (type === 'sim:setParams') {
+          // A PARAMETER CHANGE IS A DELIBERATE INSTRUCTION, and it outranks the host's mount-time choice.
+          // This is what lets a manifest's conformance script pin the seed and still get the seed it asked
+          // for, while a plain mount honours whatever the host derived.
+          hostSeed = null;
+        }
         handler(event.data, event.source);
       };
       window_.addEventListener('message', listener);

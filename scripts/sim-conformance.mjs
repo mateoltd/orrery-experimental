@@ -546,6 +546,50 @@ const defaultParams = (entry) =>
     (entry.parameters ?? []).map((parameter) => [parameter.name, parameter.default]),
   );
 
+/**
+ * THE THREE MOUNTS OF THE PER-STUDENT CELL, SEPARATED OUT SO THE PAGE CAN BE RESTORED REGARDLESS OF HOW THEY END.
+ *
+ * Declared at module scope rather than inside the cell because the cell's `finally` needs to CALL it, and a
+ * helper defined in the middle of an array literal is not a function anyone can reach. The first version tried
+ * to define it inline and the file did not even parse, which is a louder failure than the silent one it
+ * replaced -- but still a failure that should not have been written.
+ *
+ * Returns the conformance cell's own result: `null` for a pass, a string describing the failure otherwise.
+ */
+const compareSeeds = async (seedUsed) => {
+  const firstResult = await seedUsed('attempt-alpha');
+  if (firstResult.seed === null) {
+    return (
+      `this simulation declares randomised: true but ${String(firstResult.reason)}. A seed-dependent ` +
+      'simulation has to carry its seed in the state -- the only place a cross-origin harness can see it -- ' +
+      'and say that the seed came from the host rather than from its own default'
+    );
+  }
+  const first = firstResult.seed;
+
+  // ONE IDENTITY, TWICE. A re-sit has to reproduce, or a teacher cannot say what the student was given.
+  const againResult = await seedUsed('attempt-alpha');
+  if (againResult.seed === null)
+    return `the second mount reported no seed: ${String(againResult.reason)}`;
+  if (againResult.seed !== first) {
+    return `the same student was given seed ${first} and then ${String(againResult.seed)}, so a re-sit does not reproduce`;
+  }
+
+  // A DIFFERENT IDENTITY, and an ADJACENT one on purpose. `deriveSeed` hashes its input, so a raw value
+  // would put a neighbouring student on 'attempt-alpha1' -- sequential and trivially guessable, which is
+  // the failure the hashing exists to prevent.
+  const otherResult = await seedUsed('attempt-beta');
+  if (otherResult.seed === null)
+    return `the third mount reported no seed: ${String(otherResult.reason)}`;
+  if (otherResult.seed === first) {
+    return (
+      `two different students were both given seed ${first}. A cohort sharing one paper is the failure ` +
+      'nobody notices until the results come in'
+    );
+  }
+  return null;
+};
+
 const CELLS = [
   {
     name: "the manifest's OWN conformance script runs and its `expect` holds",
@@ -858,6 +902,131 @@ const CELLS = [
       return problems.length === 0 ? null : problems.join('; ');
     },
   },
+
+  {
+    /**
+     * THE PER-STUDENT SEED PATH, WHICH NOTHING EXERCISED IN A BROWSER BEFORE THIS CELL.
+     *
+     * `deriveSeed` has three branches and the browser matrix only ever reached one. The harness pinned
+     * `seedPolicy={{ kind: 'FIXED', seed: 'conformance-seed' }}`, which is right for a determinism cell and
+     * left `PER_STUDENT` dead. That branch is the ANTI-COLLUSION claim, and it caught a real defect: a
+     * `randomised: true` simulation that read its seed only from the manifest default, so a cohort would have
+     * received one paper while every number on screen looked correct.
+     *
+     * ## WHY IT READS THE STATE, NOT THE INIT FRAME
+     *
+     * The first version looked for the seed on `sim:init` and reported "the sim:init frame carried no seed" on
+     * every simulation it ran. That was not a platform defect: `sim:init` travels HOST TO SIM and the harness
+     * records only INBOUND frames, for a structural reason it documents at length -- patching `postMessage`
+     * on a cross-origin frame window throws a `SecurityError`, so outbound frames cannot be observed at all
+     * without defeating the sandbox this suite exists to check.
+     *
+     * So the seed is observed where it is genuinely visible: in the simulation's own state, because a
+     * seed-dependent simulation is required to carry it there.
+     *
+     * ## AND WHY IT INSISTS ON `seedFromHost`
+     *
+     * The seed VALUE cannot distinguish "the host chose this" from "the manifest default happened to be this",
+     * and while the bug above was live the two were EQUAL -- so a harness reading only the value would have
+     * reported a simulation that ignored per-student seeding as correct. A simulation must say where its seed
+     * came from.
+     */
+    name: 'a PER-STUDENT seed gives two students different questions and one student the same one',
+    why:
+      "the harness pinned seedPolicy to FIXED, so deriveSeed's PER_STUDENT branch never ran in a browser. " +
+      'It is the anti-collusion claim, and a cohort sharing one paper is the failure nobody notices until the ' +
+      'results come in',
+    run: async ({ page, entry, manifest, appOrigin }) => {
+      // BOTH SOURCES. The first version consulted only `entry.randomised`, which is undefined for all
+      // twenty-three sims -- so every simulation skipped, including the two that declare `randomised: true`,
+      // because the flag lives in the manifest. The determinism cell below already checks both.
+      if (entry.randomised !== true && (manifest?.capabilities?.randomised ?? false) !== true) {
+        return {
+          skip: 'the simulation does not declare randomness, so there is no seed for it to derive',
+        };
+      }
+
+      const baselineConfig = new URL(page.url()).searchParams.get('cfg');
+      if (baselineConfig === null) return 'no baseline config to vary';
+
+      /**
+       * MOUNT GRADED UNDER A PER_STUDENT POLICY AND REPORT THE SEED THE SIMULATION ENDED UP USING.
+       *
+       * Graded, because per-student seeding is what an EXAM does and a lesson mount is not the case anyone is
+       * defending against. The seed is read from the captured state rather than recomputed here: deriving it
+       * again in the runner would test `deriveSeed` against itself, and both would agree even if both were
+       * wrong about what was actually sent.
+       */
+      const seedUsed = async (attemptId) => {
+        const config = {
+          ...JSON.parse(Buffer.from(baselineConfig, 'base64url').toString('utf8')),
+          seedPolicy: { kind: 'PER_STUDENT', derivation: 'ATTEMPT_ID' },
+          identity: { attemptId },
+          mode: 'graded',
+        };
+        const encoded = Buffer.from(JSON.stringify(config)).toString('base64url');
+        await page.goto(`${appOrigin}/?cfg=${encoded}`, { waitUntil: 'load' });
+        await page.waitForFunction(() => globalThis.__conformance?.ready === true, undefined, {
+          timeout: 15_000,
+        });
+        await waitForStatus(page, ['READY', 'DEGRADED']);
+        // Long enough for a seeded shuffle to have run and a state to have been captured, which is the same
+        // allowance the determinism cell below makes.
+        await page.waitForTimeout(400);
+        const captured = await captureState(page);
+        const state = captured?.state;
+        if (state === null || typeof state !== 'object')
+          return { seed: null, reason: 'no state was captured' };
+        if (state.seedFromHost !== true) {
+          return {
+            seed: null,
+            reason: 'the simulation did not report that its seed came from the host',
+          };
+        }
+        const seed = state.seed;
+        // A NUMBER OR A STRING, because the two seeded simulations disagree and both are legitimate:
+        // `maths.sequence-next` parses its hex seed to a number because its generator wants arithmetic on it,
+        // and `maths.monte-carlo-pi` keeps the string because `createRng` hashes a string. Demanding a number
+        // passed on one and failed the other with a message about the SIMULATION that was about the CELL.
+        const text =
+          typeof seed === 'number' && Number.isFinite(seed)
+            ? `#${String(Math.trunc(seed))}`
+            : typeof seed === 'string' && seed !== ''
+              ? `#${seed}`
+              : null;
+        return text === null
+          ? { seed: null, reason: 'the state carries no usable `seed`' }
+          : { seed: text };
+      };
+
+      /**
+       * EVERY MOUNT HAPPENS INSIDE A `try`, AND THE BASELINE PAGE IS RESTORED IN A `finally`.
+       *
+       * This cell navigates three times, each under `mode: 'graded'` with a `PER_STUDENT` policy. Without the
+       * restore it left the page mounted graded with a derived seed, and EVERY CELL AFTER IT INHERITED THAT --
+       * which is how two unrelated RESET cells started failing with a checksum that did not match the declared
+       * defaults. The cells after this one were not broken; they were measuring the wrong page.
+       *
+       * The existing graded-mount cell documents the same trap at length, including that restoring only on the
+       * success path guarantees the code after the `return` is the code that runs -- which is the code that
+       * cannot. `finally` is what "on every path" has to mean.
+       */
+      let outcome;
+      try {
+        outcome = await compareSeeds(seedUsed);
+      } finally {
+        await page.goto(`${appOrigin}/?cfg=${String(baselineConfig)}`, { waitUntil: 'load' });
+        await page
+          .waitForFunction(() => globalThis.__conformance?.ready === true, undefined, {
+            timeout: 15_000,
+          })
+          .catch(() => {});
+        await waitForStatus(page, ['READY', 'DEGRADED']).catch(() => {});
+      }
+      return outcome;
+    },
+  },
+
   {
     name: 'a RANDOMISED simulation gives the same student the same question',
     why:

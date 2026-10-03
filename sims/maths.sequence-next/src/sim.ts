@@ -113,7 +113,26 @@ export function startSim(
     announce(status, 'Answer submitted.');
   });
 
-  const snapshot = (): Record<string, unknown> => ({ seed: Number.parseInt(seed, 16), shown });
+  /**
+   * WHETHER THE SEED CAME FROM THE HOST, OR FROM THIS SIMULATION'S OWN DEFAULT.
+   *
+   * ## WHY THE VALUE ALONE IS NOT ENOUGH
+   *
+   * `seed` is `parseInt(seed, 16)`, and a simulation that IGNORED `init.seed` would still report a seed -- the
+   * one from its manifest default. When the two coincide, which they do whenever the host's derived seed
+   * happens to match, a harness reading only the value cannot tell an honoured seed from an ignored one.
+   *
+   * That is not hypothetical: `maths.monte-carlo-pi` declared `randomised: true`, ignored the host's seed
+   * entirely, and would have passed a value-only check while handing a whole cohort one paper. So the
+   * provenance is carried explicitly, beside the value it describes.
+   */
+  let seedFromHost = false;
+
+  const snapshot = (): Record<string, unknown> => ({
+    seed: Number.parseInt(seed, 16),
+    shown,
+    seedFromHost,
+  });
 
   const handlers: BridgeHandlers = {
     onSetParams: (next) => {
@@ -182,7 +201,11 @@ export function startSim(
         // prop means the simulation has no seed until the host has actually told it one.
         if (type === 'sim:init') {
           const init = event.data as { nonce?: unknown; seed?: unknown };
-          if (typeof init.seed === 'string') seed = init.seed;
+          if (typeof init.seed === 'string') {
+            seed = init.seed;
+            // RECORDED ALONGSIDE THE SEED, not inferred from it. See `snapshot`.
+            seedFromHost = true;
+          }
           if (typeof init.nonce === 'string')
             (window_ as unknown as { __nonce?: string }).__nonce = init.nonce;
         }
