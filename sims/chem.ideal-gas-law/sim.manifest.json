@@ -89,15 +89,20 @@
             "n": 1
           }
         }
-      },
-      {
-        "command": "command",
-        "args": {
-          "name": "loadScenario"
-        }
       }
     ],
-    "expect": {}
+    "type": {
+      "kelvin": 273.15
+    },
+    "expect": {
+      "answer": {
+        "kelvin": {
+          "min": 273.0,
+          "max": 273.4
+        }
+      },
+      "grade": 4
+    }
   },
   "grading": {
     "strategy": "TOLERANCE",

@@ -83,15 +83,26 @@
       {
         "command": "setParams",
         "args": {
-          "params": { "m": 2, "c": -4, "span": 5 }
+          "params": {
+            "m": 2,
+            "c": -4,
+            "span": 5
+          }
         }
-      },
-      {
-        "command": "command",
-        "args": { "name": "reset" }
       }
     ],
-    "expect": {}
+    "type": {
+      "intercept": 2
+    },
+    "expect": {
+      "answer": {
+        "xIntercept": {
+          "min": 1.9,
+          "max": 2.1
+        }
+      },
+      "grade": 4
+    }
   },
   "grading": {
     "strategy": "TOLERANCE",
