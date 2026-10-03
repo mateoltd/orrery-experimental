@@ -3063,6 +3063,33 @@ replacement — ` ` — is the same character in source, so it is semantically a
 code this phase does not own is worse than a known defect written down. Finding them is the result; fixing them
 belongs to whoever owns those modules.
 
+### PF-5 · An absent answer is a BLANK and an unreadable one is a FAULT — CLOSED in `0dbebe5`
+
+**THE GAP.** `numeric` and `short_text` had **no BLANK path in `grade()`**. With no answer, `asNumber(undefined)`
+and `asString(undefined)` both returned `null`, so the grader reported `UNPARSEABLE` where `BLANK` is the true fact.
+
+**THE PRACTICAL EFFECT WAS A MARKER OPENING AN UNTOUCHED PAPER AND SEEING A LIST OF PLATFORM FAULTS.** Every
+unanswered numeric and short-text question raised a `MALFORMED_RESPONSE` flag. `multi_select` and `ordering` always
+had a BLANK path, which is why the bug survived: the two types with the most common interaction had it right.
+
+**ABSENT AND UNREADABLE DO NOT LOOK IDENTICAL, AND THE COMMENT THAT SAID THEY DID WAS WRONG.** A P7-T5 test asserted
+that a response with no `text` was `UNPARSEABLE`, reasoning that "an empty textarea and a textarea whose contents
+failed to serialise look identical in the response object". **They do not.** A missing `text` key is a question nobody
+answered; a `text` key holding a number is a body that could not be read.
+
+So the distinction is **PRESENCE, not readability**: a missing or `null` field is `BLANK`; a field that is present and
+unreadable is still a fault. A browser sends `null` for a cleared numeric input, which is why `null` counts as blank
+rather than as unreadable. **Whitespace is a blank too** — the mark is zero either way, but `BLANK` is what tells a
+marker "left empty" from "tried and got it wrong", and `gradePaper`'s `isAbsent` already trimmed, so the two layers
+were disagreeing about the same response.
+
+**THE TESTS WERE INVERTED RATHER THAN DELETED, AND THE INVERSION IS THE RECORD.** One asserted the old behaviour and
+now asserts the split; one asserted the gap and now asserts that the two layers agree. **A test that documents a
+defect by naming it is worth more than a silent workaround, and the inverse is what stops the gap reopening.**
+
+`grading/index.ts` remains at 100% per-path with the new branches covered — the check that matters for a change to
+shared fully-covered code, since the whole risk of editing it is adding a path nothing exercises.
+
 ### PF-5 · A gap in fully-covered code, found at the end and deliberately not fixed
 
 `numeric` and `short_text` have **no BLANK path in `grade()`**. With no answer, `asNumber(undefined)` and
