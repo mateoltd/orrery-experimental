@@ -1,0 +1,103 @@
+{
+  "id": "chem.mole-concentration",
+  "version": "1.0.0",
+  "title": "Concentration by dilution",
+  "summary": "Read a burette, fill a volumetric flask, and calculate the diluted concentration.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["chemistry"],
+  "tags": ["chemistry", "solutions", "concentration", "titration"],
+  "ageRange": [14, 19],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A burette reading in centimetres, a flask volume in millilitres, and a box for the concentration in moles per litre.",
+    "reducedMotion": true,
+    "textAlternative": "A burette reading and a flask volume are given, together with the concentration of the stock solution. The task is to work out the concentration after the flask is made up to its mark."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "buretteCm": {
+        "type": "number",
+        "label": "Burette reading",
+        "unit": "cm",
+        "minimum": 0,
+        "maximum": 50,
+        "default": 23.4,
+        "step": 0.1
+      },
+      "flaskMl": {
+        "type": "number",
+        "label": "Flask volume",
+        "unit": "mL",
+        "minimum": 1,
+        "maximum": 1000,
+        "default": 250,
+        "step": 1
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 330,
+    "minHeight": 240,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "buretteCm": 23.4,
+            "flaskMl": 250
+          }
+        }
+      }
+    ],
+    "type": {
+      "concentration": 0.0936
+    },
+    "expect": {
+      "value": {
+        "min": 0.0935,
+        "max": 0.0937
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "NUMERIC",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0.0001,
+      "relative": 0.01
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You said {answer} mol/L; the diluted solution is {expected} mol/L."
+  }
+}

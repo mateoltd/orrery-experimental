@@ -148,6 +148,19 @@ export const lifecycleSchema = z.object({
     .optional(),
 });
 
+const expectationSchema = z.union([
+  z.number(),
+  z
+    .object({
+      min: z.number().optional(),
+      max: z.number().optional(),
+      in: z.array(z.unknown()).min(1).optional(),
+      set: z.array(z.unknown()).min(1).optional(),
+      prefix: z.string().min(4).optional(),
+    })
+    .strict(),
+]);
+
 export const conformanceSchema = z.object({
   script: z
     .array(
@@ -171,13 +184,26 @@ export const conformanceSchema = z.object({
    */
   type: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
   expect: z.object({
-    answer: z.record(z.string(), z.unknown()).optional(),
+    // ONE SHAPE, USED TWICE, SO THE TWO CANNOT DRIFT.
+    //
+    // The JSON Schema and this mirror are checked against each other by `gate:schema`, and they had
+    // already drifted once: `expect.value` was added to the runner for a simulation whose answer is a
+    // bare number, and the runner -- which is not validated -- accepted it while both schemas refused it.
+    // A contract that only one of three consumers enforces is not a contract.
+    answer: z.record(z.string(), expectationSchema).optional(),
+    /** For an answer that IS a number. `answer` is keyed, for `{quantity, value}` and `{roots: [...]}`. */
+    value: expectationSchema.optional(),
     grade: z.number().min(0).optional(),
     stateChecksumPrefix: z.string().min(4).optional(),
   }),
   capturesPath: z.string().regex(/^\.\//u).optional(),
 });
 
+/**
+ * How a conformance cell judges one value: an exact number, a range, membership in a list, or a set
+ * compared WITHOUT ORDER. The last one exists because a quadratic's roots are an answer whose order is
+ * not part of the answer, and a positional comparison marks a correct pair wrong half the time.
+ */
 export const simManifestSchema = z
   .object({
     id: simIdSchema,
