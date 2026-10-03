@@ -16,6 +16,23 @@ export default defineConfig({
         branches: 80,
         functions: 85,
         statements: 85,
+        /**
+         * THE GRADING CORE IS AT 100%, PERCENT, NOT ON AVERAGE.
+         *
+         * `plans/07` §4 asks for "100% branch, enforced by a dedicated coverage threshold that cannot be
+         * lowered". A global threshold cannot express that: the module is 3% of the tree, so a repo-wide 85%
+         * passes with every branch in it uncovered, and the only way the number could drop is by editing this
+         * file -- which the `GATE-CHANGE:` rule above already requires a PR body to justify.
+         *
+         * Globals are the floor. A per-path floor is the ceiling, and the grading core is the one place where
+         * an uncovered branch is a mark a student did not get.
+         */
+        'packages/contracts/src/grading/index.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
       },
     },
   },
