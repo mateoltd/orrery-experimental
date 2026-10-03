@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims (re-costed ≈240h: 24 × 10h, the first sims built against a brand-new SDK, template and conformance harness)   | **IN PROGRESS** | `3702d77` | 1 of 24 built (`maths.projectile-motion`). The declared `conformance.script` is now honoured, which is the machinery 24 sims need; it caught two defects on its first run. OPEN QUESTION: `plans/10` gives a scripted host no way to ask a sim for its answer. |
+| P6-T11 24 gold sims (re-costed ≈240h: 24 × 10h, the first sims built against a brand-new SDK, template and conformance harness)     | **IN PROGRESS** | *(next commit)* | 2 of 24 built (`maths.projectile-motion`). The declared `conformance.script` is now honoured, which is the machinery 24 sims need; it caught two defects on its first run. OPEN QUESTION: `plans/10` gives a scripted host no way to ask a sim for its answer. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -1796,6 +1796,48 @@ run.** Recorded as an open spec question rather than fixed by inventing a frame 
 #### P6-T11 evidence so far
 - `pnpm sim:conformance`: **15/15 cells** (the declared-script cell is the new one).
 - 1495 unit, 336 db integration, 9/9 gates, lint 0, typecheck 0, escape gate 12/12, playground smoke green.
+
+
+#### P6-T11: gold sim 2, and what building it caught
+
+**`maths.linear-functions` — two parameters, one question: where does the line cross the x-axis.** The
+parameters are `m`, `c`, `span` and `showGrid`; the answer is `{xIntercept}`, and **`null` is a real
+answer.** With `m = 0` the line is flat and never crosses, so "there is no crossing" is graded 4/4. A
+student who correctly declines to type a number into a box that has no number in it must not be marked
+wrong for it — and a number where the answer is "none" scores 0, with feedback saying why.
+
+**THREE DEFECTS, ALL THE SAME SHAPE: A VALUE SILENTLY ARRIVING AS `NaN` OR AS NOTHING.**
+
+- `Number(value, fallback)` DOES NOT EXIST. `Number` takes one argument and ignores the second, so every
+  answer was graded against `NaN` and awarded 0 points — to a student who was exactly right. The feedback
+  even said "the line crosses at x = 2" about an answer of 2.
+- `tolerance(given, expected, spec)` wants `abs` and `rel`. The manifest spells the same idea `absolute`
+  and `relative`, and passing the long names produced a spec with **no tolerance in it at all** — a
+  tolerance of zero, which reads as "mark everything wrong". Two spellings of one concept, and the
+  mismatch is silent in both directions.
+- `num(spec)` is a spec BUILDER, not a coercion helper: `num(raw.m, 2)` returns `{type: 0}`. Third time in
+  this phase — the projectile sim's `paramsFrom` made the same call.
+
+None of the three would be caught by a manifest check or a type check. Each graded a real student's answer
+wrongly, and each was found by a test asserting a **specific mark** rather than a shape.
+
+**A TEST ROOT FOR `sims/`, AND `sims/` IS STILL NOT A WORKSPACE.** `RN-07` says a simulation resolves the
+SDK and the RNG and nothing more, so adding `sims/` to `pnpm-workspace.yaml` to get a test runner would
+have undone the dependency boundary. `sims/vitest.config.ts` adds the runner and nothing else, with aliases
+pointing at the SDK's source for the same reason `sim:build` does: a grader tested against a stale `dist`
+is a grader tested against something that does not ship. `_template` and `_fixtures` are excluded — they
+are scaffolding, and a permanently red test in a suite is how the real ones stop being read too.
+
+**THE ESCAPE GATE IS NOT IN `pnpm gates`, AND SAYS WHY.** The Docker image build runs `gates`, the image
+has no Chromium, and adding one would cost ~150 MB plus a network fetch at build time. The tempting
+alternative — exit 0 when the binary is missing — would have been **a gate that passes by not running**,
+the exact failure mode that file exists to prevent. So it exits 1 with the command to run, and
+`pnpm gate:browser` groups it with the conformance matrix as the browser-requiring half.
+
+#### P6-T11 evidence
+- 2 of 24 gold sims. `pnpm sim:conformance` **30/30 cells** across both; `pnpm test:sims` 8/8.
+- 1495 unit, 336 db integration, 8/8 container gates, lint 0, typecheck 0, image builds green,
+  `gate:browser` green (escape 12/12 + conformance 30/30).
 
 
 #### P6-T6 correction (the host could listen and never speak)

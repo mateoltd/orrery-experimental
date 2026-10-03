@@ -1,0 +1,106 @@
+{
+  "id": "maths.linear-functions",
+  "version": "1.0.0",
+  "title": "Linear functions",
+  "summary": "Change the gradient and the intercept of a straight line, then report where it crosses the x-axis.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["maths"],
+  "tags": ["algebra", "graphs"],
+  "ageRange": [13, 18],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A straight line drawn on a pair of axes, with buttons to walk points along it and to reveal where it crosses the x-axis.",
+    "reducedMotion": true,
+    "textAlternative": "A straight line with gradient 2 and y-intercept 1, crossing the x-axis at x = -0.5."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "m": {
+        "type": "number",
+        "label": "Gradient",
+        "unit": "",
+        "minimum": -5,
+        "maximum": 5,
+        "default": 2
+      },
+      "c": {
+        "type": "number",
+        "label": "y-intercept",
+        "unit": "",
+        "minimum": -5,
+        "maximum": 5,
+        "default": 1
+      },
+      "span": {
+        "type": "number",
+        "label": "Axis range",
+        "unit": "",
+        "minimum": 2,
+        "maximum": 10,
+        "default": 5
+      },
+      "showGrid": {
+        "type": "boolean",
+        "label": "Show grid",
+        "default": true
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 360,
+    "minHeight": 240,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": { "m": 2, "c": -4, "span": 5 }
+        }
+      },
+      {
+        "command": "command",
+        "args": { "name": "reset" }
+      }
+    ],
+    "expect": {}
+  },
+  "grading": {
+    "strategy": "TOLERANCE",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0.1,
+      "relative": 0.02
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You said the crossing is at x = {answer.xIntercept}; it is at x = {expected.xIntercept}."
+  }
+}

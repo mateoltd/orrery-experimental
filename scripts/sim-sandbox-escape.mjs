@@ -158,7 +158,31 @@ const run = async () => {
 
   const sim = await startSimOrigin();
   const app = await startAppOrigin();
-  const browser = await chromium.launch();
+
+  // A MISSING BROWSER IS A FAILURE, NOT A SKIP.
+  //
+  // This gate is deliberately NOT in `pnpm gates`: the Docker image build runs `gates`, the image has no
+  // Chromium, and adding the browser to the image would cost ~150 MB and a network fetch at build time.
+  // The tempting alternative — exiting 0 when the binary is absent — would have been a gate that passes
+  // by not running, which is the exact failure mode this file exists to prevent.
+  //
+  // So it exits 1 with the command to run, and `gate:browser` groups it with the conformance matrix as the
+  // browser-requiring half of the checks.
+  let browser;
+  try {
+    browser = await chromium.launch();
+  } catch (error) {
+    process.stderr.write(
+      `${c.red('no Chromium available')}\n` +
+        `  The sandbox escape gate needs a real browser: it proves a browser ENFORCED the sandbox, which\n` +
+        `  no other check in this repository can do.\n` +
+        `  ${c.dim('run `pnpm exec playwright install chromium`, then `pnpm run gate:browser`')}\n` +
+        `  ${c.dim(String(error instanceof Error ? error.message.split('\n')[0] : error))}\n`,
+    );
+    sim.close();
+    app.close();
+    process.exit(1);
+  }
   const browserContext = await browser.newContext();
   const page = await browserContext.newPage();
 

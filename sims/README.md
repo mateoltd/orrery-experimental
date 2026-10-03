@@ -17,7 +17,8 @@ without a per-sim install there is nothing to upgrade it with.
 | `pnpm sim:validate` | Manifest, schema, rules, determinism, no-I/O, budget | Every commit |
 | `pnpm sim:conformance` | The full matrix in a real browser | Before a sim is merged |
 | `pnpm sim:playground` | Mount one sim on a real second origin, with every frame both ways listed live | While writing one |
-| `pnpm sim:sandbox-escape` | Attempts twelve escapes from inside the frame | In `pnpm gates`; run it if you touch the frame |
+| `pnpm sim:sandbox-escape` | Attempts twelve escapes from inside the frame | `pnpm gate:browser` — needs a real browser |
+| `pnpm gate:browser` | The escape gate plus the whole conformance matrix | Needs `playwright install chromium`; deliberately NOT in `pnpm gates`, because the Docker image build runs that and has no browser |
 
 `sims/_template` and `sims/_fixtures` are excluded from every one of them: a leading underscore means
 scaffolding or deliberately-broken test input, not a simulation.
