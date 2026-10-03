@@ -199,32 +199,46 @@ describe('a response for a question NOT on this paper is ignored', () => {
 });
 
 /**
- * A KNOWN GAP, ASSERTED RATHER THAN PAPERED OVER.
+ * PF-5, NOW CLOSED -- the gap this describe documented is the gap that was fixed.
  *
- * `numeric` and `short_text` have NO BLANK path in `grade()`: with no answer, `asNumber(undefined)` and
- * `asString(undefined)` both return `null`, so the grader reports `UNPARSEABLE` rather than `BLANK`. `multi_select`
- * and `ordering` do have one, which is why `emptyResponseFor` matters at all.
+ * It used to assert that `numeric` and `short_text` report `UNPARSEABLE` for an unanswered question while
+ * `PaperGrade.blank` says `true`, and it named that as a defect in the P7-T2/P7-T4 core. Both handlers now have a
+ * `BLANK` path, so the two layers agree -- which is the point. `gradePaper`'s `isAbsent` trims whitespace and the
+ * grader now does too, and two layers disagreeing about the same response is how a question gets marked wrong for
+ * a reason nobody can see.
  *
- * So an unanswered NUMERIC question is reported as a `MALFORMED_RESPONSE` at the grader level even though
- * `PaperGrade.blank` is correctly `true`. That is a defect in the P7-T2/P7-T4 core, not in this function, and it is
- * asserted here so it cannot be quietly forgotten: `blank` is the paper-level truth and the rationale is not.
- *
- * Fixing it means adding a blank path to two graders in `grading/index.ts`, which is a change to fully-covered
- * shared code and is recorded in the tracker rather than made at the end of a session.
+ * The test is inverted rather than deleted, because a test that documents a defect by naming it is worth more than
+ * a silent workaround, and the inverse is what stops the gap reopening.
  */
-describe('the KNOWN GAP: numeric and short_text cannot report BLANK, and `blank` is the truth', () => {
-  it('reports the blank correctly while the rationale says UNPARSEABLE', () => {
-    const result = gradePaper(paper([numeric(), shortText()]), {});
-    expect(result.grades.map((entry) => entry.blank)).toEqual([true, true]);
+describe('PF-5 closed: the grader and the paper layer now AGREE about a blank', () => {
+  it('reports BLANK for every type with a blank path, including the two that were fixed', () => {
+    const result = gradePaper(paper([numeric(), shortText(), multi(), multi()]), {});
+    expect(result.grades.map((entry) => entry.blank)).toEqual([true, true, true, true]);
     expect(result.grades.map((entry) => entry.outcome.rationale.code)).toEqual([
-      'UNPARSEABLE',
-      'UNPARSEABLE',
+      'BLANK',
+      'BLANK',
+      'BLANK',
+      'BLANK',
     ]);
   });
 
-  it('reports BLANK for the types that DO have a blank path', () => {
-    const result = gradePaper(paper([multi(), multi()]), {});
-    expect(result.grades.map((entry) => entry.outcome.rationale.code)).toEqual(['BLANK', 'BLANK']);
+  it('reports BLANK for a whitespace answer and not for a malformed one, at BOTH layers', () => {
+    const whitespace = gradePaper(paper([shortText()]), { q1: { text: '   ' } });
+    expect(whitespace.grades[0]?.blank).toBe(true);
+    expect(whitespace.grades[0]?.outcome.rationale.code).toBe('BLANK');
+    expect(unusableQuestions(whitespace)).toEqual([]);
+
+    const malformed = gradePaper(paper([numeric()]), { q1: { value: 'abc' } });
+    expect(malformed.grades[0]?.blank).toBe(false);
+    expect(unusableQuestions(malformed)).toEqual(['q1']);
+  });
+
+  it('no longer raises MALFORMED_RESPONSE on a paper of entirely unanswered questions', () => {
+    // The practical effect of PF-5: a marker opening an untouched paper saw a list of platform faults, because
+    // every unanswered numeric and short-text question reported one.
+    const result = gradePaper(paper([numeric(), shortText(), numeric()]), {});
+    expect(unusableQuestions(result)).toEqual([]);
+    expect(result.needsHumanCount).toBe(0);
   });
 });
 

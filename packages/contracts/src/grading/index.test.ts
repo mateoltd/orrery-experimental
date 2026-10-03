@@ -821,18 +821,43 @@ describe('short_text and ordering through `grade`, which P7-T5 had to wire up', 
     expect(result.rationale.detail.matcher).toBe('EXACT');
   });
 
-  it('reports a short-text response with no text as MALFORMED, not as wrong', () => {
+  it('reports an ABSENT short-text response as BLANK, and an UNREADABLE one as MALFORMED', () => {
     /**
-     * THE POINT OF THE `MALFORMED` FLAG, on the one path that was previously unreachable.
+     * THIS TEST WAS INVERTED BY PF-5, and the inversion is the finding.
      *
-     * An empty textarea that never received input and a textarea whose contents failed to serialise look
-     * identical in the response object. Reporting the second as an incorrect answer puts a platform fault into
-     * a student's mark, and averaging it into their total is how it disappears.
+     * It used to assert that a response with no `text` was `UNPARSEABLE` with a `MALFORMED_RESPONSE` flag, on the
+     * reasoning that an empty textarea and a textarea whose contents failed to serialise "look identical in the
+     * response object".
+     *
+     * **They do not**, and that was the bug. A missing `text` key is a question nobody answered; a `text` key
+     * holding a number is a body that could not be read. The first is `BLANK` and the second is a fault, and
+     * conflating them raised a `MALFORMED_RESPONSE` flag on every unanswered short-text question -- so a marker
+     * saw a list of platform faults on a paper where nothing had gone wrong.
+     *
+     * The distinction is PRESENCE, not readability.
      */
-    const result = g(shortText, {});
-    expect(result.rationale.code).toBe('UNPARSEABLE');
-    expect(result.flags).toContain('MALFORMED_RESPONSE');
-    expect(result.points).toBe(0);
+    const absent = g(shortText, {});
+    expect(absent.rationale.code).toBe('BLANK');
+    expect(absent.flags).not.toContain('MALFORMED_RESPONSE');
+    expect(absent.points).toBe(0);
+
+    // WHITESPACE is a blank too: `gradePaper`'s `isAbsent` already trims, and without this the two layers
+    // disagreed about the same response.
+    expect(g(shortText, { text: '   ' }).rationale.code).toBe('BLANK');
+
+    // A value that is PRESENT and unreadable is still a fault.
+    const unreadable = g(shortText, { text: 42 });
+    expect(unreadable.rationale.code).toBe('UNPARSEABLE');
+    expect(unreadable.flags).toContain('MALFORMED_RESPONSE');
+  });
+
+  it('reports an ABSENT numeric response as BLANK and an UNREADABLE one as MALFORMED', () => {
+    // A browser sends `null` for a cleared numeric input, so `{value: null}` is an unanswered question and not a
+    // fault. `NaN` and a string are present and unreadable, and remain faults.
+    expect(g(numeric, {}).rationale.code).toBe('BLANK');
+    expect(g(numeric, { value: null }).rationale.code).toBe('BLANK');
+    expect(g(numeric, { value: 'abc' }).rationale.code).toBe('UNPARSEABLE');
+    expect(g(numeric, { value: Number.NaN }).flags).toContain('MALFORMED_RESPONSE');
   });
 
   it('names a bad REGEX pattern as NEEDS_HUMAN rather than marking the student wrong', () => {

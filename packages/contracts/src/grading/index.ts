@@ -589,7 +589,21 @@ const gradeNumeric = (
   const expected = read.value;
   const value = asNumber(response.value);
   if (value === null) {
-    return malformed(spec.points, why('UNPARSEABLE', 'No number was returned.'));
+    /**
+     * ABSENT IS A BLANK AND UNREADABLE IS A FAULT, AND THE TWO WERE CONFLATED HERE.
+     *
+     * A numeric field the student never filled in arrives as `{value: null}` or with no `value` at all -- a browser
+     * sends `null` for a cleared input. That is an UNANSWERED question, and `plans/07`'s `BLANK` code exists for
+     * exactly it. Reporting `UNPARSEABLE` instead raised a `MALFORMED_RESPONSE` flag on every unanswered numeric
+     * question, so a marker saw a list of platform faults on a paper where nothing had gone wrong.
+     *
+     * A value that is PRESENT and unreadable -- a string, an object, `NaN` -- is still a fault, and still malformed.
+     * The distinction is presence, not readability.
+     */
+    if (!('value' in response) || response.value === null) {
+      return emit(0, spec.points, why('BLANK', 'No number was returned.'));
+    }
+    return malformed(spec.points, why('UNPARSEABLE', 'The number returned could not be read.'));
   }
   /**
    * THE BOUND IS THE LOOSER OF THE TWO, AND AN ABSENT ONE IS ZERO RATHER THAN INFINITY.
@@ -765,7 +779,22 @@ const gradeShortText = (
   if (!('key' in read)) return read;
   const text = asString(response.text);
   if (text === null) {
-    return malformed(spec.points, why('UNPARSEABLE', 'No text was returned.'));
+    // As for `numeric`: absent is a blank, present-and-unreadable is a fault.
+    if (!('text' in response) || response.text === null) {
+      return emit(0, spec.points, why('BLANK', 'No text was returned.'));
+    }
+    return malformed(spec.points, why('UNPARSEABLE', 'The text returned could not be read.'));
+  }
+  /**
+   * WHITESPACE IS A BLANK, NOT AN ANSWER.
+   *
+   * `EXACT` would score `'   '` against a key of `'photosynthesis'` as simply wrong, so the mark is zero either
+   * way -- but the RATIONALE differs, and `BLANK` is what tells a marker the difference between a question left
+   * empty and one the student tried and got wrong. `gradePaper`'s `isAbsent` already trims for the same reason, so
+   * without this the two layers disagreed about the same response.
+   */
+  if (text.trim() === '') {
+    return emit(0, spec.points, why('BLANK', 'No text was returned.'));
   }
   const verdict = matchShortText(read.value, text, {
     matcher: spec.matcher,
