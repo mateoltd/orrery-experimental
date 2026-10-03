@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `650acc8` | **9 of 24 built.** Every sim's declared `conformance.script` and `expect` are honoured and checked; `conformance.type` records what a student enters, and it is checked against the fields the simulation actually has. `expect.value` covers a scalar answer, `expect.answer` a keyed one. `defineSim` enforces the grader arity. Multi-part partial credit, set grading, enums, seeded randomness, null answers, units, scenarios and derived answers are all exercised by real sims rather than only by the SDK's tests. |
+| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `9b5e063` | **9 of 24 built.** Every sim's declared `conformance.script` and `expect` are honoured and checked; `conformance.type` is checked against the fields the simulation actually has; `expect.value` covers a scalar answer and `expect.answer` a keyed one. `reset` is checked to restore the declared defaults, through the host. `defineSim` enforces the grader arity. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -2091,6 +2091,47 @@ declaration nobody checks is a comment.
 - **1572 unit**, 336 db integration, 3 e2e, **9/9 container gates** (the ninth is `gate:tracker`),
   lint 0, typecheck 0, `pnpm test` 22/22 tasks, `gate:browser` green, image builds green.
 - `pnpm verify` now includes the unit count, so the figure above is reproducible rather than remembered.
+
+#### P6-T11: the host's parameters never reached the simulation
+
+**`sim:init` CARRIES `params`, AND `connectSim` NEVER HANDED THEM OVER.** It consumes the first
+`sim:init` to learn the nonce and build the bridge, reads the sim id and the version off it, and stops
+there. Every simulation began on whatever defaults its own source file hardcoded. A teacher who
+configured a lesson with specific values got a simulation showing different numbers, and nothing in the
+protocol reported that the values had been dropped.
+
+**IT TOOK A CELL THAT COULD NOT SEE A CHANGE TO NOTICE, AND THAT IS THE PART THAT MATTERS.** The cell
+asserts `reset` puts a student back where they started — a real guarantee no simulation had ever been
+asked for, because all nine drove `setParams` only. Posting `sim:setParams` into the frame could not test
+it: the reply came back with the UNCHANGED state every time. And `expect.grade` was no help, because it
+is computed in **Node** from the manifest's params and never reads the browser at all. Three suites, all
+green, and not one of them able to see a host fail to configure a simulation.
+
+**THE MISLEADING EVIDENCE, AND IT IS WORTH NAMING.** The simulations record every inbound frame type in
+their own listener, which runs BEFORE the bridge authenticates the frame — so `__simReceived` showed
+`sim:setParams` ARRIVING while the bridge was dropping it. The evidence that looked like proof of delivery
+was evidence of the opposite, and I read it as proof for several steps before the counters disagreed.
+
+**WHAT ELSE THE FIX UNCOVERED, both now fixed:**
+
+- **A frame arriving before `sim:init` is dropped SILENTLY** — there is no nonce to authenticate it with.
+  A conformance script that posted the moment the page loaded raced the handshake, and `setParams` lost
+  about one run in three: `physics.newtons-second-law` answered `"acceleration"` for a script that had
+  just set `"mass"`. Invisible while init params were discarded, because then the race had nothing to
+  decide. The runner now waits for READY before scripting.
+- **THE HARNESS WRAPPED THE FRAME IN `StrictMode`**, which double-invokes effects: the sim mounted, tore
+  down, and mounted again with a fresh document. A harness that measures a simulation through a remount is
+  measuring React, not the simulation. Production does not remount a lesson block.
+
+**THE RESET CELL RUNS LAST AND RESTORES THE PAGE**, because it remounts three times through the host and
+two unrelated cells started failing the moment it sat second in the list. A cell owns its own effects.
+
+`scripts/repro-init-params.mjs` reproduces the original defect in one command.
+
+#### P6-T11 evidence
+- 9 of 24 gold sims. `pnpm sim:conformance` **153/153** across **three consecutive runs**; `pnpm test:sims`
+  69/69; **1575 unit**; 336 db integration; 3 e2e; 9/9 container gates; lint 0; typecheck 0;
+  `pnpm test` 22/22; `gate:browser` green; image builds green.
 
 #### P6-T11: the verification scripts that could not do what they claimed
 
