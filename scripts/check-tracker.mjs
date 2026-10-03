@@ -24,10 +24,31 @@
  * 4. **No heading is duplicated**, except the deliberately repeated per-task evidence headings.
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const TRACKER = join(process.cwd(), '.tmp', 'TRACKER.md');
+
+// THE TRACKER IS NOT IN THE DOCKER CONTEXT, AND THAT IS CORRECT.
+//
+// `.dockerignore` excludes `.tmp`, and `infra/docker/web.Dockerfile` runs `pnpm run gates` during the
+// image build. So adding this gate to `gates` made every image build fail with
+// `ENOENT: .tmp/TRACKER.md` -- a working document broke a product build. The tracker is the record of the
+// work; it is not an artifact of the work, and a repository-only check has no business failing a build
+// that legitimately has no repository in it.
+//
+// So the absence is a SKIP, stated as a skip. Silently passing would be the worse bug: it would look like
+// the tracker had been verified.
+if (!existsSync(TRACKER)) {
+  console.log('TRACKER INTEGRITY GATE');
+  console.log('  SKIPPED — .tmp/TRACKER.md is not in this context.');
+  console.log(
+    '  This is expected inside the image build, where .tmp is excluded by .dockerignore.',
+  );
+  console.log('  Run it from the repository checkout to check the tracker.');
+  process.exit(0);
+}
+
 const problems = [];
 const bad = (message) => problems.push(message);
 
