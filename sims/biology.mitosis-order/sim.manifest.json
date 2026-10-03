@@ -1,0 +1,137 @@
+{
+  "id": "biology.mitosis-order",
+  "version": "1.0.0",
+  "title": "Ordering the stages of cell division",
+  "summary": "Put the described stages of cell division into the order they happen.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["biology"],
+  "tags": ["cell-division", "mitosis", "sequencing"],
+  "ageRange": [13, 16],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A list of six described events with buttons to move each one up and down, and a button to submit.",
+    "reducedMotion": true,
+    "textAlternative": "Six events from one cell division are described, each without its name. Arrange them in the order they occur, beginning with the stage in which DNA is copied and ending with the division of the cytoplasm."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "count": {
+        "type": "number",
+        "label": "Stages",
+        "unit": "",
+        "minimum": 2,
+        "maximum": 6,
+        "default": 6
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 420,
+    "minHeight": 300,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "click",
+        "args": {
+          "selector": "#sim-up-4"
+        }
+      },
+      {
+        "command": "click",
+        "args": {
+          "selector": "#sim-up-3"
+        }
+      },
+      {
+        "command": "click",
+        "args": {
+          "selector": "#sim-up-2"
+        }
+      },
+      {
+        "command": "click",
+        "args": {
+          "selector": "#sim-up-1"
+        }
+      },
+      {
+        "command": "click",
+        "args": {
+          "selector": "#sim-up-3"
+        }
+      },
+      {
+        "command": "click",
+        "args": {
+          "selector": "#sim-up-2"
+        }
+      },
+      {
+        "command": "click",
+        "args": {
+          "selector": "#sim-up-3"
+        }
+      },
+      {
+        "command": "click",
+        "args": {
+          "selector": "#sim-up-5"
+        }
+      },
+      {
+        "command": "click",
+        "args": {
+          "selector": "#sim-up-4"
+        }
+      },
+      {
+        "command": "click",
+        "args": {
+          "selector": "#sim-submit"
+        }
+      }
+    ],
+    "type": {},
+    "expect": {
+      "value": {
+        "sequence": ["Interphase", "Prophase", "Metaphase", "Anaphase", "Telophase", "Cytokinesis"]
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "ORDER",
+    "maxPoints": 4,
+    "partialCredit": true,
+    "rationaleTemplate": "You had {right} of {expected} stages in the right position."
+  }
+}

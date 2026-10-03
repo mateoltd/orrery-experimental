@@ -26,7 +26,15 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { defineSim, gradeStoredState } from './define.js';
-import { exact, numeric, rubric, setMatch, tolerance, withinTolerance } from './grading.js';
+import {
+  exact,
+  numeric,
+  orderMatch,
+  rubric,
+  setMatch,
+  tolerance,
+  withinTolerance,
+} from './grading.js';
 import { bool, choice, clampParams, int, num, str, validateParamSpecs } from './params.js';
 import { checksumState, restoreState, serialiseState, serialiseToText } from './state.js';
 import { createStepper, initialStepper, MAX_CATCHUP_STEPS, stepperReduce } from './stepper.js';
@@ -755,5 +763,70 @@ describe('a zero tolerance is an EXACT match, not a rejection', () => {
     const spec = { abs: 0, rel: 0, maxPoints: 4, partialCredit: false };
     expect(tolerance(3, 4, spec).points).toBe(0);
     expect(tolerance(4, 4, spec).points).toBe(4);
+  });
+});
+describe('orderMatch', () => {
+  const expected = ['Interphase', 'Prophase', 'Metaphase', 'Anaphase', 'Telophase', 'Cytokinesis'];
+  const spec = { maxPoints: 4 } as const;
+
+  it('awards full marks only when EVERY POSITION is right', () => {
+    expect(orderMatch(expected, expected, spec).points).toBe(4);
+  });
+
+  // THE INVERSION `setMatch` EXISTS TO PREVENT.
+  //
+  // A set matcher would score a completely reversed sequence as a perfect answer, because every item is
+  // present. For a sequencing task the order IS the question, so reusing `setMatch` there would mark a
+  // reversed sequence correct -- the exact mirror image of marking `1, 3` wrong for `3, 1` in a
+  // quadratic.
+  it('does NOT care that the items are present when the positions are wrong', () => {
+    const reversed = [...expected].reverse();
+    expect(setMatch(reversed, expected, spec).points).toBe(4);
+    expect(orderMatch(reversed, expected, spec).points).toBe(0);
+  });
+
+  it('CREDITS BY POSITION, not by how many items are somewhere correct', () => {
+    // `['Interphase', 'Metaphase', 'Prophase', 'Anaphase', 'Telophase', 'Cytokinesis']` has all six items
+    // and only positions 0, 3, 4 and 5 right -- so the two counts differ, and the positional one is
+    // lower. A student cannot keep full marks by getting the set right and the order wrong.
+    const swapped = [expected[0], expected[2], expected[1], ...expected.slice(3)];
+    expect(swapped.filter((item) => expected.includes(item)).length).toBe(6);
+    const grade = orderMatch(swapped, expected, { ...spec, partialCredit: true });
+    expect(grade.points).toBeCloseTo((4 / 6) * 4, 6);
+  });
+
+  it('awards no partial credit unless it is asked for', () => {
+    expect(orderMatch([expected[0], ...expected.slice(2)], expected, spec).points).toBe(0);
+    expect(
+      orderMatch([expected[0], ...expected.slice(2)], expected, { ...spec, partialCredit: true })
+        .points,
+    ).toBeGreaterThan(0);
+  });
+
+  it('does not credit a list that is TOO LONG, and says so', () => {
+    const grade = orderMatch([...expected, 'Nuclear envelope reformed'], expected, {
+      ...spec,
+      partialCredit: true,
+    });
+    expect(grade.points).toBeLessThan(4);
+    expect(grade.rationale).toMatch(/past the end/);
+  });
+
+  it('treats an empty or non-list answer as no answer rather than throwing', () => {
+    for (const bad of ['', null, undefined, 'Interphase', {}, 42]) {
+      expect(orderMatch(bad, expected, { ...spec, partialCredit: true }).points).toBe(0);
+    }
+  });
+
+  it('folds case and whitespace by default, and can be told not to', () => {
+    const shouty = expected.map((item) => `  ${item.toUpperCase()} `);
+    expect(orderMatch(shouty, expected, { ...spec, partialCredit: true }).points).toBe(4);
+    expect(orderMatch(shouty, expected, { ...spec, caseSensitive: true }).points).toBe(0);
+  });
+
+  it('scores nothing at all when nothing was expected, rather than dividing by zero', () => {
+    const grade = orderMatch(expected, [], { ...spec, partialCredit: true });
+    expect(grade.points).toBe(0);
+    expect(grade.rationale).toMatch(/nothing was expected/);
   });
 });

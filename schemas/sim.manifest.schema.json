@@ -145,6 +145,7 @@
             "max": { "type": "number" },
             "in": { "type": "array", "minItems": 1 },
             "set": { "type": "array", "minItems": 1 },
+            "sequence": { "type": "array", "minItems": 1 },
             "prefix": { "type": "string", "minLength": 4 }
           }
         }
@@ -354,7 +355,7 @@
       "properties": {
         "strategy": {
           "type": "string",
-          "enum": ["EXACT", "TOLERANCE", "SET", "NUMERIC", "RUBRIC"]
+          "enum": ["EXACT", "TOLERANCE", "SET", "ORDER", "NUMERIC", "RUBRIC"]
         },
         "maxPoints": {
           "type": "number",
@@ -425,7 +426,7 @@
             "properties": {
               "command": {
                 "type": "string",
-                "enum": ["setParams", "command", "wait", "requestState", "reset"]
+                "enum": ["setParams", "command", "click", "wait", "requestState", "reset"]
               },
               "args": {
                 "type": "object"

@@ -123,7 +123,7 @@ export const capabilitiesSchema = z.object({
 export const plainObjectSchema = z.object({ type: z.literal('object') });
 
 export const gradingSchema = z.object({
-  strategy: z.enum(['EXACT', 'TOLERANCE', 'SET', 'NUMERIC', 'RUBRIC']),
+  strategy: z.enum(['EXACT', 'TOLERANCE', 'SET', 'ORDER', 'NUMERIC', 'RUBRIC']),
   maxPoints: z.number().min(0.25).max(100),
   tolerance: z
     .object({
@@ -156,6 +156,7 @@ const expectationSchema = z.union([
       max: z.number().optional(),
       in: z.array(z.unknown()).min(1).optional(),
       set: z.array(z.unknown()).min(1).optional(),
+      sequence: z.array(z.unknown()).min(1).optional(),
       prefix: z.string().min(4).optional(),
     })
     .strict(),
@@ -165,7 +166,9 @@ export const conformanceSchema = z.object({
   script: z
     .array(
       z.object({
-        command: z.enum(['setParams', 'command', 'wait', 'requestState', 'reset']),
+        // `click` drives the simulation's OWN controls from Node, which is the only way to exercise an
+        // interaction the simulation implements itself rather than injecting an answer past it.
+        command: z.enum(['setParams', 'command', 'click', 'wait', 'requestState', 'reset']),
         args: z.record(z.string(), z.unknown()).optional(),
       }),
     )

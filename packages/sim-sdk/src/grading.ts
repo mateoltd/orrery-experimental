@@ -16,7 +16,7 @@
  * it is invisible until a real student's number lands near the boundary.
  */
 
-export type GradingStrategy = 'EXACT' | 'TOLERANCE' | 'SET' | 'NUMERIC' | 'RUBRIC';
+export type GradingStrategy = 'EXACT' | 'TOLERANCE' | 'SET' | 'ORDER' | 'NUMERIC' | 'RUBRIC';
 
 export interface Grade {
   /** Points awarded, within `maxPoints`. Never negative, never above the maximum. */
@@ -281,6 +281,97 @@ export function setMatch(
 }
 
 /** `RUBRIC` grading: a human decided, and the machine records it without re-deciding. */
+/**
+ * `ORDER` grading: a SEQUENCE, where position is part of the answer.
+ *
+ * ## WHY THIS IS NOT `setMatch`
+ *
+ * `setMatch` compares a SET, because the order a quadratic's roots are written in is not part of the
+ * answer. Ordering a set of stages IS the question in a sequencing task, and reusing the set matcher
+ * there would mark a completely reversed sequence as a perfect score -- the exact inversion of the
+ * mistake `setMatch` exists to prevent.
+ *
+ * ## CREDIT IS PER POSITION, NOT PER ITEM
+ *
+ * Partial credit counts how many POSITIONS hold the right item. That is not the same as how many items
+ * are somewhere correct: with `[A, B, C, D]` given against `[A, C, B, D]` expected, four items are all
+ * present and two positions are right, so the two counts differ. Credit per position is the honest
+ * reading of "how much of the sequence is right", and it is also the harder one to inflate: a student
+ * cannot keep full marks by getting the set right and the order wrong, which is precisely the mistake
+ * this strategy is for.
+ *
+ * ## AN EXTRA ITEM IS A MISSED POSITION
+ *
+ * A list longer than the expected one cannot earn marks for its surplus, because each surplus entry
+ * occupies a position that should hold the right item. Its score is reported rather than hidden.
+ */
+const toList = (value: unknown, fold: (input: string) => string): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => fold(String(entry)));
+};
+
+export function orderMatch(
+  given: unknown,
+  expected: readonly string[],
+  spec: {
+    readonly maxPoints: number;
+    readonly partialCredit?: boolean;
+    readonly caseSensitive?: boolean;
+  },
+): Grade {
+  const fold = spec.caseSensitive === true ? (value: string): string => value : canonicalText;
+  const givenList = toList(given, fold);
+  const expectedList = expected.map((value) => fold(value));
+  const maxPoints = spec.maxPoints;
+
+  if (expectedList.length === 0) {
+    return finish(0, maxPoints, 'ORDER', 'nothing was expected, so nothing can be scored');
+  }
+
+  let correctPositions = 0;
+  for (const [index, item] of expectedList.entries()) {
+    if (givenList[index] === item) correctPositions += 1;
+  }
+  const extra = Math.max(0, givenList.length - expectedList.length);
+  const misplaced = expectedList.length - correctPositions;
+
+  if (correctPositions === expectedList.length && extra === 0) {
+    return finish(
+      maxPoints,
+      maxPoints,
+      'ORDER',
+      `all ${String(expectedList.length)} positions are right`,
+    );
+  }
+
+  if (spec.partialCredit === true) {
+    // THE DENOMINATOR IS HOW MANY POSITIONS THE ANSWER OCCUPIES, not how many were expected.
+    //
+    // Dividing by the expected length alone gave full marks to a seven-item answer that got all six
+    // expected positions right and then added one: six of six, so 4 of 4, and the surplus cost nothing.
+    // An extra item occupies a position that should hold the right one, so it belongs in the count of
+    // positions the student had to get right.
+    const positions = Math.max(expectedList.length, givenList.length);
+    const fraction = correctPositions / positions;
+    return finish(
+      maxPoints * fraction,
+      maxPoints,
+      'ORDER',
+      `${String(correctPositions)} of ${String(positions)} positions hold the right item` +
+        (extra > 0 ? `, and ${String(extra)} item${extra === 1 ? '' : 's'} past the end` : ''),
+    );
+  }
+
+  return finish(
+    0,
+    maxPoints,
+    'ORDER',
+    `${String(correctPositions)} of ${String(expectedList.length)} positions right, ` +
+      `${String(misplaced)} misplaced` +
+      (extra > 0 ? `, ${String(extra)} extra` : ''),
+  );
+}
+
 export function rubric(decision: {
   readonly points: number;
   readonly maxPoints: number;

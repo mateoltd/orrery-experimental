@@ -192,6 +192,24 @@ const runManifestScript = async (page, frame, entry, manifest) => {
 
   const before = await page.evaluate(() => globalThis.__conformance.log.answers.length);
   for (const step of steps) {
+    // REAL UI INTERACTIONS, driven from Node. `page.evaluate` serialises its function into the browser,
+    // so a Playwright call placed in there is not a Playwright call at all -- it is a `ReferenceError`
+    // that would be reported as the simulation misbehaving. Clicking is also the only way to exercise an
+    // interaction the simulation implements itself: every other step speaks the protocol, and a scripted
+    // answer injected through `type` would test the grader rather than the simulation.
+    if (step.command === 'click') {
+      const inside = page.frameLocator('iframe');
+      const selector = String(step.args?.selector ?? '');
+      if (step.what === 'fill') {
+        await inside.locator(selector).fill(String(step.args?.value ?? ''));
+      } else if (step.what === 'select') {
+        await inside.locator(selector).selectOption(String(step.args?.value ?? ''));
+      } else {
+        await inside.locator(selector).click();
+      }
+      await page.waitForTimeout(120);
+      continue;
+    }
     await page.evaluate(async (s) => {
       const frame = globalThis.document.querySelector('iframe');
       const target = frame?.contentWindow;
@@ -346,6 +364,19 @@ const runManifestScript = async (page, frame, entry, manifest) => {
         remaining.splice(at, 1);
       }
       return true;
+    }
+    // `{ sequence: [...] }` -- an ORDERED collection, where position is part of the answer.
+    //
+    // The mirror of `{ set: [...] }`, and needed for the same reason in the opposite direction: ordering
+    // stages is the question, so every item being present is not evidence of anything. Without this, a
+    // simulation graded `ORDER` could not declare a checked expectation at all -- which is the state the
+    // platform was in for scalar answers before `expect.value` and for enums before `in`.
+    if (want !== null && typeof want === 'object' && Array.isArray(want.sequence)) {
+      const actual = Array.isArray(got) ? got : null;
+      if (actual === null || actual.length !== want.sequence.length) return false;
+      return want.sequence.every(
+        (value, index) => JSON.stringify(value) === JSON.stringify(actual[index]),
+      );
     }
     // `{ in: [...] }` -- "the answer is one of these". Added for ENUM-valued answers, where the exact
     // value is an implementation detail but WHICH quantity was answered is the whole point: the first
