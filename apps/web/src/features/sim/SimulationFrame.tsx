@@ -67,6 +67,15 @@ export interface SimulationFrameProps {
    */
   readonly simOrigin: string;
   readonly params: Readonly<Record<string, unknown>>;
+  /**
+   * The student's saved state, sent back on `sim:init`.
+   *
+   * `hostBridge` already stamps this onto the init frame and `PROTOCOL.md` already documents it, but
+   * nothing ever PASSED it in -- there was no prop for it. So a returning attempt mounted a simulation
+   * with no memory of the previous session, and because the parameters still arrived, nothing looked
+   * wrong. A student who saved their work and came back found it gone, and the page rendered perfectly.
+   */
+  readonly initialState?: unknown;
   readonly mode: SimMode;
   readonly seedPolicy: SeedPolicy;
   readonly defaultHeight: number;
@@ -146,6 +155,7 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
     simVersion,
     bundleUrl,
     params,
+    initialState,
     mode,
     seedPolicy,
     defaultHeight,
@@ -264,6 +274,32 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
    * its identity would rebuild the bridge on every render for values that never changed.
    */
   const paramsKey = JSON.stringify(params);
+  /**
+   * The saved state, keyed on its CONTENT, for the same reason as `paramsKey` above.
+   *
+   * `initialState` is an object handed in from a saved attempt, and depending on its IDENTITY would
+   * rebuild the bridge -- re-handshake, and wipe the very state being restored -- on every render of
+   * the lesson around it. Leaving it out of the dependency list is not the alternative: a NEW saved
+   * state arriving for the same simulation has to reach the bridge, or the student silently keeps the
+   * old one and never finds out.
+   *
+   * `JSON.stringify` is lossy for a Map or a Set, and a simulation state is only ever JSON because it
+   * has to survive `postMessage` and a checksum -- so this is the same trade `paramsKey` makes.
+   */
+  // `stableInitialState` is `initialState` with a CONTENT-derived identity, exactly as `stableParams` is
+  // for `params`: same value, but a stable one when the value has not changed. Depending on
+  // `initialState` directly would rebuild the bridge -- re-handshake, and wipe the state being
+  // restored -- on every render of the lesson around it, while leaving it out entirely would mean a
+  // NEW saved state for the same simulation never reaches the bridge.
+  const initialStateKey = initialState === undefined ? '' : JSON.stringify(initialState);
+  // Derived from the KEY ALONE, which is how `stableParams` avoids depending on `params`'s identity:
+  // a state is JSON by construction -- it has to survive `postMessage` and a checksum -- so parsing the
+  // serialised value loses nothing. `''` means `undefined`, and `'null'` round-trips to `null`, so the
+  // two are still distinguishable, and "restore nothing" is not confused with "restore null".
+  const stableInitialState = useMemo(
+    () => (initialStateKey === '' ? undefined : (JSON.parse(initialStateKey) as unknown)),
+    [initialStateKey],
+  );
   // Read through a ref, and keyed on the serialised VALUE. The content is what the simulation is
   // configured by; the identity is an artefact of whoever built the object this render.
   const policyRef = useRef(seedPolicy);
@@ -366,6 +402,10 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
       // Through the refs, because `paramsKey` and `seed` are what the effect is keyed on -- the CONTENT,
       // never the identity. Reading the objects directly here is what made the effect re-run per render.
       params: stableParams,
+      // OMITTED when there is nothing saved. An init frame carrying `initialState: undefined` tells a
+      // simulation to RESTORE NOTHING, which is a different message from not mentioning it at all, and a
+      // simulation cannot tell those apart.
+      ...(stableInitialState === undefined ? {} : { initialState: stableInitialState }),
       seed,
       seedPolicy: policyRef.current,
       gradingSupplied: mode === 'graded',
@@ -448,6 +488,8 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
     nonce,
     mode,
     stableParams,
+    // `stableInitialState`, whose identity tracks its CONTENT -- see above.
+    stableInitialState,
     seed,
     // NOT `seedPolicy`: it is an object, and depending on its identity rebuilt the bridge on every
     // render. A genuine policy change is still covered, because `seed` is derived from the policy's

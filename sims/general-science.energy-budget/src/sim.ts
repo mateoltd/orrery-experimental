@@ -207,6 +207,20 @@ export function startSim(
     onRequestState: () => {},
     onVisibility: () => {},
     onTeardown: () => connection?.dispose(),
+    // THE STUDENT'S SAVED WORK.
+    //
+    // `sim:init` carries `initialState` and this simulation now reads it, which it did not: a student who
+    // saved an attempt, closed the tab and came back found the simulation reset to its opening position,
+    // on a page that rendered perfectly. The conformance cell that checks this found sixteen simulations
+    // that ignored it, and this is one of them no longer.
+    onRestore: (state) => {
+      if (state !== null && typeof state === 'object') {
+        const s = state as Record<string, unknown>;
+        // The budget's own `fraction` is the efficiency, so a restored state carries the split the
+        // student was looking at rather than a second, parallel notion of it.
+        applyParams({ inputJ: Number(s.inputJ), efficiency: Number(s.fraction) * 100 });
+      }
+    },
     getState: (): Budget => budget(params.inputJ, params.efficiency),
   };
 

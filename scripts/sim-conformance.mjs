@@ -1023,6 +1023,88 @@ const CELLS = [
       return verdict;
     },
   },
+  // LAST OF ALL, AND IT OWNS THE PAGE.
+  //
+  // This cell leaves a simulation mounted from a RESTORED state -- a perfectly good page for the next
+  // cell to inherit and a misleading one. The reset cell then perturbed parameters against a baseline
+  // that was no longer the opening position, and reported `a=2 produced the same state as the default`
+  // for fourteen simulations that were perfectly fine. Two cells that both remount the page have to come
+  // LAST, in a known order, and this one goes after that one.
+  {
+    name: "the student's SAVED WORK comes back",
+    why:
+      'a simulation that ignores `initialState` loses everything the student did, silently: the protocol ' +
+      'carries it, the host stamps it, and before this cell existed nothing checked that a simulation ' +
+      'looked at it -- sixteen of sixteen did not',
+    run: async ({ page, entry, simOrigin, appOrigin }) => {
+      const baselineConfig = new URL(page.url()).searchParams.get('cfg');
+
+      // Ask the simulation to change something, so the state is a state the student would have produced.
+      // `loadScenario` is not used: it is a protocol command and the point here is the SIMULATION's work.
+      const parameter = (entry.parameters ?? []).find((p) => p.default !== undefined);
+      const perturbed =
+        parameter === undefined
+          ? {}
+          : parameter.type === 'number'
+            ? {
+                [parameter.name]:
+                  Number(parameter.default) +
+                  (Number(parameter.default) === Number(parameter.maximum) ? -1 : 1),
+              }
+            : Array.isArray(parameter.enumValues) && parameter.enumValues.length > 1
+              ? { [parameter.name]: parameter.enumValues.find((v) => v !== parameter.default) }
+              : {};
+      const workedConfig = Buffer.from(
+        JSON.stringify({
+          ...harnessConfig(entry, simOrigin),
+          params: { ...harnessConfig(entry, simOrigin).params, ...perturbed },
+        }),
+      ).toString('base64url');
+
+      const mount = async (cfg) => {
+        await page.goto(`${appOrigin}/?cfg=${cfg}`, { waitUntil: 'load' });
+        await page.waitForFunction(() => globalThis.__conformance?.ready === true, undefined, {
+          timeout: 15_000,
+        });
+        await waitForStatus(page, ['READY', 'DEGRADED']);
+        await page.waitForTimeout(300);
+        return captureState(page);
+      };
+
+      // 1. A fresh mount, and the state it produces on its own.
+      const opening = await mount(String(baselineConfig));
+      if (opening === null || typeof opening.state !== 'object' || opening.state === null) {
+        return { skip: 'the simulation reports no structured state to save' };
+      }
+      const openingChecksum = opening.checksum;
+
+      // 2. Work: perturb it, and take the state the student would have saved.
+      const worked = await mount(workedConfig);
+      if (worked === null || typeof worked.checksum !== 'string') return 'no state after working';
+      if (worked.checksum === openingChecksum && Object.keys(perturbed).length > 0) {
+        return { skip: 'no parameter could be perturbed, so there is no work to restore' };
+      }
+      const saved = worked.state;
+
+      // 3. A mount carrying that state back. The host is told to restore it, exactly as a returning
+      //    attempt would be, and the parameters go back to their DEFAULTS -- so a simulation that merely
+      //    echoed the host's parameters would not match, and only one that read `initialState` can.
+      const restoreConfig = Buffer.from(
+        JSON.stringify({
+          ...harnessConfig(entry, simOrigin),
+          initialState: saved,
+        }),
+      ).toString('base64url');
+      const restored = await mount(restoreConfig);
+      if (restored === null || typeof restored.checksum !== 'string')
+        return 'the restored mount reported no state';
+
+      return restored.checksum === worked.checksum
+        ? null
+        : `restoring ${JSON.stringify(saved).slice(0, 120)} gave ${String(restored.checksum)}, but the ` +
+            `saved state was ${String(worked.checksum)} -- the simulation did not read \`initialState\``;
+    },
+  },
 ];
 
 const run = async () => {

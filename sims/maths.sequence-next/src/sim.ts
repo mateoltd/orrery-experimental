@@ -143,6 +143,30 @@ export function startSim(
     onTeardown: () => {
       connection?.dispose();
     },
+    // THE STUDENT'S SAVED WORK.
+    //
+    // `sim:init` carries `initialState` and this simulation now reads it, which it did not: a student who
+    // saved an attempt, closed the tab and came back found the simulation reset to its opening position,
+    // on a page that rendered perfectly. The conformance cell that checks this found sixteen simulations
+    // that ignored it, and this is one of them no longer.
+    onRestore: (state) => {
+      if (state !== null && typeof state === 'object') {
+        const s = state as Record<string, unknown>;
+        // THE SEED IS THE QUESTION. Two students with different seeds see different sequences, so a
+        // student who came back to a different one was not looking at their own work -- and no error was
+        // possible, because the page rendered a perfectly valid sequence.
+        //
+        // The seed is stored as the NUMBER `parseInt(seed, 16)` produces, so restoring it is the inverse of
+        // storing it: back to hex, zero-padded to the width `parseInt` was given.
+        const restored = Number(s.seed);
+        if (Number.isFinite(restored) && restored >= 0) {
+          seed = restored.toString(16);
+          shown = typeof s.shown === 'number' ? s.shown : shown;
+          field.value = '';
+          refresh();
+        }
+      }
+    },
     getState: () => snapshot(),
   };
 

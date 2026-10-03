@@ -191,6 +191,24 @@ export function startSim(
     onRequestState: () => {},
     onVisibility: () => {},
     onTeardown: () => connection?.dispose(),
+    // THE STUDENT'S SAVED WORK.
+    //
+    // `sim:init` carries `initialState` and this simulation now reads it, which it did not: a student who
+    // saved an attempt, closed the tab and came back found the simulation reset to its opening position,
+    // on a page that rendered perfectly. The conformance cell that checks this found sixteen simulations
+    // ignoring it, and this is one of them no longer.
+    onRestore: (state) => {
+      if (state !== null && typeof state === 'object') {
+        const s = state as Record<string, unknown>;
+        // The state carries BOTH the measured parallax and the distance it implies. Restoring the
+        // distance and inverting it would accumulate the rounding of a value that was only ever
+        // computed for display, so the measurement is what comes back.
+        applyParams({
+          parallax: Number(s.measured),
+          inLightYears: s.unit === 'light years',
+        });
+      }
+    },
     getState: () => ({
       parallax: parsecs(params.parallax),
       measured: params.parallax,

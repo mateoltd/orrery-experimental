@@ -48,6 +48,21 @@ export interface BridgeHandlers {
   onRequestState?(reason: StateRequestReason): void;
   onVisibility?(visible: boolean): void;
   onSetParams?(params: Readonly<Record<string, unknown>>, seed?: string): void;
+  /**
+   * Rehydrate from a state the HOST is handing back.
+   *
+   * `sim:init` carries `initialState`, `PROTOCOL.md` documents it, and the host fills it from a saved
+   * attempt -- but nothing ever read it. A student who saved, closed the tab and came back found the
+   * simulation reset to its opening position, and no frame reported that anything had been lost.
+   *
+   * It arrives as a WHOLE rather than merged into the parameters, because a state and a parameter are
+   * different things: a parameter is a setting the host chose, while a state is whatever the student
+   * actually did, which need not be expressible as a parameter at all. A simulation that cannot restore
+   * omits this, and then `getState` should return something it would be content to lose.
+   *
+   * Called AFTER `onSetParams`, so the student's own values win over the host's defaults.
+   */
+  onRestore?(state: unknown): void;
   onTeardown?(): void;
   /** Supply the current state when the host asks for it. */
   getState(): unknown;
@@ -475,6 +490,19 @@ export function connectSim(input: ConnectSimInput): SimConnection {
     // that had never seen a single configured value.
     if (frame.params !== undefined) {
       input.handlers.onSetParams?.(frame.params, frame.seed);
+    }
+    // `initialState` IS THE STUDENT'S WORK COMING BACK, AND IT WAS BEING DROPPED.
+    //
+    // `sim:init` carries it, the host stamps it from the saved attempt, and `PROTOCOL.md` documents it --
+    // but the listener read the frame for its nonce, its sim id and its version, and nothing ever looked
+    // at the state. A student who saved an attempt, closed the tab and came back found a simulation reset
+    // to its opening position, and no frame reported that anything had been lost.
+    //
+    // It is handed to the simulation as a WHOLE rather than merged into the parameters, because a state and
+    // a parameter are different things: a parameter is a setting the host chose, and a state is whatever
+    // the student actually did, which may not be expressible as a parameter at all.
+    if (frame.initialState !== undefined) {
+      input.handlers.onRestore?.(frame.initialState);
     }
     bridge.ready({
       simId: input.expectedSimId,

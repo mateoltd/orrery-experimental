@@ -30,6 +30,8 @@ interface HarnessConfig {
   readonly textAlternative: string;
   readonly title: string;
   readonly params: Record<string, unknown>;
+  /** A saved state to restore, when a cell is testing save/restore. Omitted otherwise. */
+  readonly initialState?: unknown;
   readonly mode: 'lesson' | 'graded' | 'preview';
 }
 
@@ -123,6 +125,9 @@ createRoot(mountPoint).render(
     bundleUrl={config.bundleUrl}
     simOrigin={config.simOrigin}
     params={config.params}
+    // Only present when a cell asked for a restore; otherwise the prop is OMITTED, so an ordinary mount
+    // carries nothing -- which is exactly what a real first visit looks like.
+    {...(config.initialState === undefined ? {} : { initialState: config.initialState })}
     mode={config.mode}
     seedPolicy={{ kind: 'FIXED', seed: 'conformance-seed' }}
     defaultHeight={config.defaultHeight}

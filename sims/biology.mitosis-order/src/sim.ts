@@ -133,6 +133,24 @@ export function startSim(
     onRequestState: () => {},
     onVisibility: () => {},
     onTeardown: () => connection?.dispose(),
+    // THE STUDENT'S SAVED WORK.
+    //
+    // `sim:init` carries `initialState` and this simulation now reads it, which it did not: a student who
+    // saved an attempt, closed the tab and came back found the simulation reset to its opening position,
+    // on a page that rendered perfectly. The conformance cell that checks this found sixteen simulations
+    // that ignored it, and this is one of them no longer.
+    onRestore: (state) => {
+      if (state !== null && typeof state === 'object') {
+        const s = state as Record<string, unknown>;
+        // The ORDER is the student's work. Restoring the count alone would restore the question and
+        // throw away the arrangement they had built.
+        if (Array.isArray(s.order)) order = s.order.map((entry) => String(entry));
+        params = { count: Number(s.count) };
+        submitted = s.submitted === true;
+        render();
+        alternative.textContent = describeOrder(params.count);
+      }
+    },
     getState: () => ({ order, count: params.count, submitted }),
   };
 

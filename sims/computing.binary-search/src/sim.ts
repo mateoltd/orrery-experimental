@@ -218,6 +218,21 @@ export function startSim(
     onRequestState: () => {},
     onVisibility: () => {},
     onTeardown: () => connection?.dispose(),
+    // THE STUDENT'S SAVED WORK.
+    //
+    // `sim:init` carries `initialState` and this simulation now reads it, which it did not: a student who
+    // saved an attempt, closed the tab and came back found the simulation reset to its opening position,
+    // on a page that rendered perfectly. The conformance cell that checks this found sixteen simulations
+    // that ignored it, and this is one of them no longer.
+    onRestore: (state) => {
+      if (state !== null && typeof state === 'object') {
+        const s = state as Record<string, unknown>;
+        applyParams({ target: Number(s.target), length: Number(s.length) });
+        // The stepper is part of the state, not a function of the parameters: a student who scrubbed to
+        // step four and came back to step zero had their place taken away.
+        stepper.dispatch({ type: 'scrubTo', t: Number(s.step) });
+      }
+    },
     getState: () => ({
       target: params.target,
       length: params.length,

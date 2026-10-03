@@ -107,6 +107,61 @@ describe('connectSim', () => {
     expect(calls).toBe(0);
   });
 
+  // THE STUDENT'S SAVED WORK, WHICH WAS BEING DROPPED.
+  //
+  // `sim:init` carries `initialState`, `PROTOCOL.md` documents it, and the host fills it from a saved
+  // attempt -- but the listener read the frame for its nonce, its id and its version and nothing ever
+  // looked at the state. A student who saved, closed the tab and came back found the simulation reset to
+  // its opening position, and no frame reported that anything had been lost.
+  it('HANDS the `initialState` to the simulation', () => {
+    const t = transport();
+    const seen: unknown[] = [];
+    connectSim({
+      transport: t,
+      handlers: handlers({ onRestore: (state) => seen.push(state) }),
+      expectedSimId: 'maths.projectile-motion',
+      expectedVersion: '1.0.0',
+      capabilities: CAPABILITIES,
+    });
+    t.deliver(initFrame({ initialState: { t: 2.5, revealed: ['a'] } }));
+    expect(seen).toEqual([{ t: 2.5, revealed: ['a'] }]);
+  });
+
+  it("RESTORES AFTER THE PARAMETERS, so a student's values win over the host's defaults", () => {
+    const t = transport();
+    const order: string[] = [];
+    connectSim({
+      transport: t,
+      handlers: handlers({
+        onSetParams: () => order.push('params'),
+        onRestore: () => order.push('restore'),
+      }),
+      expectedSimId: 'maths.projectile-motion',
+      expectedVersion: '1.0.0',
+      capabilities: CAPABILITIES,
+    });
+    t.deliver(initFrame({ params: { speed: 25 }, initialState: { speed: 40 } }));
+    expect(order).toEqual(['params', 'restore']);
+  });
+
+  it('does not call `onRestore` when there is no saved state', () => {
+    const t = transport();
+    let calls = 0;
+    connectSim({
+      transport: t,
+      handlers: handlers({
+        onRestore: () => {
+          calls += 1;
+        },
+      }),
+      expectedSimId: 'maths.projectile-motion',
+      expectedVersion: '1.0.0',
+      capabilities: CAPABILITIES,
+    });
+    t.deliver(initFrame());
+    expect(calls).toBe(0);
+  });
+
   it('has NO bridge before `sim:init`, because there is no nonce to echo yet', () => {
     const t = transport();
     const connection = connectSim({

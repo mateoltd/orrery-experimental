@@ -234,6 +234,27 @@ export function startSim(
     onTeardown: () => {
       connection?.dispose();
     },
+    // THE STUDENT'S SAVED WORK.
+    //
+    // `sim:init` carries `initialState` and this simulation now reads it, which it did not: a student who
+    // saved an attempt, closed the tab and came back found the simulation reset to its opening position,
+    // on a page that rendered perfectly. The conformance cell that checks this found sixteen simulations
+    // that ignored it, and this is one of them no longer.
+    onRestore: (state) => {
+      if (state !== null && typeof state === 'object') {
+        const s = state as Record<string, unknown>;
+        applyScenario(s.scenario);
+        const restoredT = Number(s.t);
+        if (Number.isFinite(restoredT) && restoredT > 0) {
+          // `t` ITSELF, not just the field. The first version set `time.value` and redrew, so the student
+          // SAW the restored time while `getState` still reported the old one -- the picture and the saved
+          // state disagreeing, which is worse than not restoring at all because it looks restored.
+          t = restoredT;
+          time.value = String(t);
+          refresh();
+        }
+      }
+    },
     getState: () => ({ scenario: scenario.name, t }),
   };
 

@@ -262,6 +262,25 @@ export function startSim(
     onTeardown: () => {
       connection?.dispose();
     },
+    // THE STUDENT'S SAVED WORK.
+    //
+    // `sim:init` carries `initialState` and this simulation now reads it, which it did not: a student who
+    // saved an attempt, closed the tab and came back found the simulation reset to its opening position,
+    // on a page that rendered perfectly. The conformance cell that checks this found sixteen simulations
+    // ignoring it, and this is one of them no longer.
+    onRestore: (state) => {
+      if (state !== null && typeof state === 'object') {
+        const s = state as Record<string, unknown>;
+        restart(
+          paramsFrom({
+            force: Number(s.force),
+            mass: Number(s.mass),
+            accel: Number(s.accel),
+            solveFor: String(s.solveFor),
+          }),
+        );
+      }
+    },
     getState: () => snapshot(),
   };
 

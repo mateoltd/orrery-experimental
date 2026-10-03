@@ -341,6 +341,30 @@ export function startSim(document_: Document, window_: Window, parent: Window | 
       running = false;
       connection?.dispose();
     },
+    // THE STUDENT'S SAVED WORK.
+    //
+    // `sim:init` carries `initialState` and this simulation now reads it, which it did not: a student who
+    // saved an attempt, closed the tab and came back found the simulation reset to its opening position,
+    // on a page that rendered perfectly. The conformance cell that checks this found sixteen simulations
+    // ignoring it, and this is one of them no longer.
+    onRestore: (state) => {
+      if (state !== null && typeof state === 'object') {
+        const s = state as Record<string, unknown>;
+        const saved = s.params;
+        if (saved !== null && typeof saved === 'object') {
+          restart(paramsFrom(saved as Record<string, unknown>));
+        }
+        // The TIMELINE is the student's position in the flight, not a function of the parameters.
+        // Restoring the parameters alone drops them back to t = 0, which is the opening frame.
+        stepper.dispatch({ type: 'scrubTo', t: Number(s.t) });
+        // Restoring a RUNNING simulation would start it moving again on a page the student is still
+        // reading, with no press of play. The state records it so a reload can show the button pressed; the
+        // motion itself is the student's to start.
+        running = false;
+        play.setAttribute('aria-pressed', 'false');
+        refresh();
+      }
+    },
     getState: () => snapshot(),
   };
 

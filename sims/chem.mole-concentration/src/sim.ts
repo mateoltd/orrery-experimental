@@ -182,6 +182,17 @@ export function startSim(
     onRequestState: () => {},
     onVisibility: () => {},
     onTeardown: () => connection?.dispose(),
+    // THE STUDENT'S SAVED WORK.
+    //
+    // `sim:init` carries `initialState` and this simulation now reads it, which it did not: a student who
+    // saved an attempt, closed the tab and came back found the simulation reset to its opening position,
+    // on a page that rendered perfectly. The conformance cell that checks this found sixteen simulations
+    // that ignored it, and this is one of them no longer.
+    onRestore: (state) => {
+      if (state !== null && typeof state === 'object') {
+        applyParams(state as Partial<ConcentrationParams>);
+      }
+    },
     getState: () => ({ buretteCm: params.buretteCm, flaskMl: params.flaskMl }),
   };
 
