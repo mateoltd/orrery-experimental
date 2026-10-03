@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `a8d1f05` | **11 of 24 built.** Every sim's declared `conformance.script` (which may now press the simulation's own controls), `expect`, `conformance.type` and `reset` are honoured and checked against the simulation's real fields and states. Grading strategies exercised by real sims: EXACT, TOLERANCE, NUMERIC, SET and ORDER. Maths, physics, chemistry, computing and biology are all represented. |
+| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `e742b8d` | **12 of 24 built.** Every sim's declared `conformance.script` (which may press the simulation's own controls), `expect`, `conformance.type` and `reset` are honoured and checked against the simulation's real fields and states. Strategies exercised by real sims: EXACT, TOLERANCE, NUMERIC, SET and ORDER; answers exercised: numbers, units, sets, ordered lists, scalars, and free TEXT. Five subjects represented. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -2132,6 +2132,46 @@ two unrelated cells started failing the moment it sat second in the list. A cell
 - 9 of 24 gold sims. `pnpm sim:conformance` **153/153** across **three consecutive runs**; `pnpm test:sims`
   69/69; **1575 unit**; 336 db integration; 3 e2e; 9/9 container gates; lint 0; typecheck 0;
   `pnpm test` 22/22; `gate:browser` green; image builds green.
+
+#### P6-T11: gold sim 12, and the answer that is a SENTENCE
+
+**`chemistry.equation-balancing` — THE STUDENT TYPES A LINE OF CHEMICAL ALGEBRA.** Every other
+simulation's answer is a number, a set or a list; this is the first thing on a chemistry course that
+cannot be reduced to a value in a box, and the platform's first **time-typed** graded answer.
+
+**WHAT COUNTS AS THE SAME ANSWER, WHICH IS THE WHOLE PROBLEM.** The same equation is written with the
+reactants on the right, with either arrow, with terms in either order, with `1` written or omitted, and
+with `H2O(l)`. A grader that compares strings accepts one spelling and marks the rest wrong — which
+teaches a student that the question is about matching a string rather than balancing an equation. The
+comparison is therefore on a **normal form**: terms split into element/count pairs, sorted, compared as a
+set. **Multiplying an equation is not different chemistry**, so the comparison is by ratio and the
+multiplier cancels; otherwise the question is really asking for one particular whole-number reduction.
+
+**THE COST OF THAT DECISION IS RECORDED, NOT HIDDEN.** `2H2 + O2 -> H2O` is accepted, because H:O is 2:1
+on both sides, and a textbook marks it down for not being the simplest whole-number form. A teacher may
+reasonably disagree with me; the alternative is a question about reduction rather than about balance.
+
+**A PARSER THAT READ ONLY THE FIRST ELEMENT OF A TERM.** `2H2O` is the most ordinary term in chemistry
+and the first version scored it as four hydrogens and dropped the oxygen. **Nothing balanced, ever**, and
+the conformance cell reported `expect.grade was 4, the grader awarded 0` against an answer that is
+correct. There is now a test for every element in a term, and one that `H2 + H` means H3.
+
+**THE PLACEHOLDER WAS THE ANSWER.** The text box's placeholder is a format example and must not be this
+question's answer; the first version put the balanced equation there, handing the answer over in grey
+text. It is now `2A + B2 -> 2AB`.
+
+**THE SIMULATION DECLARES NO PARAMETERS.** The first version declared `context` as a number with
+`min: 0, max: 0` to carry a sentence — a parameter that can only be zero is a lie about the interface a
+host can configure.
+
+`expect` grows `{ exact: "..." }` for a text answer, and **`reset` now checks simulations with no
+parameters at all** rather than skipping the one button every student presses — the first text-answer
+simulation was about to ship with `reset` unchecked because there was nothing to perturb.
+
+#### P6-T11 evidence
+- 12 of 24 gold sims. `pnpm sim:conformance` **216/216**; `pnpm test:sims` 111/111; **1629 unit**;
+  336 db integration; 3 e2e; 9/9 container gates; lint 0; typecheck 0; `pnpm test` 22/22;
+  `gate:browser` green (12/12 escapes, 216/216 cells).
 
 #### P6-T11: gold sim 11, and an ORDER strategy a set matcher cannot express
 
