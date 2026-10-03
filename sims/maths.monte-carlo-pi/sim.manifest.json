@@ -1,0 +1,107 @@
+{
+  "id": "maths.monte-carlo-pi",
+  "version": "1.0.0",
+  "title": "Estimating pi by throwing points",
+  "summary": "Throw points at a quarter circle and estimate pi from the proportion that land inside.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["maths"],
+  "tags": ["probability", "estimation", "pi"],
+  "ageRange": [13, 18],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A square with a quarter circle, a scatter of thrown points, a running count, and a box for the estimate.",
+    "reducedMotion": true,
+    "textAlternative": "A square one unit on each side with a quarter circle of radius one at its lower-left corner, and a scatter of plotted points, some inside the curve and some outside. The task is to use the proportion of points that landed inside to work out an estimate of pi."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "samples": {
+        "type": "number",
+        "label": "points",
+        "unit": "",
+        "minimum": 100,
+        "maximum": 20000,
+        "default": 2000
+      },
+      "dropped": {
+        "type": "number",
+        "label": "points drawn",
+        "unit": "",
+        "minimum": 0,
+        "maximum": 20000,
+        "default": 2000
+      },
+      "seed": {
+        "type": "number",
+        "label": "seed",
+        "unit": "",
+        "minimum": 0,
+        "maximum": 999999,
+        "default": 4242
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": true,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 480,
+    "minHeight": 380,
+    "aspectRatio": "4/3"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "samples": 2000,
+            "dropped": 2000,
+            "seed": 4242
+          }
+        }
+      }
+    ],
+    "type": {
+      "answer": "3.1416"
+    },
+    "expect": {
+      "value": 3.1416,
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "TOLERANCE",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0.01,
+      "relative": 0
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You estimated {answer}; the true value of pi is 3.141593, and this sample resolves it to about 0.13."
+  }
+}
