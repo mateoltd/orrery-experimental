@@ -82,6 +82,28 @@ export default defineConfig({
           functions: 100,
           statements: 100,
         },
+        /**
+         * The deadline arithmetic, held to the same floor because every one of its branches is a decision
+         * about whether a student's work is still accepted.
+         *
+         * `evaluateWrite` has five refusal branches and the order they are checked in is the message the
+         * student receives, so an uncovered branch is an uncovered way to tell a student their paper is closed
+         * when it is not. `shuffle.ts` is here for a different reason: its uncovered branches would be the
+         * `plans/06` cautions -- the catch-all option, the ordered scale, the author's `meaningfulOrder` -- and
+         * each of those exists to stop a shuffle that would cost somebody a mark.
+         */
+        'packages/contracts/src/policy/deadline.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
+        'packages/contracts/src/policy/shuffle.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
       },
     },
   },

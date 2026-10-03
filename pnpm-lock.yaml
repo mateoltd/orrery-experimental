@@ -171,6 +171,9 @@ importers:
 
   packages/contracts:
     dependencies:
+      '@orrery/rng':
+        specifier: workspace:*
+        version: link:../rng
       katex:
         specifier: 0.16.22
         version: 0.16.22
@@ -184,6 +187,9 @@ importers:
       '@types/node':
         specifier: 22.10.2
         version: 22.10.2
+      fast-check:
+        specifier: 3.23.2
+        version: 3.23.2
       jest-axe:
         specifier: 10.0.0
         version: 10.0.0
@@ -3776,6 +3782,14 @@ snapshots:
       chai: 5.3.3
       tinyrainbow: 2.0.0
 
+  '@vitest/mocker@3.2.7(vite@7.3.6(@types/node@22.10.2)(jiti@2.7.0))':
+    dependencies:
+      '@vitest/spy': 3.2.7
+      estree-walker: 3.0.3
+      magic-string: 0.30.21
+    optionalDependencies:
+      vite: 7.3.6(@types/node@22.10.2)(jiti@2.7.0)
+
   '@vitest/mocker@3.2.7(vite@7.3.6(@types/node@24.19.0)(jiti@2.7.0))':
     dependencies:
       '@vitest/spy': 3.2.7
@@ -4990,7 +5004,7 @@ snapshots:
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/expect': 3.2.7
-      '@vitest/mocker': 3.2.7(vite@7.3.6(@types/node@24.19.0)(jiti@2.7.0))
+      '@vitest/mocker': 3.2.7(vite@7.3.6(@types/node@22.10.2)(jiti@2.7.0))
       '@vitest/pretty-format': 3.2.7
       '@vitest/runner': 3.2.7
       '@vitest/snapshot': 3.2.7
@@ -5032,7 +5046,7 @@ snapshots:
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/expect': 3.2.7
-      '@vitest/mocker': 3.2.7(vite@7.3.6(@types/node@24.19.0)(jiti@2.7.0))
+      '@vitest/mocker': 3.2.7(vite@7.3.6(@types/node@22.10.2)(jiti@2.7.0))
       '@vitest/pretty-format': 3.2.7
       '@vitest/runner': 3.2.7
       '@vitest/snapshot': 3.2.7

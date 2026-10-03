@@ -140,6 +140,7 @@
     "clean": "rm -rf dist *.tsbuildinfo coverage"
   },
   "dependencies": {
+    "@orrery/rng": "workspace:*",
     "katex": "0.16.22",
     "zod": "4.4.3"
   },
