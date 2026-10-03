@@ -7,17 +7,9 @@
   "licence": "CC-BY-4.0",
   "provenance": "ORIGINAL",
   "protocol": 1,
-  "subjects": [
-    "physics"
-  ],
-  "tags": [
-    "kinematics",
-    "motion"
-  ],
-  "ageRange": [
-    13,
-    18
-  ],
+  "subjects": ["physics"],
+  "tags": ["kinematics", "motion"],
+  "ageRange": [13, 18],
   "accessibility": {
     "keyboard": true,
     "screenReaderSummary": "A choice of situation, a time in seconds, and a box to work out the distance travelled in.",
@@ -44,11 +36,7 @@
       "scenario": {
         "type": "enum",
         "label": "Situation",
-        "enumValues": [
-          "dropped",
-          "thrown",
-          "rolled"
-        ],
+        "enumValues": ["dropped", "thrown", "rolled"],
         "default": "dropped"
       }
     },
@@ -61,11 +49,7 @@
     "audio": false,
     "webgl": false,
     "stepper": false,
-    "scenarios": [
-      "dropped",
-      "thrown",
-      "rolled"
-    ]
+    "scenarios": ["dropped", "thrown", "rolled"]
   },
   "stateSchema": {
     "type": "object"
