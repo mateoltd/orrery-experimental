@@ -1,0 +1,109 @@
+{
+  "id": "astronomy.orrery",
+  "version": "1.0.0",
+  "title": "An orrery",
+  "summary": "Read a planet's orbit and work out how long it takes to go round once.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["astronomy"],
+  "tags": ["orbits", "period", "time"],
+  "ageRange": [13, 18],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A planet on its orbit around the Sun, a slider for the day, a number box for the answer, and step buttons.",
+    "reducedMotion": true,
+    "textAlternative": "A planet on its orbit around the Sun, and a table of the orbit: the distance from the Sun in astronomical units, and how many days one complete orbit takes. The task is to work out how many days the planet takes to return to the same point."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "a": {
+        "type": "number",
+        "label": "orbit radius",
+        "unit": "AU",
+        "minimum": 0.1,
+        "maximum": 40,
+        "default": 1
+      },
+      "e": {
+        "type": "number",
+        "label": "eccentricity",
+        "unit": "",
+        "minimum": 0,
+        "maximum": 0.9,
+        "default": 0.017
+      },
+      "period": {
+        "type": "number",
+        "label": "period",
+        "unit": "days",
+        "minimum": 1,
+        "maximum": 5000,
+        "default": 365.25
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": true,
+    "stepper": true,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 420,
+    "minHeight": 320,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "a": 1,
+            "e": 0.017,
+            "period": 365.25
+          }
+        }
+      }
+    ],
+    "type": {
+      "answer": "365.25"
+    },
+    "expect": {
+      "answer": {
+        "days": 365.25
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "TOLERANCE",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0.01,
+      "relative": 0.001
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You said {answer} days; the planet's orbit takes {expected} days."
+  }
+}

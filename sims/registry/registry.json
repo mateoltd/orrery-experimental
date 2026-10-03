@@ -1,7 +1,59 @@
 {
   "generatedFrom": "1970-01-01",
-  "digest": "61471a966154f05775777194e87c942d95d502f9ca1baa528201bdc1af966226",
+  "digest": "8b386b46aae2a2a8742b9c9e284d976f8ac3ea6eb6e4eb8649d76cd7da6effcc",
   "entries": [
+    {
+      "id": "astronomy.orrery",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.31d57d7afbba.html",
+        "browser": "./browser.3bd1fe89faf5.js",
+        "grader": "./grader.13fc889d03de.js",
+        "style": "./style.75a5f5513d82.css"
+      },
+      "bytes": {
+        "browser": 14245,
+        "grader": 7295,
+        "total": 22406
+      },
+      "defaultHeight": 420,
+      "minHeight": 320,
+      "parameters": [
+        {
+          "name": "a",
+          "type": "number",
+          "label": "orbit radius",
+          "unit": "AU",
+          "minimum": 0.1,
+          "maximum": 40,
+          "step": null,
+          "default": 1
+        },
+        {
+          "name": "e",
+          "type": "number",
+          "label": "eccentricity",
+          "unit": "",
+          "minimum": 0,
+          "maximum": 0.9,
+          "step": null,
+          "default": 0.017
+        },
+        {
+          "name": "period",
+          "type": "number",
+          "label": "period",
+          "unit": "days",
+          "minimum": 1,
+          "maximum": 5000,
+          "step": null,
+          "default": 365.25
+        }
+      ]
+    },
     {
       "id": "astronomy.parallax-distance",
       "version": "1.0.0",
