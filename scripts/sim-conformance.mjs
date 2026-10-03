@@ -212,6 +212,22 @@ const runManifestScript = async (page, frame, entry, manifest) => {
   // COMPUTES its answer has nothing to type, and one that asks the student for a number has nothing to
   // submit without it. The first Newton manifest hit exactly this -- `expect.answer.value` wanted 6 and
   // the sim answered `null`, because the field was empty.
+  // A GRADE CLAIM WITH NO ANSWER CHECKS NOTHING.
+  //
+  // `expect.grade` is only evaluated once an answer exists, and an answer only exists once something has
+  // submitted one — which happens only when `expect.answer` is declared. So a manifest declaring
+  // `expect.grade: 4` and no `expect.answer` passed vacuously, having verified nothing at all. The first
+  // randomised gold sim did exactly that, and its cell went green while the runner had no idea what the
+  // simulation answered.
+  if (declared.grade !== undefined && declared.answer === undefined) {
+    return {
+      ok: false,
+      note:
+        'expect.grade is declared but expect.answer is not, so there is no answer to grade and the ' +
+        'claim is never checked. Declare the answer, or drop the grade claim.',
+    };
+  }
+
   const typed = manifest?.conformance?.type;
   if (typed !== null && typed !== undefined) {
     for (const [key, value] of Object.entries(typed)) {

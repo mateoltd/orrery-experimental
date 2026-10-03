@@ -1,0 +1,79 @@
+{
+  "id": "maths.sequence-next",
+  "version": "1.0.0",
+  "title": "Next in the sequence",
+  "summary": "Read a sequence of numbers, find the rule, and type the term that comes next.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["maths"],
+  "tags": ["sequences", "number"],
+  "ageRange": [11, 15],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A row of numbers, a rule stated beneath it, and a box to type the next number into.",
+    "reducedMotion": true,
+    "textAlternative": "A sequence of five numbers with the first named, and the rule that each step changes by. The task is to work out the number that comes next."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "shown": {
+        "type": "number",
+        "label": "Terms shown",
+        "unit": "",
+        "minimum": 3,
+        "maximum": 8,
+        "default": 5
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": true,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 260,
+    "minHeight": 240,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "shown": 5
+          }
+        }
+      }
+    ],
+    "expect": {}
+  },
+  "grading": {
+    "strategy": "EXACT",
+    "maxPoints": 4,
+    "partialCredit": false,
+    "rationaleTemplate": "You said {answer}; the next term is {expected}."
+  }
+}

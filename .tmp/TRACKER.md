@@ -2019,6 +2019,43 @@ instead, and it includes the simulation tests rather than leaving them to a sepa
 cannot detect a missing package is not a measurement.
 
 
+#### P6-T11: gold sim 6, the first SEEDED simulation, and a vacuous pass caught
+
+**`maths.sequence-next` — the first gold sim whose content DEPENDS ON THE SEED.** Nothing else in the gold
+set exercises the path from the host's seed policy through `deriveSeed` into a simulation's own randomness,
+and that path is what makes a randomised question safe to retry. The randomness lives in one function in
+`model.ts`, taking a seed; nothing calls `Math.random`, and **the grader reconstructs the sequence from
+the seed it was given** rather than from anything the browser remembered — so a grade can be recomputed on
+a server that has never seen the student's browser. Graded `EXACT`, because a student's answer is a whole
+number and a floating-point tolerance invites an argument about whether 30.0000001 is 30.
+
+**THE TEXT ALTERNATIVE WAS GIVING AWAY THE ANSWER.** It ended *"The next term is 41"*, so a blocked
+student read the answer instead of the question and a printed worksheet carried its own solution. There is
+now a test that asserts the **absence** for every seed it tries, because this is exactly the kind of
+regression that reads as a feature when someone reviews the copy.
+
+**A DECLARED `expect.grade` WITH NO `expect.answer` PASSED VACUOUSLY, AND IS NOW A LOUD FAILURE.** The grade
+claim is only evaluated once an answer exists, and an answer only exists once something submits one — which
+happens only when `expect.answer` is declared. So `expect.grade: 4` with no answer went green having
+verified **nothing at all**, and this simulation did precisely that. The runner now refuses the combination:
+
+```
+expect.grade is declared but expect.answer is not, so there is no answer to grade and the claim is
+never checked. Declare the answer, or drop the grade claim.
+```
+
+Demonstrated by running it. This simulation declares nothing instead, because its answer depends on a seed
+the manifest cannot know — and a plausible-looking expectation is worse than an honest empty one.
+
+**THE SCHEMA REJECTED A 200px FRAME WITH `minimum: below 240`, AND WAS RIGHT TO.** A simulation shorter
+than the minimum has its control bar clipped, and a clipped control is a control a student cannot reach.
+
+#### P6-T11 evidence
+- 6 of 24 gold sims. `pnpm sim:conformance` **96/96 cells** across all six; `pnpm test:sims` 37/37.
+- **1477 unit**, 336 db integration, 8/8 container gates, lint 0, typecheck 0, `gate:browser` green,
+  image builds green.
+
+
 #### P6-T6 correction (the host could listen and never speak)
 
 The row was marked DONE on the strength of its CSP work. The host built six frames — `initFrame`,
