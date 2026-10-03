@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `7f7b057` | **10 of 24 built.** Every sim's declared `conformance.script`, `expect`, `conformance.type` and `reset` are honoured and checked against the simulation's real fields and states. `expect.value` covers a scalar answer, `expect.answer` a keyed one. `defineSim` enforces the grader arity, and a stepper now requires a `maxTime`. Maths, physics, chemistry and computing are all represented; partial credit, set grading, enums, seeded randomness, null answers, units, scenarios and process-derived answers are all exercised by real sims. |
+| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `a8d1f05` | **11 of 24 built.** Every sim's declared `conformance.script` (which may now press the simulation's own controls), `expect`, `conformance.type` and `reset` are honoured and checked against the simulation's real fields and states. Grading strategies exercised by real sims: EXACT, TOLERANCE, NUMERIC, SET and ORDER. Maths, physics, chemistry, computing and biology are all represented. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -2132,6 +2132,43 @@ two unrelated cells started failing the moment it sat second in the list. A cell
 - 9 of 24 gold sims. `pnpm sim:conformance` **153/153** across **three consecutive runs**; `pnpm test:sims`
   69/69; **1575 unit**; 336 db integration; 3 e2e; 9/9 container gates; lint 0; typecheck 0;
   `pnpm test` 22/22; `gate:browser` green; image builds green.
+
+#### P6-T11: gold sim 11, and an ORDER strategy a set matcher cannot express
+
+**`biology.mitosis-order` — ORDER IS THE ANSWER, AND A SET MATCHER IS THE WRONG TOOL.** The student orders
+six described stages of cell division. Every item is present in ANY arrangement, so `setMatch` scores a
+completely **reversed** sequence as a perfect answer — the exact inverse of the mistake `setMatch` exists
+to prevent in a quadratic, where `3, 1` and `1, 3` are the same answer. There is a test asserting the
+reversal scores zero *and* that all six items really are present.
+
+**`orderMatch` CREDITS BY POSITION**, not by which items appear somewhere correct. With two stages swapped,
+all six items are present and four of six positions hold, so the two counts differ and the positional one
+is lower. A student cannot keep full marks by getting the set right and the order wrong.
+
+**THE PARTIAL-CREDIT DENOMINATOR IS HOW MANY POSITIONS THE ANSWER OCCUPIES.** Dividing by the expected
+length alone gave full marks to a seven-item answer that got all six expected positions right and then
+added one: six of six, so 4 of 4, and the surplus cost nothing. An extra item occupies a position that
+should hold the right one, so it belongs in the count.
+
+**CONFORMANCE NOW DRIVES THE SIMULATION'S OWN CONTROLS.** A `click` step presses the buttons a student
+presses, which is the only way to exercise an interaction the simulation implements itself; a scripted
+answer injected through `type` would test the grader rather than the simulation. The shuffle is SEEDED, so
+the clicks that put the list right are fixed and can be declared in the manifest. The first attempt put the
+Playwright call inside `page.evaluate`, which serialises its function into the browser — not a Playwright
+call at all, but a `ReferenceError` that would have been reported as the simulation misbehaving.
+
+**Interphase is in the list although it is not a stage of mitosis**: a student who lists only the four
+mitotic stages has answered a different question, and the description says the list runs from one
+interphase to one cytokinesis. The cards never show a stage NAME, because the name is the answer.
+
+`expect` grows `{ sequence: [...] }`, the mirror of `{ set: [...] }`. Without it a simulation graded ORDER
+could not declare a checked expectation at all — the state the platform was in for scalar answers before
+`expect.value` and for enums before `in`.
+
+#### P6-T11 evidence
+- 11 of 24 gold sims. `pnpm sim:conformance` **187/187**; `pnpm test:sims` 96/96; **1614 unit**;
+  336 db integration; 3 e2e; 9/9 container gates; lint 0; typecheck 0; `pnpm test` 22/22;
+  `gate:browser` green (12/12 escapes, 187/187 cells).
 
 #### P6-T11: gold sim 10, and a zero tolerance that rejected every correct answer
 
