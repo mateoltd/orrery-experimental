@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `5e3eda4` | **16 of 24 built.** Every sim's declared `conformance.script`, `expect`, `conformance.type` and `reset` are honoured and checked against the simulation's real fields and states; randomised sims are checked for a seeded question; the manifest's capabilities are checked against the grader's. **All eight declared subjects are now represented.** |
+| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `47657e0` | **16 of 24 built.** Every sim's declared `conformance.script`, `expect`, `conformance.type`, `reset` and **`initialState`** are honoured and checked against the simulation's real fields and states; randomised sims are checked for a seeded question; the manifest's capabilities are checked against the grader's. All eight subjects represented. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -2152,6 +2152,47 @@ mounts a randomised simulation twice with the same seed and requires the same st
 biology.mitosis-order as declaring `randomised: false` while containing `Math.random`, and the occurrences
 were prose explaining why they do not call it. A grep is not an audit, and a defect found by grep alone is
 often a defect in the grep.
+
+#### P6-T11: the student's SAVED WORK, which never came back
+
+**`sim:init` CARRIES `initialState`. `PROTOCOL.md` DOCUMENTS IT. `hostBridge` STAMPS IT. SIXTEEN GOLD
+SIMULATIONS READ IT ZERO TIMES**, the SDK never handed it to a simulation, and `SimulationFrame` had no
+prop for it even though `hostBridge` accepted one. The feature was declared in three places and implemented
+in none.
+
+A student who saved an attempt, closed the tab and came back found the simulation reset to its opening
+position. Nothing reported it and **the page rendered perfectly** — the parameters still arrived, so the
+lesson was configured correctly and the *work* was simply gone. That is worse than a visible failure,
+because there was nothing for anyone to notice.
+
+**ONE ASSERTION, SIXTEEN FAILURES.** Work, take the state, remount carrying it, require the same state back.
+The first version sat **second** in the cell list and broke fourteen others on its way: it leaves a
+simulation mounted from a restored state, so the reset cell then perturbed parameters against a baseline that
+was no longer the opening position, and reported `a=2 produced the same state as the default` for
+simulations that were perfectly fine. **Two cells that both remount the page have to come last, in a known
+order**, and they now do.
+
+**WHAT THE CELL CAUGHT THAT INSPECTION DID NOT:**
+
+- **kinematics restored the DISPLAY and not the state.** `time.value` was set and the canvas redrawn, so
+  the student saw the right time while `getState` still reported the old one. A picture and a saved state
+  disagreeing is worse than not restoring at all, because it looks restored.
+- **projectile restores a RUNNING timeline as paused**, deliberately — restoring motion would start a
+  simulation moving on a page the student is still reading, with no press of play.
+- **linear-functions restores the marker and the reveal**, which are the student's own annotations on a
+  graph and are not expressible as any host parameter.
+- **binary-search restores the stepper position**, because the timeline is the student's place in the trace
+  and not a function of the parameters.
+
+`initialState` is keyed on its **CONTENT** in `SimulationFrame`, derived from the key alone exactly as
+`stableParams` is: depending on the object would rebuild the bridge, re-handshake and wipe the state being
+restored on every render of the lesson around it, and leaving it out would mean a new saved state never
+arrives.
+
+#### P6-T11 evidence
+- 16 of 24 gold sims. `pnpm sim:conformance` **320/320**; `pnpm test:sims` 157/157; **1684 unit**;
+  336 db integration; 3 e2e; 9/9 container gates; lint 0; typecheck 0; `pnpm test` 22/22;
+  `gate:browser` green (12/12 escapes, 320/320 cells).
 
 #### P6-T11: gold sim 16, and two integration failures that were not product bugs
 
