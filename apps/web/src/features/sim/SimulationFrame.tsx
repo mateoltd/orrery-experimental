@@ -581,6 +581,10 @@ export function SimulationFrame(props: SimulationFrameProps): React.ReactElement
       data-sim-frames={String(state.framesAccepted)}
       data-sim-dropped={String(state.framesDropped)}
       data-sim-spoofs={String(state.spoofAttempts)}
+      // The teacher's own note, beside the counters. "The host DISCARDED this" -- a gradePreview during an
+      // exam, a spoofed frame -- is a claim that has to be checkable rather than visible in a screenshot
+      // nobody reads.
+      data-sim-teacher-detail={teacherDetail ?? ''}
     >
       {showFallback ? (
         <div className="sim-host__fallback" role="status">

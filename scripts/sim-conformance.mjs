@@ -1023,6 +1023,119 @@ const CELLS = [
       return verdict;
     },
   },
+  {
+    name: 'a GRADED mount works, and a gradePreview during one is DISCARDED',
+    why:
+      'every conformance run mounts `lesson`, so the mode an EXAM runs in was never exercised in sixteen ' +
+      'simulations. The host-side rule is unit-tested; the mount itself is not',
+    run: async ({ page, entry, simOrigin, appOrigin }) => {
+      const config = harnessConfig(entry, simOrigin);
+      // `gradingSupplied` follows `mode`, so mounting graded is what puts a grading block on `sim:init`.
+      const gradedConfig = Buffer.from(JSON.stringify({ ...config, mode: 'graded' })).toString(
+        'base64url',
+      );
+      const lessonConfig = Buffer.from(JSON.stringify(config)).toString('base64url');
+
+      // RESTORE THE PAGE ON EVERY PATH, INCLUDING EVERY FAILURE.
+      //
+      // A cell that remounts and then returns early leaves the page mounted in GRADED mode, and every
+      // cell after it inherits a page that is not a lesson mount. The first attempt restored only on
+      // success -- so the one thing guaranteed to run was the code after the `return` that reports a
+      // failure, which is the code that cannot run. That is how a failing cell became a suite that looked
+      // broken: sixteen identical failures, each handing the next cell a page in the wrong mode.
+      //
+      // `try`/`finally`, because "on every path" has to include the paths nobody wrote down.
+      const problem = await (async () => {
+        await page.goto(`${appOrigin}/?cfg=${gradedConfig}`, { waitUntil: 'load' });
+        await page.waitForFunction(() => globalThis.__conformance?.ready === true, undefined, {
+          timeout: 15_000,
+        });
+
+        // 1. The handshake completes with a grading block on the init frame.
+        const status = await waitForStatus(page, ['READY', 'DEGRADED']);
+        if (status !== 'READY') return `a graded mount stayed at ${status}`;
+
+        // 2. The sandbox is UNCHANGED. The extra init field is data, and data cannot widen a sandbox; if
+        //    it ever could, the gradeable mode would be the one running the loosest frame.
+        const sandbox = await page.getAttribute('iframe', 'sandbox');
+        if (sandbox !== 'allow-scripts') return `sandbox="${String(sandbox)}" in graded mode`;
+
+        // 3. A gradePreview FROM INSIDE THE FRAME is discarded, and recorded.
+        //
+        // THE FIRST ATTEMPT POSTED FROM THE PARENT, which proves nothing about the frame at all:
+        // `iframe.contentWindow.postMessage(...)` runs in the HOST's realm and sends host -> frame. The
+        // host's `sim:gradePreview` case is on the INBOUND listener, so a message the host sends to
+        // itself is a message the host never sees. All sixteen cells failed with `a gradePreview during a
+        // graded mount left no record`, which reads like the discard rule is broken and is in fact the
+        // test never producing a gradePreview to discard.
+        //
+        // The frame is CROSS-ORIGIN by sandbox, so the only way to speak as the sim is to evaluate inside
+        // it. Then `parent.postMessage` carries the frame's own `event.source` and origin, which is what
+        // the host authenticates -- so this is the real path, not a shortcut around it.
+        const outcome = await page.evaluate(() => {
+          const log = globalThis.__conformance.log;
+          const nonce = [...log.inbound].reverse().find((f) => f.type === 'sim:ready')?.nonce;
+          if (nonce === undefined) return null;
+          const before =
+            globalThis.document
+              .querySelector('.sim-host')
+              ?.getAttribute('data-sim-teacher-detail') ?? '';
+          return { before, answersBefore: log.answers.length, nonce };
+        });
+        if (outcome === null) return 'the graded mount never completed its handshake';
+        const simFrame = page.frames().find((frame) => frame.url().startsWith(simOrigin));
+        if (simFrame === undefined) return 'the simulation frame was unreachable';
+
+        await simFrame.evaluate((nonce) => {
+          globalThis.parent.postMessage(
+            { type: 'sim:gradePreview', nonce, points: 4, correct: true, rationale: 'leaked' },
+            '*',
+          );
+        }, outcome.nonce);
+
+        const expired = deadline(5000);
+        let after = outcome.before;
+        for (;;) {
+          after = await page.evaluate(
+            () =>
+              globalThis.document
+                .querySelector('.sim-host')
+                ?.getAttribute('data-sim-teacher-detail') ?? '',
+          );
+          if (after !== outcome.before || expired()) break;
+          await page.waitForTimeout(100);
+        }
+        const newAnswers = await page.evaluate(
+          (n) => globalThis.__conformance.log.answers.length - n,
+          outcome.answersBefore,
+        );
+        if (after === outcome.before) {
+          return 'a gradePreview during a graded mount left no record, so nothing discarded it';
+        }
+        if (!after.includes('gradePreview')) {
+          return `the host recorded "${after}" rather than the discarded preview`;
+        }
+
+        // 4. And it was not mistaken for an answer. A preview is a mark claim, not a submission.
+        if (newAnswers !== 0) return `${String(newAnswers)} answer(s) appeared from a gradePreview`;
+        return null;
+      })();
+
+      // The page is a SHARED resource. Every cell after this one gets the one it leaves behind, so a cell
+      // that remounts owes the next cell a page in the mode the next cell expects.
+      try {
+        await page.goto(`${appOrigin}/?cfg=${lessonConfig}`, { waitUntil: 'load' });
+        await page.waitForFunction(() => globalThis.__conformance?.ready === true, undefined, {
+          timeout: 15_000,
+        });
+        await waitForStatus(page, ['READY', 'DEGRADED']);
+      } catch (error) {
+        // A restore that fails must not mask the finding that got us here.
+        return problem ?? `the page could not be restored after the graded cell: ${String(error)}`;
+      }
+      return problem;
+    },
+  },
   // LAST OF ALL, AND IT OWNS THE PAGE.
   //
   // This cell leaves a simulation mounted from a RESTORED state -- a perfectly good page for the next
