@@ -31,6 +31,7 @@
  */
 
 import type { QuestionSpec, QuestionType } from '../question/index.js';
+import { applyMethod, shareFor } from './methods.js';
 
 /**
  * THE GRADER'S OWN VERSION, and the reason regrades are auditable.
@@ -90,6 +91,18 @@ export type GradeFlag =
 
 export type GradeOutput = {
   readonly points: number;
+  /**
+   * THE SCORE BEFORE THE ZERO FLOOR, which `NG` and `PM` can drive NEGATIVE.
+   *
+   * `plans/07` section 3.2 is explicit that this must be stored rather than clamped in the item: "clamping at
+   * zero silently converts NG into no penalty for every student who guessed -- destroying the guessing
+   * suppression NG exists to provide -- while keeping the penalty for students who did not guess." The floor
+   * belongs in the attempt total and nowhere else.
+   *
+   * So `points` carries the invariant section 4 property-tests (`0 <= points <= maxPoints`) and `rawPoints`
+   * carries what the method actually said. For NC, 1PM and SU the two are equal; for NG and PM they are not.
+   */
+  readonly rawPoints: number;
   readonly maxPoints: number;
   readonly correct: boolean;
   readonly rationale: Rationale;
@@ -159,6 +172,16 @@ const asStringArray = (value: unknown): string[] | null => {
 // ───────────────────────────────────────────────────────────── the exit
 
 /**
+ * `-0` BECOMES `0`, AND NOTHING ELSE IS TOUCHED.
+ *
+ * Named so the intent is visible at the call site: this is NOT a clamp. A negative score is a legitimate
+ * value here -- `NG` produces them by design -- and a helper called `clamp` returning `-4` would be the sort of
+ * contradiction this file keeps finding.
+ */
+const normaliseZero = (value: number): number =>
+  Object.is(value, -0) ? 0 : Number.isFinite(value) ? value : 0;
+
+/**
  * THE ONE PLACE A `GradeOutput` IS BUILT, and the reason "bounded" is true by construction.
  *
  * `points` is clamped into `[0, maxPoints]` HERE rather than at each of the six type handlers. Those handlers
@@ -173,7 +196,13 @@ const emit = (
   rawPoints: number,
   maxPoints: number,
   rationale: Rationale,
-  flags: readonly GradeFlag[],
+  /**
+   * `flags` IS OPTIONAL because most outcomes have none, and a caller passing `[]` at every call site is a
+   * caller whose `[]` will eventually be `[]` when it should have been `['NEEDS_HUMAN']`.
+   */
+  flags: readonly GradeFlag[] = [],
+  /** The untransformed score, when it differs from `points`. Defaults to the same value. */
+  unbounded?: number,
 ): GradeOutput => {
   const ceiling = Number.isFinite(maxPoints) && maxPoints > 0 ? maxPoints : 0;
   // `Number.isFinite(rawPoints)` first: `Math.min(Math.max(NaN, 0), 5)` is NaN, and NaN points serialise to
@@ -181,6 +210,19 @@ const emit = (
   const points = Number.isFinite(rawPoints) ? Math.min(Math.max(rawPoints, 0), ceiling) : 0;
   return {
     points,
+    /**
+     * THE RAW SCORE IS NOT CLAMPED. THAT IS THE WHOLE POINT OF HAVING IT.
+     *
+     * The first version of this line was `Math.max(unbounded ?? rawPoints, 0)` -- the same clamp as `points`,
+     * applied to the value whose entire purpose is to escape it. `NG` can return `-4`, and a `rawPoints` of
+     * `-4` is what `plans/07` section 3.2 requires be stored, because the floor belongs in the attempt total
+     * and "clamping at zero silently converts NG into no penalty for every student who guessed".
+     *
+     * `Number.isFinite` is still required, because a NaN that reaches a stored column fails at write time
+     * rather than at grade time. Only the `-0` is normalised: `Math.max(-0, -0)` is `-0`, and `-0` compares
+     * unequal to `0` under `Object.is`, so a diff of the two columns would show a change that is not one.
+     */
+    rawPoints: normaliseZero(unbounded ?? rawPoints),
     maxPoints: ceiling,
     // `correct` is `points === maxPoints` rather than a flag the handlers set, so it cannot disagree with the
     // score it describes. A question worth zero is never "correct", which is why this is a comparison rather
@@ -280,83 +322,92 @@ const gradeMultiSelect = (
   spec: ResponseOf<'multi_select'>,
   response: Record<string, unknown>,
 ): GradeOutput => {
-  const given = new Set(asStringArray(response.choiceIds) ?? []);
-  if (!Array.isArray(response.choiceIds)) {
+  const chosen = asStringArray(response.choiceIds);
+  if (chosen === null) {
     return malformed(spec.points, why('UNPARSEABLE', 'No set of options was returned.'));
-  }
-  const key = new Set(spec.key.choiceIds);
-  if (given.size === 0) {
-    return emit(
-      0,
-      spec.points,
-      why('BLANK', 'No options were selected.', { correctCount: key.size }),
-      [],
-    );
   }
 
   const method = spec.partialCredit;
-  if (method !== 'NC' && method !== '1PM') {
-    // NOT A ZERO. A score of 0 here would be indistinguishable from a wrong answer, and the plan's P7-T3 exists
-    // precisely because these methods are not interchangeable with 0.
+  /**
+   * THE METHOD IS THE QUESTION'S, AND IT IS APPLIED BY THE ONE SHARED IMPLEMENTATION.
+   *
+   * `plans/07` section 3 makes the choice depend on stakes and on whether guessing is rewarded, both known when
+   * the question is written, so a grader that defaulted it would be picking a scoring policy at marking time --
+   * and `RN-05` names no default. The default lives on the question (`DEFAULT_PARTIAL_CREDIT`) and this module
+   * only applies what it is told.
+   *
+   * The arithmetic lives in `./methods.ts` and was INLINE here first. Two copies of six formulas is two places
+   * for them to disagree, and the inline one had already drifted from the fixtures before it was replaced.
+   */
+  const key = new Set(spec.key.choiceIds);
+  const applied = applyMethod(method, {
+    selected: new Set(chosen),
+    key,
+    // `M` IS THE FULL OPTION LIST, and the size clauses are meaningless without it: a distractor the student
+    // did not tick is invisible in `selected`, so the pool size cannot be recovered from either set.
+    optionCount: spec.choices.length,
+  });
+  const raw = applied.rawCount * shareFor(key, spec.points);
+
+  if (chosen.length === 0) {
+    // BLANK IS NOT INCORRECT, and it is not "no correct options selected" either: a student who answered
+    // nothing has told the marker something different from one who chose wrongly.
     return emit(
       0,
       spec.points,
-      why('MANUAL_REQUIRES_HUMAN', `Partial-credit method ${method} is not implemented yet.`, {
-        method,
-      }),
-      ['NEEDS_HUMAN'],
+      why('BLANK', 'No options were selected.', { correctCount: applied.correctCount }),
     );
   }
 
-  if (method === 'NC') {
-    const allCorrect = given.size === key.size && [...given].every((id) => key.has(id));
+  if (applied.zeroedBySize) {
     return emit(
-      allCorrect ? spec.points : 0,
+      raw,
       spec.points,
-      allCorrect
-        ? why('CORRECT', 'Every correct option and nothing else.', { method })
-        : why('INCORRECT', 'Not exactly the correct set.', { method }),
+      why(
+        'INCORRECT',
+        'More options were selected than there are correct ones, so the score is zero.',
+        {
+          method,
+          selected: chosen.length,
+          correctCount: applied.correctCount,
+        },
+      ),
       [],
+      raw,
     );
   }
+
+  const exact = applied.correctCount === key.size && applied.incorrectCount === 0;
+  const code: RationaleCode = exact
+    ? 'CORRECT'
+    : raw > 0 && raw < spec.points
+      ? 'PARTIAL'
+      : 'INCORRECT';
 
   /**
-   * 1PM — "+1 per correct option selected, 0 for incorrect, 0 overall if more options are selected than there
-   * are correct ones."
-   *
-   * The third clause is the whole reason this method is the default: it removes the select-all exploit
-   * WITHOUT producing a negative score, which is what `NG` does and what makes `NG` fail the plan's
-   * publish-time guard when more than half the options are correct.
+   * A NEGATIVE RAW SCORE IS FLAGGED, because `points` will read zero and a marker looking at `points` alone
+   * would see an ordinary wrong answer rather than a penalised one.
    */
-  let hits = 0;
-  for (const id of given) if (key.has(id)) hits += 1;
-  const overSelected = given.size > key.size;
-  const perOption = key.size === 0 ? 0 : spec.points / key.size;
-  const points = overSelected ? 0 : hits * perOption;
-  const partial = points > 0 && points < spec.points;
+  const flags: GradeFlag[] = applied.negative ? ['NEEDS_HUMAN'] : [];
+  const explanation = applied.negative
+    ? `Scored ${String(raw)} of ${String(spec.points)}, below zero, because method ${method} deducts for ` +
+      'incorrect selections. The zero floor is applied in the attempt total; this item does not apply it.'
+    : exact
+      ? 'Every correct option and nothing else.'
+      : code === 'PARTIAL'
+        ? 'Some credit earned.'
+        : 'No credit earned.';
+
   return emit(
-    points,
+    raw,
     spec.points,
-    overSelected
-      ? why(
-          'INCORRECT',
-          'More options were selected than there are correct ones, so the score is zero.',
-          {
-            method,
-            selected: given.size,
-            correctCount: key.size,
-          },
-        )
-      : partial
-        ? why('PARTIAL', 'Some correct options were selected.', {
-            method,
-            hits,
-            correctCount: key.size,
-          })
-        : hits === key.size
-          ? why('CORRECT', 'Every correct option and nothing else.', { method, hits })
-          : why('INCORRECT', 'No correct option was selected.', { method, hits }),
-    [],
+    why(code, explanation, {
+      method,
+      hits: applied.correctCount,
+      correctCount: applied.correctCount,
+    }),
+    flags,
+    raw,
   );
 };
 

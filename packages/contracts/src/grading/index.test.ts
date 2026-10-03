@@ -310,19 +310,55 @@ describe('multi_select', () => {
     expect(g(nc, { choiceIds: ['a', 'c'] }).points).toBe(4);
   });
 
-  it('returns NEEDS_HUMAN for the four methods P7-T3 has not implemented yet', () => {
+  it('APPLIES all six methods rather than deferring the four P7-T3 has now implemented', () => {
     /**
-     * NOT A ZERO. A score of 0 would be indistinguishable from a wrong answer, and these methods are precisely
-     * the ones that are NOT interchangeable with 0 -- that is why they are separate named methods.
+     * WAS `NEEDS_HUMAN`, AND NOW IS NOT.
+     *
+     * Before P7-T3 the four remaining methods returned `NEEDS_HUMAN`, because scoring them as 0 would have
+     * been indistinguishable from a wrong answer -- and the whole point of naming them separately is that they
+     * are NOT 0. `NG` on one correct and one wrong scores 0 while `1PM` scores 2, so deferring them was
+     * correct and leaving them deferred forever would not have been.
      */
     for (const method of ['NG', 'SU', 'RI', 'PM'] as const) {
       const spec = { ...multiSelect, partialCredit: method } as QuestionSpec;
       const result = g(spec, { choiceIds: ['a', 'c'] });
-      expect(result.rationale.code).toBe('MANUAL_REQUIRES_HUMAN');
-      expect(result.flags).toContain('NEEDS_HUMAN');
-      expect(result.points).toBe(0);
-      expect(result.rationale.detail.method).toBe(method);
+      expect(result.rationale.code).not.toBe('MANUAL_REQUIRES_HUMAN');
+      expect(result.points).toBe(4);
     }
+  });
+
+  it('keeps a NEGATIVE raw score visible while reporting bounded points', () => {
+    /**
+     * THE TWO FIELDS, AND WHY BOTH EXIST.
+     *
+     * `plans/07` section 3.2: NG "produces negative raw scores BY DESIGN", and clamping at zero in the item
+     * "silently converts NG into no penalty for every student who guessed -- destroying the guessing suppression
+     * NG exists to provide". So `points` is 0 (the section 4 invariant holds) and `rawPoints` is negative (the
+     * item statistics in `08` are computed on that scale), and the response is FLAGGED so a marker reading
+     * `points` alone does not mistake a penalised response for an ordinary wrong one.
+     */
+    const spec = { ...multiSelect, partialCredit: 'NG' } as QuestionSpec;
+    const result = g(spec, { choiceIds: ['b', 'd'] });
+    expect(result.rawPoints).toBe(-4);
+    expect(result.points).toBe(0);
+    expect(result.flags).toContain('NEEDS_HUMAN');
+    expect(result.rationale.explanation).toMatch(/below zero/u);
+  });
+
+  it('keeps points and rawPoints EQUAL for the methods with no penalty term', () => {
+    for (const method of ['NC', '1PM', 'SU'] as const) {
+      const spec = { ...multiSelect, partialCredit: method } as QuestionSpec;
+      const result = g(spec, { choiceIds: ['a'] });
+      expect(result.rawPoints).toBe(result.points);
+    }
+  });
+
+  it('zeroes an over-sized response under 1PM via the SHARED method, not a local copy', () => {
+    // The size clause moved out of this file and into `./methods.ts`, where it is property-tested. This asserts
+    // the wiring rather than the arithmetic, which is the part that lives here now.
+    const result = g(multiSelect, { choiceIds: ['a', 'b', 'c', 'd'] });
+    expect(result.points).toBe(0);
+    expect(result.rationale.detail.method).toBe('1PM');
   });
 });
 

@@ -33,6 +33,19 @@ export default defineConfig({
           functions: 100,
           statements: 100,
         },
+        /**
+         * The partial-credit methods, for the same reason and with more force: these six formulas decide
+         * students' grades, and a seventh policy of the same shape -- a penalty term added to `SU`, a size clause
+         * dropped from `RI` -- would change every mark on every affected item while leaving the file's shape
+         * untouched. `plans/07` section 3's fixture table is the contract, so the code that implements it is
+         * held to the same floor as the dispatcher that calls it.
+         */
+        'packages/contracts/src/grading/methods.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
       },
     },
   },
