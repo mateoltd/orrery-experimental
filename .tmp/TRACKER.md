@@ -1362,6 +1362,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
 | P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `47657e0` | **16 of 24 built.** Every sim's declared `conformance.script`, `expect`, `conformance.type`, `reset` and **`initialState`** are honoured and checked against the simulation's real fields and states; randomised sims are checked for a seeded question; the manifest's capabilities are checked against the grader's. All eight subjects represented. |
+| P6-T14 Exercise `mode: 'graded'` end to end (EXAM PATH, currently untested in a browser) | **OPEN** | -- | `hostBridge.test.ts:204` asserts a graded `sim:init` carries a `grading` block and `:320` asserts a `sim:gradePreview` during a graded mount is discarded and recorded, so the HOST logic is covered. What is NOT covered is a browser mount in graded mode: no conformance run has ever used it, because the harness always mounts `lesson`. A cell was written for it and **removed**: it took the suite from ~2 min to ~15 min and then died with `EXIT=1` and no summary line, after ~40 cells. Shipping a cell that destabilises the suite is worse than shipping no cell, so the gap is recorded here instead. **Next: profile the per-cell page loads before retrying** -- three of the twenty cells now remount the page, and the suite has gone from minutes to a quarter of an hour. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -2152,6 +2153,32 @@ mounts a randomised simulation twice with the same seed and requires the same st
 biology.mitosis-order as declaring `randomised: false` while containing `Math.random`, and the occurrences
 were prose explaining why they do not call it. A grep is not an audit, and a defect found by grep alone is
 often a defect in the grep.
+
+#### P6-T11: graded mode is unit-tested, and that is not the same as exercised
+
+**`hostBridge.test.ts:204` PROVES A GRADED `sim:init` CARRIES A `grading` BLOCK, AND `:320` PROVES A
+`sim:gradePreview` SENT DURING A GRADED MOUNT IS DISCARDED AND RECORDED.** So the host-side reasoning is
+covered, and a browser cell would only have added end-to-end coverage of the mount itself.
+
+**THE CELL I WROTE FOR IT MADE THE SUITE DIE.** It took `pnpm sim:conformance` from about two minutes to
+roughly fifteen — three cells now remount the page per simulation, and the run does sixteen of them — and
+then exited 1 with **no summary line at all** after about forty cells, which is a process dying outside the
+per-cell `try/catch` rather than a cell failing.
+
+**I ALMOST RECORDED THE WRONG CAUSE.** The working tree was clean at one point, so I read the death as my own
+shell killing the background job and reverted the cell on that basis. It was not: the tree was clean
+*BECAUSE I HAD ALREADY REVERTED IT*. Re-applying it reproduced the failure exactly. That is the third time
+this tracker/turn has been nearly misdiagnosed from a signal that was a consequence of my own repair rather
+than evidence about the product — the discipline that has served here is **re-run the experiment before
+believing a conclusion**, not "the tree is clean, therefore the bug was never mine".
+
+So it is tracked as **P6-T14, OPEN** rather than left as a paragraph: a row cannot be forgotten the way a
+note can, and the next attempt has the measurement it needs (profile the per-cell page loads first).
+
+#### P6-T11 evidence
+- 16 of 24 gold sims. `pnpm sim:conformance` **320/320**; `pnpm test:sims` 157/157; **1684 unit**;
+  336 db integration; 3 e2e; 9/9 container gates; lint 0; typecheck 0; `pnpm test` 22/22;
+  `gate:browser` green (12/12 escapes, 320/320 cells).
 
 #### P6-T11: the student's SAVED WORK, which never came back
 

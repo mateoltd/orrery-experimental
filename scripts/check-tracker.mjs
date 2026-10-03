@@ -103,6 +103,28 @@ for (const line of current.split('\n')) {
   }
 }
 
+// --- 3b. an OPEN row is allowed to have no commit, and anything else is not ----
+// A `OPEN` row with `--` in the commit column is a DEFECT someone found and did not fix, and it is the
+// only legitimate reason for that column to be empty. Without this rule an OPEN row would need a commit it
+// cannot have, and the alternative -- inventing one -- is worse than the ambiguity.
+for (const line of current.split('\n')) {
+  const match =
+    /^\|\s*(P\d+-T\d+)[^|]*\|\s*\*\*(DONE|OPEN|IN PROGRESS)\*\*\s*\|\s*`?([^|`]*?)`?\s*\|/.exec(
+      line,
+    );
+  if (match === null) continue;
+  const [, id, status, commit] = match;
+  const blank = commit.trim() === '' || commit.trim() === '--';
+  if (status === 'DONE' && blank) {
+    bad(`${id} is DONE with no commit; DONE requires a commit and evidence, or it is not DONE`);
+  }
+  if (status !== 'DONE' && status !== 'IN PROGRESS' && !blank) {
+    bad(
+      `${id} is ${status} but carries a commit (${commit.trim()}), which reads as work already landed`,
+    );
+  }
+}
+
 // --- 4. no duplicated section headings (evidence headings excepted) --------
 const counted = new Map();
 for (const line of headings(current)) {
@@ -127,4 +149,5 @@ console.log('\n  ✓ section count did not decrease');
 console.log(`  ✓ ${String(rows.length)} task rows, one per id`);
 console.log('  ✓ no placeholders in summary rows');
 console.log('  ✓ no duplicated sections');
+console.log('  ✓ every DONE row carries a commit, and no OPEN row fakes one');
 console.log('\nTRACKER INTEGRITY GATE PASSED');
