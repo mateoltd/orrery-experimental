@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `e1c9031` | **7 of 24 built.** Every sim's declared `conformance.script` and `expect` are honoured and checked; `conformance.type` records what a student enters. `defineSim` enforces the grader arity. Multi-part partial credit, set grading, enums, seeded randomness and null answers are all exercised by real sims rather than only by the SDK's tests. |
+| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `35cc67d` | **8 of 24 built.** Every sim's declared `conformance.script` and `expect` are honoured and checked; `conformance.type` records what a student enters and `expect.value` covers a scalar answer. `defineSim` enforces the grader arity. Multi-part partial credit, set grading, enums, seeded randomness, null answers, units and scenarios are all exercised by real sims rather than only by the SDK's tests. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -1793,308 +1793,46 @@ The projectile manifest's `expect` is therefore now EMPTY, deliberately, and `si
 of them carries an expectation field that cannot be satisfied, teaching authors to write checks that never
 run.** Recorded as an open spec question rather than fixed by inventing a frame the plan does not have.
 
-#### P6-T11 evidence so far
-- `pnpm sim:conformance`: **15/15 cells** (the declared-script cell is the new one).
-- 1495 unit, 336 db integration, 9/9 gates, lint 0, typecheck 0, escape gate 12/12, playground smoke green.
+#### P6-T11: the verification scripts that could not do what they claimed
 
+**THE RECOVERY CAME FROM RUNNING EVERY SCRIPT IN `package.json`, NOT THE ONES I KNEW.**
 
-#### P6-T11: gold sim 2, and what building it caught
+`pnpm test:sims` had been green for seven simulations the whole time. `pnpm test` had been RED since
+the grader-arity enforcement landed, because the SDK's own `defineSim` fixtures were still two-argument
+graders and the new check threw at import time. A check added in one commit and not exercised by the
+suite it lives in is the same failure mode as an unchecked conformance claim.
 
-**`maths.linear-functions` — two parameters, one question: where does the line cross the x-axis.** The
-parameters are `m`, `c`, `span` and `showGrid`; the answer is `{xIntercept}`, and **`null` is a real
-answer.** With `m = 0` the line is flat and never crosses, so "there is no crossing" is graded 4/4. A
-student who correctly declines to type a number into a box that has no number in it must not be marked
-wrong for it — and a number where the answer is "none" scores 0, with feedback saying why.
+**FOUR SCRIPTS THAT COULD NOT DO WHAT THEY SAID.**
 
-**THREE DEFECTS, ALL THE SAME SHAPE: A VALUE SILENTLY ARRIVING AS `NaN` OR AS NOTHING.**
+1. **Partial credit never reached zero.** `tolerance()` awarded `maxPoints * (1 - relativeError)`, and
+   `max(|given|,|expected|)` saturates relative error just under 1 — so a student 1000x out still
+   scored 0.087 of 4. Dividing by the tolerance instead was *worse*: every out-of-tolerance answer
+   scored zero, which is not partial credit, it is a wall. Credit now decays from the tolerance
+   boundary to zero `partialCreditBand` tolerances further out. `linear-functions` declares 5 because a
+   crossing point read off a grid is coarse and deserves a slope, not a cliff.
 
-- `Number(value, fallback)` DOES NOT EXIST. `Number` takes one argument and ignores the second, so every
-  answer was graded against `NaN` and awarded 0 points — to a student who was exactly right. The feedback
-  even said "the line crosses at x = 2" about an answer of 2.
-- `tolerance(given, expected, spec)` wants `abs` and `rel`. The manifest spells the same idea `absolute`
-  and `relative`, and passing the long names produced a spec with **no tolerance in it at all** — a
-  tolerance of zero, which reads as "mark everything wrong". Two spellings of one concept, and the
-  mismatch is silent in both directions.
-- `num(spec)` is a spec BUILDER, not a coercion helper: `num(raw.m, 2)` returns `{type: 0}`. Third time in
-  this phase — the projectile sim's `paramsFrom` made the same call.
+2. **`pnpm test:e2e` had never worked.** There was no `playwright.config.ts`, so Playwright used its
+   default `testDir` — the repository root — and swept up vitest files under `apps/web/src`, dying with
+   "Vitest cannot be imported in a CommonJS module" without ever opening a browser. `@playwright/test`
+   was not even installed; only `playwright` was. A script that fails for a reason unrelated to what it
+   claims to test is worse than a missing script, because it looks like coverage.
 
-None of the three would be caught by a manifest check or a type check. Each graded a real student's answer
-wrongly, and each was found by a test asserting a **specific mark** rather than a shape.
+3. **`pnpm test:integration` needed an export nobody documented.** `.env.test` has held `DATABASE_URL`
+   the whole time and the integration config never read it, so the suite failed with "Environment
+   variable not found" and read like a schema fault. 336 tests now run with no manual export.
 
-**A TEST ROOT FOR `sims/`, AND `sims/` IS STILL NOT A WORKSPACE.** `RN-07` says a simulation resolves the
-SDK and the RNG and nothing more, so adding `sims/` to `pnpm-workspace.yaml` to get a test runner would
-have undone the dependency boundary. `sims/vitest.config.ts` adds the runner and nothing else, with aliases
-pointing at the SDK's source for the same reason `sim:build` does: a grader tested against a stale `dist`
-is a grader tested against something that does not ship. `_template` and `_fixtures` are excluded — they
-are scaffolding, and a permanently red test in a suite is how the real ones stop being read too.
-
-**THE ESCAPE GATE IS NOT IN `pnpm gates`, AND SAYS WHY.** The Docker image build runs `gates`, the image
-has no Chromium, and adding one would cost ~150 MB plus a network fetch at build time. The tempting
-alternative — exit 0 when the binary is missing — would have been **a gate that passes by not running**,
-the exact failure mode that file exists to prevent. So it exits 1 with the command to run, and
-`pnpm gate:browser` groups it with the conformance matrix as the browser-requiring half.
+4. **`pnpm gates` depended on run order.** `gate:bundle` measured a fallback directory listing when the
+   app had not been built and reported "1735 KB over a 250 KB budget" — a number that means nothing and
+   looks catastrophic. It did fail, which is exactly why this went unnoticed for as long as a build
+   happened to be lying around. `gates` builds the web app first; it reports 99.5 KB.
 
 #### P6-T11 evidence
-- 2 of 24 gold sims. `pnpm sim:conformance` **30/30 cells** across both; `pnpm test:sims` 8/8.
-- 1495 unit, 336 db integration, 8/8 container gates, lint 0, typecheck 0, image builds green,
-  `gate:browser` green (escape 12/12 + conformance 30/30).
-
-
-#### P6-T11: gold sim 3 — chemistry, and a unit that is part of the answer
-
-**`chem.ideal-gas-law` — T = PV/nR, with `R` deliberately NOT a parameter.** The gas constant is a fact
-about the universe, not a choice; making it configurable would let a teacher "solve" the law with a number
-that is not the gas constant, and the student would learn the shape of the law without the law. Same
-reasoning that keeps `g` out of the projectile sim, and the rule generalises: **a value that is not a
-choice is not a parameter.**
-
-**A CELSIUS READING IS A DIFFERENT QUESTION, NOT AN ARITHMETIC ERROR.** 100 °C is 373 K, so a student who
-types `0` because the gas is at 0 °C has not divided badly. Both obvious responses are wrong: marking it 0
-teaches them the field rejects their unit, and converting it silently teaches them the field ignores it.
-So it is graded as the answer it *is* — converted, compared, full credit — with feedback naming the
-conversion. The student gets the mark and learns why the unit mattered.
-
-**THE RELATIVE TOLERANCE IS 0.5% HERE AND 2% EVERYWHERE ELSE, ON PURPOSE.** A percentage is the right
-shape for a quantity with a meaningful zero, and 2% of 273 K is 5.5 K of slack. On an absolute scale 5 K is
-not a rounding error; it is a visibly different answer. Tightened to 0.5% (1.4 K at these values), with
-`absolute: 1` alongside. Caught by a test asserting a *specific mark*, not a shape — the same class of
-check that found `NaN` grading in sim 2.
-
-**AN EMPTY FIELD MUST NOT FALL INTO ABSOLUTE ZERO.** `Number('')` is `0`, and 0 K is absolute zero — so
-the submit handler sends `NaN` for a blank field rather than 0. A blank box is not a claim about the
-temperature, and a student should have to mean it.
-
-**IT BUILT AND PASSED CONFORMANCE ON THE FIRST RUN**, which is the thing worth recording about the pipeline:
-three sims, three different shapes — ballistic motion with a timeline, a graph with no timeline and a
-`null` answer, and a chemistry rearrangement with a fixed constant — through one scaffolder, one validator,
-one builder, one conformance matrix and one escape gate, with no per-sim configuration anywhere.
-
-#### P6-T11 evidence
-- 3 of 24 gold sims. `pnpm sim:conformance` **45/45 cells** across all three; `pnpm test:sims` 15/15.
-- 1495 unit, 336 db integration, 8/8 container gates, lint 0, typecheck 0, image builds green,
-  `gate:browser` green, playground smoke green.
-
-
-#### P6-T11: the open spec question, CLOSED — without changing the protocol
-
-**THE GAP WAS REAL AND IT WAS IN THE RUNNER, NOT THE PLATFORM.** `plans/10` fixes the host command
-vocabulary and none of it asks a simulation for its answer, so every gold sim's `conformance.expect.answer`
-was unsatisfiable and I had recorded that as a spec gap for P6-T11 to close. It did not need a protocol
-change: the conformance runner now submits **the way a student does**, through the simulation's own
-`#sim-submit` control, after driving the declared script. Twenty-four sims get a satisfiable
-`expect.answer` and the ratified protocol is untouched.
-
-**`contentDocument` IS NULL, AND THAT IS THE SANDBOX WORKING.** The first implementation reached into the
-frame with `contentDocument.getElementById('sim-submit')` and reported *"no #sim-submit control"* for a
-simulation that has one — which would have persuaded the next author that the field was unsatisfiable all
-over again. Clicking goes through Playwright's frame API instead, the same route the matrix's own
-interaction cell uses. That cell worked and the new one did not, and the difference was the entire lesson.
-
-**THE PROJECTILE MANIFEST NOW DECLARES WHAT IT PROMISES**: `expect.answer.range` of `{min: 60, max: 68}`
-and `expect.grade: 4`, both checked. **And the cell can fail** — an expectation of `{min: 900, max: 999}`
-is reported as *"expect.answer.range was {min:900, max:999}, the sim answered 63.71"*. A declared check
-that cannot fail is the failure mode this whole cell exists to prevent, so it was demonstrated in both
-directions before being believed.
-
-**THE SPEC DOC'S CLAIM WAS CORRECTED RATHER THAN LEFT.** `sims/maths.projectile-motion/sim.spec.md` said the
-field was unsatisfiable. That was true of the runner and false of the platform, and a stale claim sitting
-in a repository is how the next person re-derives a problem that no longer exists.
-
-
-#### P6-T11: gold sim 4, and the grader signature was wrong in THREE sims
-
-**`physics.newtons-second-law` — three parameters where the one being SOLVED FOR is ignored.** Because
-`m = F/a` with `a` computed as `F/m` is circular: the first version handed back the mass it had been given,
-and a beautifully wrong answer. The answer also NAMES its quantity, so the right *number* for the wrong
-*quantity* is 0 with feedback saying which was asked for.
-
-**`defineSim`'s GRADER HALF IS `grade(state, params, answer)`.** Three positional arguments, no context
-object. Three of my gold sims were written as `grade(answer, context)`, so the SDK handed them the
-PARAMETERS as the answer and the answer as the parameters: `parseAnswer` failed, **every answer scored 0**,
-and the conformance cell that grades in bare Node printed a confident number derived from the wrong things.
-It passed for the projectile sim because that one had it right, and for the other two because **neither
-declared `expect.grade`** — so a broken grading path was never once compared against a claim. That is the
-whole argument for a declared expectation being honoured rather than ignored.
-
-**THE TOLERANCE IS THE SIM'S, NOT THE CALLER'S.** `grade(state, params, answer)` has no tolerance argument,
-because the per-item tolerance a teacher sets in P7 belongs to the grading service. All three sims declare
-`TOLERANCE` once, matching their manifests.
-
-**`F = 0` AT A NON-ZERO ACCELERATION GIVES A MASS OF ZERO, WHICH IS NOT A MASS.** The first version returned
-`0` and told a student who had correctly said "there is none" that *"the mass is 0 kg"*.
-
-**THE RUNNER LEARNED THREE THINGS THIS SIM NEEDED AND THE REMAINING TWENTY WILL TOO:**
-
-- **`conformance.type`** — what a *student* would enter, kept separate from `conformance.expect` because
-  they answer different questions. Two shapes of simulation need different things from a scripted host: one
-  that COMPUTES its answer has nothing to type, and one that asks the student for a number has nothing to
-  submit without it. Typing `expect.answer` into the field and then asserting the sim reports it would be a
-  test that cannot fail for the reason anyone would write it.
-- **`expect.answer.quantity: {in: ['mass']}`** — set membership, for enum-valued answers.
-- **PARAMS ARE A RECORD FOR THE GRADER.** `gradeStoredState` runs them through `clampParams`, which reads by
-  name; given the registry's array of `{name, default}`, every value came back `undefined`, every
-  parameter fell to its fallback, and the grader confidently reported that the student had been asked for
-  the acceleration.
-
-#### P6-T11 evidence
-- 4 of 24 gold sims. `pnpm sim:conformance` **60/60 cells** across all four; `pnpm test:sims` 22/22.
-- 1495 unit, 336 db integration, 8/8 container gates, lint 0, typecheck 0, `gate:browser` green.
-
-
-#### P6-T11: gold sim 5, and the first simulation that needs SET grading
-
-**`maths.pythagoras` — "which side is the longest?" has THREE answers, and with sides 6, 6 and 5 it has
-TWO correct ones.** The rule, stated precisely: **the student must name a non-empty subset of the longest
-sides.** Naming one of two tied sides is a complete answer; naming all three is not a better answer than
-naming one, it is not an answer. `plans/20` requires set grading in P7, so building it here means the
-SDK's set helpers are exercised by a simulation rather than only by their own tests.
-
-**SLICING THE EXPECTED SET TO THE STUDENT'S SET SIZE COMPARED "b" AGAINST "a".** The first attempt at
-"a non-empty subset" shortened the expected set and called `setMatch` — so with sides 6, 6, 5, answering
-"a" scored 4 and answering **"b" scored 0**. Both are correct answers. The rule is now plain containment,
-and `setMatch` is kept only for what it is good at: making the comparison order-independent.
-
-**THE TEST'S PREMISE WAS WRONG BEFORE THE CODE WAS.** It used 5, 5, 7.07 — an isosceles *right* triangle,
-where the hypotenuse is longest on its own and the tie does not exist. The cases that did not check the
-tie passed for the wrong reason; the one that did, failed. A test written about a case you have not
-checked is not a test.
-
-**AN ARRAY-VALUED `name` PARSED AS AN EMPTY SET.** The sim sends `{name: ['a','b']}` when a student typed
-more than one side, and the parser read only a string — so a correct two-answer reply scored 0 with "Name a
-side" as its feedback.
-
-**`isRightAngleAt`'s PARAMETER WAS IGNORED**, so `rightAngles` reported a 90° angle for every side of any
-right triangle, and three for an isosceles one. Found by the linter's unused-parameter rule, which is the
-fourth time in this phase that a "style" warning has been describing a real bug.
-
-**THE MANIFEST NEEDED A NEW FIELD, SO IT GOT ONE PROPERLY.** `conformance.type` — what a *student* would
-enter — is now declared in the Zod mirror **and** the JSON Schema. Both are strict by design
-(`additionalProperties: false`), so a field the runner needs must be in both or a manifest is rejected for
-the right reason and the wrong message.
-
-#### P6-T11 evidence
-- 5 of 24 gold sims. `pnpm sim:conformance` **75/75 cells** across all five; `pnpm test:sims` 30/30.
-- 1495 unit, 336 db integration, 8/8 container gates, lint 0, typecheck 0, `gate:browser` green,
-  playground smoke green, image builds green.
-
-
-#### P6-T11: the grader contract is now ENFORCED, not discovered nineteen more times
-
-Every gold sim so far has found the same class of defect in the grader, and each was found by hand, in
-that sim, because nothing in the platform could see it. That is the wrong place to keep finding it.
-
-**`defineSim` NOW CHECKS THE GRADER'S ARITY, AT DEFINITION.** The contract is
-`grade(state, params, answer)` — three positional arguments. TypeScript checks that for a TypeScript
-author and cannot check it for a JavaScript one, and a grader bundle is a plain object at runtime. So a
-two-argument function is now a **load-time error naming the simulation**, instead of a silent zero that
-reaches a student:
-
-```
-GRADER_ARITY in maths.something: grade takes (state, params, answer) — three arguments — and this
-one takes 2. A grader with the wrong arity is handed the parameters as its answer and the answer
-as its parameters, so every mark it awards is zero and nothing anywhere reports an error.
-```
-
-**AND THE CONFORMANCE MATRIX CHECKS IT PER SIM AS WELL**, so a simulation someone published without
-building locally is still caught — `every registered sim's grader honours grade(state, params, answer)`,
-16 cells now rather than 15 per sim.
-
-**A NEGATIVE CONTROL THAT PROVED NOTHING, RECORDED AS SUCH.** The first attempt at a sim-level negative
-control rewrote the signature as `grade(answer, params, _context)` — which is still THREE parameters, so
-there was nothing for the check to catch and the build passed. The check was right and the control was
-useless. The SDK's own test passes a zero-argument grader and asserts `GRADER_ARITY`, which is the
-control that actually exercises it.
-
-#### P6-T11 evidence
-- 5 of 24 gold sims. `pnpm sim:conformance` **80/80 cells** across all five; `pnpm test:sims` 30/30;
-  sim-sdk 66.
-- **1470 unit** — 1440 in the workspace packages and apps, plus 30 simulation tests — 336 db
-  integration, 8/8 container gates, lint 0, typecheck 0, `gate:browser` green.
-
-**THE COUNTING LOOP WAS LYING, AND NOW SAYS SO.** The sweep this replaced added whatever number each
-package's output matched, so a package whose output did not match contributed nothing and the total came
-out short with no error anywhere — which is how an earlier report in this tracker claimed 1495 when two
-independent runs agreed on 1440. `.tmp/unit-count.sh` reports `NO COUNT: <package>` and exits non-zero
-instead, and it includes the simulation tests rather than leaving them to a separate line. A count that
-cannot detect a missing package is not a measurement.
-
-
-#### P6-T11: gold sim 6, the first SEEDED simulation, and a vacuous pass caught
-
-**`maths.sequence-next` — the first gold sim whose content DEPENDS ON THE SEED.** Nothing else in the gold
-set exercises the path from the host's seed policy through `deriveSeed` into a simulation's own randomness,
-and that path is what makes a randomised question safe to retry. The randomness lives in one function in
-`model.ts`, taking a seed; nothing calls `Math.random`, and **the grader reconstructs the sequence from
-the seed it was given** rather than from anything the browser remembered — so a grade can be recomputed on
-a server that has never seen the student's browser. Graded `EXACT`, because a student's answer is a whole
-number and a floating-point tolerance invites an argument about whether 30.0000001 is 30.
-
-**THE TEXT ALTERNATIVE WAS GIVING AWAY THE ANSWER.** It ended *"The next term is 41"*, so a blocked
-student read the answer instead of the question and a printed worksheet carried its own solution. There is
-now a test that asserts the **absence** for every seed it tries, because this is exactly the kind of
-regression that reads as a feature when someone reviews the copy.
-
-**A DECLARED `expect.grade` WITH NO `expect.answer` PASSED VACUOUSLY, AND IS NOW A LOUD FAILURE.** The grade
-claim is only evaluated once an answer exists, and an answer only exists once something submits one — which
-happens only when `expect.answer` is declared. So `expect.grade: 4` with no answer went green having
-verified **nothing at all**, and this simulation did precisely that. The runner now refuses the combination:
-
-```
-expect.grade is declared but expect.answer is not, so there is no answer to grade and the claim is
-never checked. Declare the answer, or drop the grade claim.
-```
-
-Demonstrated by running it. This simulation declares nothing instead, because its answer depends on a seed
-the manifest cannot know — and a plausible-looking expectation is worse than an honest empty one.
-
-**THE SCHEMA REJECTED A 200px FRAME WITH `minimum: below 240`, AND WAS RIGHT TO.** A simulation shorter
-than the minimum has its control bar clipped, and a clipped control is a control a student cannot reach.
-
-#### P6-T11 evidence
-- 6 of 24 gold sims. `pnpm sim:conformance` **96/96 cells** across all six; `pnpm test:sims` 37/37.
-- **1477 unit**, 336 db integration, 8/8 container gates, lint 0, typecheck 0, `gate:browser` green,
-  image builds green.
-
-
-#### P6-T11: gold sim 7, the first MULTI-PART answer
-
-**`maths.quadratic-roots` — the first gold sim with MORE THAN ONE GRADED QUANTITY**, so the first to
-exercise partial credit *across parts*. `plans/20` needs that in P7 for every multi-part question, and
-building it here means the multi-part path is exercised by a simulation rather than only by the grading
-service's own tests. A grading service whose first multi-part question is a production incident is one
-that was only ever tested on single-value answers.
-
-**THREE SHAPES OF ANSWER FROM ONE QUESTION**, which is why the sim exists at all: two distinct roots, one
-REPEATED root, or none at all — and **leaving both boxes empty is the only correct answer** in that last
-case.
-
-**THE ORDER THE ROOTS ARE WRITTEN IN IS NOT PART OF THE ANSWER.** `1, 3` and `3, 1` are the same answer,
-and matching is done against the SET of expected roots, each given root against the nearest **unused**
-expected root — so one correct root cannot be "found" twice. A positional comparison would mark a correct
-pair wrong half the time, and the manifest needed a `{set: [...]}` expectation form to say so.
-
-**A REPEATED ROOT SCORED HALF.** A fixed price per root meant `(x - 2)²` — one root, typed correctly as
-`2` — earned 2 of 4. The award is now **proportional to what was asked for**: `matched / expected.length`,
-so a single root is the whole question when there is only one.
-
-**THE TEXT-ALTERNATIVE TEST WAS WRONG BEFORE THE CODE WAS.** It asserted the alternative does not contain
-`"3"`, which fails on the *constant term* of `x² - 4x + 3`. The equation is the question and belongs
-there. What must not appear is a statement *of the answer*, so the test now requires the text never to say
-"roots are" while still requiring the shape claim.
-
-**MY DECLARED EXPECTATION WAS WRONG AND THE CELL SAID SO.** `expect.answer.roots` was `{-1, 3}` for
-`(x+1)(x-3)`, which is `x² - 2x - 3`, not the `x² - 4x + 3` the manifest set. The simulation was right; the
-manifest was wrong; the cell reported `the sim answered [1, 3]`. A declared expectation that is CHECKED is
-worth more than one that is trusted, which is the whole argument for this mechanism.
-
-**STABILITY CHECKED, NOT ASSUMED.** One Newton cell failed alongside the quadratic one and then passed
-without any change to it, which suggested order sensitivity in a shared answer log. Three consecutive full
-runs at 112/112 before the suite was believed.
-
-#### P6-T11 evidence
-- 7 of 24 gold sims. `pnpm sim:conformance` **112/112 cells** across all seven; `pnpm test:sims` 47/47.
-- **1487 unit**, 336 db integration, 8/8 container gates, lint 0, typecheck 0, `gate:browser` green,
-  image builds green.
+- 8 of 24 gold sims. `pnpm sim:conformance` **128/128** across all eight; `pnpm test:sims` 59/59.
+- **1562 unit**, 336 db integration, 3 e2e, 8/8 container gates, lint 0, typecheck 0,
+  `pnpm test` 22/22 tasks, `gate:browser` green, image builds green.
+- **The unit-count helper is `.tmp/unit-count.sh` and it is NOT IN GIT.** Only `.tmp/TRACKER.md` is
+  un-ignored, so every "1562 unit" figure above rests on a script that exists only on one machine. It
+  needs to live in `scripts/` before any of these numbers are trustworthy to a reviewer.
 
 
 #### P6-T6 correction (the host could listen and never speak)
