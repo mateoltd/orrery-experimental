@@ -1362,7 +1362,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
 | P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `47657e0` | **16 of 24 built.** Every sim's declared `conformance.script`, `expect`, `conformance.type`, `reset` and **`initialState`** are honoured and checked against the simulation's real fields and states; randomised sims are checked for a seeded question; the manifest's capabilities are checked against the grader's. All eight subjects represented. |
-| P6-T14 Exercise `mode: 'graded'` end to end (EXAM PATH, currently untested in a browser) | **OPEN** | -- | `hostBridge.test.ts:204` asserts a graded `sim:init` carries a `grading` block and `:320` asserts a `sim:gradePreview` during a graded mount is discarded and recorded, so the HOST logic is covered. What is NOT covered is a browser mount in graded mode: no conformance run has ever used it, because the harness always mounts `lesson`. A cell was written for it and **removed**: it took the suite from ~2 min to ~15 min and then died with `EXIT=1` and no summary line, after ~40 cells. Shipping a cell that destabilises the suite is worse than shipping no cell, so the gap is recorded here instead. **Profiled: the remounts are NOT the cost.** `sim:conformance` now prints per-cell timings, and a remounting cell costs about **1.5 s**, so a graded cell with two mounts would add roughly 25 s across sixteen simulations. Total *cell* time for the whole matrix is **57 s**, against a wall clock several times that -- so the dominant cost is per-simulation MOUNTING, not cells. **Next: look at what the reverted cell left behind**, because it remounted in `graded` mode and every cell after it inherited a page that was not a lesson mount. |
+| P6-T14 Exercise `mode: 'graded'` end to end (EXAM PATH, currently untested in a browser) | **OPEN** | -- | `hostBridge.test.ts:204` asserts a graded `sim:init` carries a `grading` block and `:320` asserts a `sim:gradePreview` during a graded mount is discarded and recorded, so the HOST logic is covered. What is NOT covered is a browser mount in graded mode: no conformance run has ever used it, because the harness always mounts `lesson`. A cell was written for it and **removed**: it took the suite from ~2 min to ~15 min and then died with `EXIT=1` and no summary line, after ~40 cells. Shipping a cell that destabilises the suite is worse than shipping no cell, so the gap is recorded here instead. **Profiled TWICE, and the first profile was also wrong.** Cells total **58 s** for the whole matrix and mounting sixteen simulations totals **2 s** -- about a minute accounted for, against a wall clock several times that. A remounting cell costs ~1.5 s, so the graded cell would have added ~25 s: **page loads are not the cost either**. The time is in per-simulation work that is neither a cell nor a mount. **Next: instrument what is left** -- the per-simulation `page.close()`, the console-error sweep, and the screenshot -- before writing the cell again. Note also that a run dies at exactly the same point twice now, immediately after `RESET`, inside the saved-work cell, which suggests the saved-work cell is where a remount-heavy suite comes apart. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -2153,6 +2153,49 @@ mounts a randomised simulation twice with the same seed and requires the same st
 biology.mitosis-order as declaring `randomised: false` while containing `Math.random`, and the occurrences
 were prose explaining why they do not call it. A grep is not an audit, and a defect found by grep alone is
 often a defect in the grep.
+
+#### P6-T11: profiling the suite, and TWO wrong hypotheses
+
+**THE RUNNER NOW PRINTS PER-CELL TIMINGS**, because "the suite got slower" is not an actionable
+observation, and every cell printed the same single line whether it took forty milliseconds or forty
+seconds. A run that is **green AND slow** is exactly the run nobody investigates, because nothing is wrong.
+The slowest cells, their share of total time, and their per-simulation cost are printed on success as well
+as on failure.
+
+**THE MEASUREMENT, AND IT SETTLED THE ARGUMENT:**
+
+    25.2 s  1577 ms/sim   the student's SAVED WORK comes back
+    18.6 s  1161 ms/sim   RESET puts the student back where they started
+     8.7 s   544 ms/sim   the manifest's OWN conformance script runs and its `expect` holds
+    57.1 s  total for all 320 cells
+
+So cells are about a minute. **A remounting cell costs ~1.5 s**, and the graded-mode cell would have added
+roughly **25 s** across sixteen simulations — which means P6-T14's recorded next step, "profile the
+per-cell page loads", was aimed at the wrong thing, and I corrected the row rather than leave a plausible
+sounding reason that would send the next attempt down the same path.
+
+**THEN A SECOND HYPOTHESIS, ALSO WRONG.** If cells are a minute and the run is several, the obvious guess
+is that mounting sixteen simulations dominates. Timed, it is **2 s**: context 0 s, navigation 1 s,
+handshake 0 s. Setup is ~0 s too — the harness bundle, both origins and the browser launch are all
+effectively free.
+
+**So roughly eight of the nine minutes are in per-simulation work that is neither a cell nor a mount**, and
+the only candidates left are `page.close()`, the console-error sweep and the screenshot. That is the next
+measurement, and it is now written down rather than guessed at.
+
+**AND THE INSTRUMENTATION ITSELF HAD TO BE THROWN AWAY.** Extending the timing to `page.close()` made the
+run die at exactly the same point the graded cell did — immediately after `RESET`, inside the saved-work
+cell — and it was reverted to the last verified-green state. The pattern is now consistent enough to be
+worth naming: **three cells remount the page, and the suite dies where the remounts are heaviest.** Whether
+that is resource exhaustion or a genuine race is not established, and saying otherwise would be exactly the
+kind of confident guess this section exists to correct.
+
+**A ROW THAT RECORDS A HYPOTHESIS NEEDS THE MEASUREMENT THAT KILLED IT**, and it needs updating again when
+the next measurement kills the replacement.
+
+#### P6-T11 evidence
+- 16 of 24 gold sims. `pnpm sim:conformance` **320/320** with per-cell timings; `pnpm test:sims` 157/157;
+  **1684 unit**; 336 db integration; 3 e2e; 9/9 container gates; lint 0; typecheck 0; `pnpm test` 22/22.
 
 #### P6-T11: the measurement that REFUTES the hypothesis it was filed under
 
