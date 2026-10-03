@@ -285,7 +285,25 @@ export const publishRefusal = (
   );
 };
 
-/** Whether a raw score can go negative under this method. `SU` cannot, `NG` can, and the difference matters. */
+/**
+ * WHETHER A RAW SCORE CAN GO NEGATIVE UNDER THIS METHOD.
+ *
+ * ## `RI` IS IN HERE AND `plans/07` §3's TABLE SAYS IT SHOULD NOT BE
+ *
+ * The table's row reads "+1 correct, −1 incorrect, only if the response is no larger than the key", and its
+ * "produces negative raw scores" column reads "No (the size clause saves it)". The size clause does not save
+ * it: that clause fires only when the response is LARGER than the key, so a response the same size as the key
+ * and entirely wrong goes straight through to `+0 −1 = −1`.
+ *
+ * Found by the property test in `properties.test.ts`, whose counterexample was `["RI", ["b"], ["c"]]` -- one
+ * option selected, one keyed, and they differ.
+ *
+ * **SO THIS FOLLOWS THE FORMULA, AND THE GLOSS IS RECORDED AS WRONG.** The formula is the operative definition
+ * of the method; the parenthetical mis-describes the clause. `SU` is the one that cannot go negative, because
+ * its rule refuses the response outright rather than scoring it. Changing published scoring semantics is not a
+ * decision for the author of the grader, so the discrepancy is in the tracker awaiting sign-off -- what is not
+ * acceptable is the code matching a gloss that claims the opposite.
+ */
 export const canGoNegative = (method: Method): boolean =>
   method === 'NG' || method === 'PM' || method === 'RI';
 

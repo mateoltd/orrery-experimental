@@ -146,6 +146,7 @@
   "devDependencies": {
     "@types/katex": "0.16.7",
     "@types/node": "22.10.2",
+    "fast-check": "3.23.2",
     "jest-axe": "10.0.0",
     "jsdom": "26.1.0",
     "vitest": "3.2.7"
