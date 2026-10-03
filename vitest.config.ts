@@ -46,6 +46,27 @@ export default defineConfig({
           functions: 100,
           statements: 100,
         },
+        /**
+         * The short-text matchers and the ordering grader, held to the same floor.
+         *
+         * `text.ts` decides whether a student's sentence is right, and its one non-obvious hazard is
+         * REGULAR EXPRESSIONS: an author pattern that does not compile must match nothing rather than throw,
+         * or a malformed pattern in one question fails every submission. `simulation.ts` holds `INV-SIM-2`,
+         * which is a correctness property about the absence of a zero rather than about arithmetic, and an
+         * uncovered branch there is an uncovered way to zero a student.
+         */
+        'packages/contracts/src/grading/text.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
+        'packages/contracts/src/grading/simulation.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
       },
     },
   },

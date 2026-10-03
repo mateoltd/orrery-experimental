@@ -702,3 +702,43 @@ describe('a spec with no discriminant at all', () => {
     expect(result.points).toBe(0);
   });
 });
+
+describe('rawPoints is normalised without being clamped', () => {
+  it('turns a non-finite raw score into 0 rather than storing NaN', () => {
+    /**
+     * `normaliseZero` has three arms: `-0` becomes `0`, a finite value passes through UNTOUCHED, and a
+     * non-finite value becomes `0`. The middle arm is the one that matters and it is asserted here: a NEGATIVE
+     * raw score must survive, because that is the whole reason the field exists.
+     */
+    const spec = { ...multiSelect, partialCredit: 'NG' } as QuestionSpec;
+    expect(g(spec, { choiceIds: ['b', 'd'] }).rawPoints).toBe(-4);
+  });
+
+  it('normalises a NEGATIVE ZERO from a sim whose score lands exactly on the boundary', () => {
+    /**
+     * `-0` REACHES `normaliseZero` FROM A REAL PATH, and `Object.is(-0, 0)` is FALSE.
+     *
+     * A partial credit count multiplied by a per-option share of `0` is `-0` when the count is negative, which
+     * is what happens on a question whose key is empty and whose method penalises. Stored as `-0` it compares
+     * unequal to `0` under `Object.is`, so a diff of the two columns would report a change that is not one.
+     */
+    const emptyKey = {
+      ...multiSelect,
+      key: { choiceIds: [] },
+      partialCredit: 'NG',
+    } as QuestionSpec;
+    const result = g(emptyKey, { choiceIds: ['a'] });
+    expect(Object.is(result.rawPoints, -0)).toBe(false);
+    expect(result.rawPoints).toBe(0);
+    expect(Object.is(result.points, -0)).toBe(false);
+  });
+
+  it('reports 0 rather than NaN when points would overflow', () => {
+    const result = g(
+      { ...multiSelect, points: Number.POSITIVE_INFINITY },
+      { choiceIds: ['a', 'c'] },
+    );
+    expect(Number.isNaN(result.rawPoints)).toBe(false);
+    expect(Number.isFinite(result.points)).toBe(true);
+  });
+});
