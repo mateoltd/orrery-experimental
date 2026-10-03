@@ -2976,6 +2976,37 @@ The general rule this establishes: **this tracker's failure mode is confidently 
 quiet error gets caught by a test. The P7-T8 error was a confident claim — a table cell asserting `NOT STARTED`
 with no evidence behind it — and it survived until it destroyed a file.
 
+### PF-1a · The remedy, applied to the rows that were still unverified
+
+PF-1's first change is that a NOT STARTED row must record the grep that justifies it. Applied to the remaining
+P7 rows, 2026-03-01:
+
+| Row | Distinctive identifier | Present in non-test source? | Verdict |
+|---|---|---|---|
+| row `P7-T6` | `AttemptStatus` as an exported type | no | NOT STARTED, confirmed |
+| row `P7-T6` | autosave outbox | matches only prose and `assignment` | NOT STARTED, confirmed |
+| row `P7-T7` | a renderer module keyed by `QuestionType` | no such module | NOT STARTED, confirmed |
+| row `P7-T9` | `AnswerRevision` | no | NOT STARTED, confirmed |
+| row `P7-T10` | `"audit:seals"` in root `package.json` scripts | no | NOT STARTED, confirmed |
+| row `P7-T11` | a session-header / second-tab module | no | NOT STARTED, confirmed |
+| row `P7-T12` | `testGrader` | no | NOT STARTED, confirmed |
+| row `P7-T14` | a server-offset computation | no | NOT STARTED, confirmed |
+
+Two rows needed a second pass because the first grep was too loose, which is itself the lesson:
+
+- `outbox|autosave` matched **11** non-test files. Every one was a false positive — the word appears in
+  assignment-related identifiers, not in an attempt runtime. A grep that matches eleven files when the feature is
+  absent has matched nothing, and a count is not evidence.
+- `renderer|sealed` matched **12** and **8** respectively, for the same reason.
+
+**SO THE RULE IS NOT "GREP FOR THE NAME" BUT "GREP FOR AN EXPORT THAT ONLY THIS TASK WOULD PRODUCE."** A word
+that appears in prose, in neighbouring features, or in a schema comment is not a signal. The identifiers above
+were chosen because nothing else in the repository would produce them. Anything looser produced a confident count
+of false positives, which is the same failure as PF-1 in a smaller dress.
+
+`receiptHash` does exist, in `packages/interop/src/boundary.ts` — one hit, in a different package, for a boundary
+concern rather than a submission receipt. Not P7-T9's chain.
+
 ### PF-2 · A coverage threshold is a claim too, and an unthresholded file is an unexamined one
 
 `policy/index.ts` has no per-path coverage entry, and had none before this task. So its four uncovered branches
