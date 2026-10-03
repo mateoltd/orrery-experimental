@@ -116,6 +116,10 @@
       "types": "./dist/grading/simulation.d.ts",
       "default": "./dist/grading/simulation.js"
     },
+    "./grading/receipt": {
+      "types": "./dist/grading/receipt.d.ts",
+      "default": "./dist/grading/receipt.js"
+    },
     "./grading/harness": {
       "types": "./dist/grading/harness.d.ts",
       "default": "./dist/grading/harness.js"
