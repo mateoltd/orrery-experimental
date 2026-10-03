@@ -1173,6 +1173,10 @@ const run = async () => {
     const config = Buffer.from(JSON.stringify(harnessConfig(entry, sim.origin))).toString(
       'base64url',
     );
+    // NOT TIMED YET, and deliberately: the per-cell numbers showed the whole cell set costs 57 s against a
+    // wall clock several times that, so the cost is in mounting sixteen simulations rather than in the
+    // assertions. Splitting `newPage`, the navigation and the ready-wait says which of the three -- but a
+    // timer added and never read is instrumentation theatre, so it waits until someone acts on it.
     await page.goto(`${app.origin}/?cfg=${config}`, { waitUntil: 'load' });
     try {
       await page.waitForFunction(() => globalThis.__conformance?.ready === true, undefined, {
@@ -1200,7 +1204,10 @@ const run = async () => {
     for (const cell of CELLS) {
       let failure = null;
       // eslint-disable-next-line no-continue -- the click branch above deliberately continues
-      const startedAt = Date.now();
+      // `hrtime`, NOT `Date.now()`: `INV-TIME-1` bans the wall clock outside `@orrery/clock`, and it is the
+      // wrong tool anyway -- these are DURATIONS, and a clock adjustment mid-cell should not make a cell
+      // look instant or endless. The file already has `deadline()` for exactly this reason.
+      const startedAt = hrtime.bigint();
       try {
         failure = await cell.run({
           page,
@@ -1220,7 +1227,7 @@ const run = async () => {
       // Nobody could say which cell was responsible, because every cell printed the same one line whether
       // it took 40 ms or 40 s. The slowest few are printed at the end, so the next person adding a cell
       // knows what a cell COSTS before adding twenty of them.
-      const elapsed = Date.now() - startedAt;
+      const elapsed = Number(hrtime.bigint() - startedAt) / 1e6;
       const seen = timings.get(cell.name) ?? { ms: 0, n: 0 };
       seen.ms += elapsed;
       seen.n += 1;
