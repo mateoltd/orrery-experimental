@@ -1,0 +1,119 @@
+{
+  "id": "maths.midpoint-of-segment",
+  "version": "1.0.0",
+  "title": "Midpoint of a line segment",
+  "summary": "Read the two endpoints of a segment, and work out the coordinates of its midpoint.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["maths"],
+  "tags": ["coordinate-geometry", "midpoint"],
+  "ageRange": [13, 18],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A line segment drawn on axes with both endpoints labelled, and two boxes for the coordinates of its midpoint.",
+    "reducedMotion": true,
+    "textAlternative": "A straight line segment drawn between two labelled points on a pair of axes. The task is to work out the coordinates of the point halfway between them."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "x1": {
+        "type": "number",
+        "label": "first x",
+        "unit": "",
+        "minimum": -20,
+        "maximum": 20,
+        "default": -4
+      },
+      "y1": {
+        "type": "number",
+        "label": "first y",
+        "unit": "",
+        "minimum": -20,
+        "maximum": 20,
+        "default": 7
+      },
+      "x2": {
+        "type": "number",
+        "label": "second x",
+        "unit": "",
+        "minimum": -20,
+        "maximum": 20,
+        "default": 2
+      },
+      "y2": {
+        "type": "number",
+        "label": "second y",
+        "unit": "",
+        "minimum": -20,
+        "maximum": 20,
+        "default": -1
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 360,
+    "minHeight": 240,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "x1": -4,
+            "y1": 7,
+            "x2": 2,
+            "y2": -1
+          }
+        }
+      }
+    ],
+    "type": {
+      "midpoint-x": -1,
+      "midpoint-y": 3
+    },
+    "expect": {
+      "value": {
+        "sequence": [-1.0, 3.0]
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "NUMERIC",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0.01,
+      "relative": 0.005
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You answered {answer}; the midpoint is {expected}."
+  }
+}

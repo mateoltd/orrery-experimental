@@ -1,0 +1,809 @@
+{
+  "generatedFrom": "1970-01-01",
+  "digest": "a27a84968d505483a3d41bd341dad908317ce7c5987155de349b851631475e28",
+  "entries": [
+    {
+      "id": "astronomy.parallax-distance",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.c0bf4f73c16a.html",
+        "browser": "./browser.c257e5534ed3.js",
+        "grader": "./grader.d00a0f993bcf.js",
+        "style": "./style.b44267f09d47.css"
+      },
+      "bytes": {
+        "browser": 12024,
+        "grader": 7142,
+        "total": 19944
+      },
+      "defaultHeight": 330,
+      "minHeight": 240,
+      "parameters": [
+        {
+          "name": "parallax",
+          "type": "number",
+          "label": "Annual parallax",
+          "unit": "arcsec",
+          "minimum": 0.05,
+          "maximum": 2,
+          "step": 0.01,
+          "default": 0.1
+        },
+        {
+          "name": "inLightYears",
+          "type": "enum",
+          "label": "Answer in light years",
+          "unit": null,
+          "minimum": null,
+          "maximum": null,
+          "step": null,
+          "default": "false"
+        }
+      ]
+    },
+    {
+      "id": "biology.mitosis-order",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.b9fd378bc148.html",
+        "browser": "./browser.a6fbc0d76e22.js",
+        "grader": "./grader.9478f61bb559.js",
+        "style": "./style.f206050a0042.css"
+      },
+      "bytes": {
+        "browser": 11652,
+        "grader": 6965,
+        "total": 19516
+      },
+      "defaultHeight": 420,
+      "minHeight": 300,
+      "parameters": [
+        {
+          "name": "count",
+          "type": "number",
+          "label": "Stages",
+          "unit": "",
+          "minimum": 2,
+          "maximum": 6,
+          "step": null,
+          "default": 6
+        }
+      ]
+    },
+    {
+      "id": "chem.ideal-gas-law",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.1dac7efb5a13.html",
+        "browser": "./browser.0c2fb7c40d05.js",
+        "grader": "./grader.25c9ec1b0b9f.js",
+        "style": "./style.eac67ab7c953.css"
+      },
+      "bytes": {
+        "browser": 11709,
+        "grader": 7079,
+        "total": 19614
+      },
+      "defaultHeight": 340,
+      "minHeight": 240,
+      "parameters": [
+        {
+          "name": "p",
+          "type": "number",
+          "label": "Pressure",
+          "unit": "kPa",
+          "minimum": 50,
+          "maximum": 300,
+          "step": null,
+          "default": 101.3
+        },
+        {
+          "name": "v",
+          "type": "number",
+          "label": "Volume",
+          "unit": "L",
+          "minimum": 1,
+          "maximum": 60,
+          "step": null,
+          "default": 22.4
+        },
+        {
+          "name": "n",
+          "type": "number",
+          "label": "Amount",
+          "unit": "mol",
+          "minimum": 0.1,
+          "maximum": 5,
+          "step": null,
+          "default": 1
+        },
+        {
+          "name": "showFormula",
+          "type": "boolean",
+          "label": "Show the rearranged law",
+          "unit": null,
+          "minimum": null,
+          "maximum": null,
+          "step": null,
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "chem.mole-concentration",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.11c233d278ea.html",
+        "browser": "./browser.6abb3c8feabf.js",
+        "grader": "./grader.8fdea32dbfed.js",
+        "style": "./style.062ac6ea3584.css"
+      },
+      "bytes": {
+        "browser": 11764,
+        "grader": 7123,
+        "total": 19677
+      },
+      "defaultHeight": 330,
+      "minHeight": 240,
+      "parameters": [
+        {
+          "name": "buretteCm",
+          "type": "number",
+          "label": "Burette reading",
+          "unit": "cm",
+          "minimum": 0,
+          "maximum": 50,
+          "step": 0.1,
+          "default": 23.4
+        },
+        {
+          "name": "flaskMl",
+          "type": "number",
+          "label": "Flask volume",
+          "unit": "mL",
+          "minimum": 1,
+          "maximum": 1000,
+          "step": 1,
+          "default": 250
+        }
+      ]
+    },
+    {
+      "id": "chemistry.equation-balancing",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.3e57e14ab21d.html",
+        "browser": "./browser.920bc5c8ed6d.js",
+        "grader": "./grader.63c9b2cc9678.js",
+        "style": "./style.3335c02223c8.css"
+      },
+      "bytes": {
+        "browser": 8079,
+        "grader": 6077,
+        "total": 15004
+      },
+      "defaultHeight": 300,
+      "minHeight": 220,
+      "parameters": []
+    },
+    {
+      "id": "computing-science.download-time",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.e07b29dc619f.html",
+        "browser": "./browser.2282c4b5faf4.js",
+        "grader": "./grader.8d5697ee9581.js",
+        "style": "./style.a4425805387d.css"
+      },
+      "bytes": {
+        "browser": 11592,
+        "grader": 7353,
+        "total": 19733
+      },
+      "defaultHeight": 300,
+      "minHeight": 220,
+      "parameters": [
+        {
+          "name": "sizeMb",
+          "type": "number",
+          "label": "File size",
+          "unit": "MB",
+          "minimum": 0.1,
+          "maximum": 10000,
+          "step": 0.1,
+          "default": 100
+        },
+        {
+          "name": "speedMbps",
+          "type": "number",
+          "label": "Connection speed",
+          "unit": "Mbit/s",
+          "minimum": 0.1,
+          "maximum": 10000,
+          "step": 0.1,
+          "default": 100
+        }
+      ]
+    },
+    {
+      "id": "computing.binary-search",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.af040b5d7809.html",
+        "browser": "./browser.3830238a7c83.js",
+        "grader": "./grader.77d6a4baec3c.js",
+        "style": "./style.cd7f3f6bbbc7.css"
+      },
+      "bytes": {
+        "browser": 14747,
+        "grader": 7331,
+        "total": 22883
+      },
+      "defaultHeight": 360,
+      "minHeight": 240,
+      "parameters": [
+        {
+          "name": "target",
+          "type": "number",
+          "label": "Search for",
+          "unit": "",
+          "minimum": -99,
+          "maximum": 99,
+          "step": null,
+          "default": 8
+        },
+        {
+          "name": "length",
+          "type": "number",
+          "label": "List length",
+          "unit": "",
+          "minimum": 1,
+          "maximum": 64,
+          "step": null,
+          "default": 8
+        }
+      ]
+    },
+    {
+      "id": "general-science.energy-budget",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.331ac0c50c4c.html",
+        "browser": "./browser.e3c8ec588de6.js",
+        "grader": "./grader.5510bf89398a.js",
+        "style": "./style.96ca3d2aa506.css"
+      },
+      "bytes": {
+        "browser": 12116,
+        "grader": 7359,
+        "total": 20257
+      },
+      "defaultHeight": 320,
+      "minHeight": 240,
+      "parameters": [
+        {
+          "name": "inputJ",
+          "type": "number",
+          "label": "Energy supplied",
+          "unit": "J",
+          "minimum": 1,
+          "maximum": 1000000,
+          "step": 1,
+          "default": 1000
+        },
+        {
+          "name": "efficiency",
+          "type": "number",
+          "label": "Efficiency",
+          "unit": "%",
+          "minimum": 5,
+          "maximum": 100,
+          "step": 1,
+          "default": 25
+        }
+      ]
+    },
+    {
+      "id": "geography.map-scale-distance",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.46f261e2d83c.html",
+        "browser": "./browser.bca92636a191.js",
+        "grader": "./grader.872c381e89a2.js",
+        "style": "./style.42054a81bf3c.css"
+      },
+      "bytes": {
+        "browser": 12223,
+        "grader": 7066,
+        "total": 20069
+      },
+      "defaultHeight": 330,
+      "minHeight": 240,
+      "parameters": [
+        {
+          "name": "mapCm",
+          "type": "number",
+          "label": "On the map",
+          "unit": "cm",
+          "minimum": 0.5,
+          "maximum": 20,
+          "step": 0.1,
+          "default": 4
+        },
+        {
+          "name": "ratio",
+          "type": "enum",
+          "label": "Scale",
+          "unit": null,
+          "minimum": null,
+          "maximum": null,
+          "step": null,
+          "default": "50000"
+        }
+      ]
+    },
+    {
+      "id": "maths.linear-functions",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.8c778375d8b7.html",
+        "browser": "./browser.59adb798b5ac.js",
+        "grader": "./grader.eecc153fc684.js",
+        "style": "./style.296173ec044e.css"
+      },
+      "bytes": {
+        "browser": 12241,
+        "grader": 7100,
+        "total": 20173
+      },
+      "defaultHeight": 360,
+      "minHeight": 240,
+      "parameters": [
+        {
+          "name": "m",
+          "type": "number",
+          "label": "Gradient",
+          "unit": "",
+          "minimum": -5,
+          "maximum": 5,
+          "step": null,
+          "default": 2
+        },
+        {
+          "name": "c",
+          "type": "number",
+          "label": "y-intercept",
+          "unit": "",
+          "minimum": -5,
+          "maximum": 5,
+          "step": null,
+          "default": 1
+        },
+        {
+          "name": "span",
+          "type": "number",
+          "label": "Axis range",
+          "unit": "",
+          "minimum": 2,
+          "maximum": 10,
+          "step": null,
+          "default": 5
+        },
+        {
+          "name": "showGrid",
+          "type": "boolean",
+          "label": "Show grid",
+          "unit": null,
+          "minimum": null,
+          "maximum": null,
+          "step": null,
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "maths.midpoint-of-segment",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.831e03345962.html",
+        "browser": "./browser.e2ac1df998a9.js",
+        "grader": "./grader.62a11bf02eb1.js",
+        "style": "./style.b77ad90f4026.css"
+      },
+      "bytes": {
+        "browser": 11998,
+        "grader": 9034,
+        "total": 21811
+      },
+      "defaultHeight": 360,
+      "minHeight": 240,
+      "parameters": [
+        {
+          "name": "x1",
+          "type": "number",
+          "label": "first x",
+          "unit": "",
+          "minimum": -20,
+          "maximum": 20,
+          "step": null,
+          "default": -4
+        },
+        {
+          "name": "y1",
+          "type": "number",
+          "label": "first y",
+          "unit": "",
+          "minimum": -20,
+          "maximum": 20,
+          "step": null,
+          "default": 7
+        },
+        {
+          "name": "x2",
+          "type": "number",
+          "label": "second x",
+          "unit": "",
+          "minimum": -20,
+          "maximum": 20,
+          "step": null,
+          "default": 2
+        },
+        {
+          "name": "y2",
+          "type": "number",
+          "label": "second y",
+          "unit": "",
+          "minimum": -20,
+          "maximum": 20,
+          "step": null,
+          "default": -1
+        }
+      ]
+    },
+    {
+      "id": "maths.projectile-motion",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.f64287ce40d6.html",
+        "browser": "./browser.70fa033b1b6d.js",
+        "grader": "./grader.f330b5e00ca6.js",
+        "style": "./style.dec5ddce6f96.css"
+      },
+      "bytes": {
+        "browser": 22438,
+        "grader": 6674,
+        "total": 30130
+      },
+      "defaultHeight": 420,
+      "minHeight": 240,
+      "parameters": [
+        {
+          "name": "speed",
+          "type": "number",
+          "label": "Launch speed",
+          "unit": "m/s",
+          "minimum": 5,
+          "maximum": 60,
+          "step": null,
+          "default": 25
+        },
+        {
+          "name": "angle",
+          "type": "number",
+          "label": "Launch angle",
+          "unit": "degrees",
+          "minimum": 5,
+          "maximum": 85,
+          "step": null,
+          "default": 45
+        },
+        {
+          "name": "gravity",
+          "type": "number",
+          "label": "Gravity",
+          "unit": "m/s2",
+          "minimum": 1.6,
+          "maximum": 24.8,
+          "step": null,
+          "default": 9.81
+        }
+      ]
+    },
+    {
+      "id": "maths.pythagoras",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.3a5906b1a3d7.html",
+        "browser": "./browser.afd073ec69d7.js",
+        "grader": "./grader.52c2df9b7bda.js",
+        "style": "./style.ee228b1a9329.css"
+      },
+      "bytes": {
+        "browser": 12838,
+        "grader": 8221,
+        "total": 21822
+      },
+      "defaultHeight": 320,
+      "minHeight": 240,
+      "parameters": [
+        {
+          "name": "a",
+          "type": "number",
+          "label": "Side a",
+          "unit": "",
+          "minimum": 1,
+          "maximum": 20,
+          "step": null,
+          "default": 3
+        },
+        {
+          "name": "b",
+          "type": "number",
+          "label": "Side b",
+          "unit": "",
+          "minimum": 1,
+          "maximum": 20,
+          "step": null,
+          "default": 4
+        },
+        {
+          "name": "c",
+          "type": "number",
+          "label": "Side c",
+          "unit": "",
+          "minimum": 1,
+          "maximum": 30,
+          "step": null,
+          "default": 5
+        },
+        {
+          "name": "giveLengths",
+          "type": "boolean",
+          "label": "Give the lengths",
+          "unit": null,
+          "minimum": null,
+          "maximum": null,
+          "step": null,
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "maths.quadratic-roots",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.2b38cdce1a10.html",
+        "browser": "./browser.e26c26e69c0c.js",
+        "grader": "./grader.37f5fbd5d7cf.js",
+        "style": "./style.62c29a1b922b.css"
+      },
+      "bytes": {
+        "browser": 12060,
+        "grader": 8106,
+        "total": 20935
+      },
+      "defaultHeight": 360,
+      "minHeight": 240,
+      "parameters": [
+        {
+          "name": "a",
+          "type": "number",
+          "label": "x² coefficient",
+          "unit": "",
+          "minimum": -5,
+          "maximum": 5,
+          "step": null,
+          "default": 1
+        },
+        {
+          "name": "b",
+          "type": "number",
+          "label": "x coefficient",
+          "unit": "",
+          "minimum": -12,
+          "maximum": 12,
+          "step": null,
+          "default": -4
+        },
+        {
+          "name": "c",
+          "type": "number",
+          "label": "constant",
+          "unit": "",
+          "minimum": -12,
+          "maximum": 12,
+          "step": null,
+          "default": 3
+        }
+      ]
+    },
+    {
+      "id": "maths.sequence-next",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.5720fd6cfb6e.html",
+        "browser": "./browser.da9be7f66044.js",
+        "grader": "./grader.aa697849caf1.js",
+        "style": "./style.50e3936ad9ed.css"
+      },
+      "bytes": {
+        "browser": 10861,
+        "grader": 5669,
+        "total": 17324
+      },
+      "defaultHeight": 260,
+      "minHeight": 240,
+      "parameters": [
+        {
+          "name": "shown",
+          "type": "number",
+          "label": "Terms shown",
+          "unit": "",
+          "minimum": 3,
+          "maximum": 8,
+          "step": null,
+          "default": 5
+        }
+      ]
+    },
+    {
+      "id": "physics.kinematics",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.f664dca20483.html",
+        "browser": "./browser.98b5e22633d0.js",
+        "grader": "./grader.6931ec808103.js",
+        "style": "./style.ab847adcb43f.css"
+      },
+      "bytes": {
+        "browser": 12418,
+        "grader": 7349,
+        "total": 20543
+      },
+      "defaultHeight": 340,
+      "minHeight": 240,
+      "parameters": [
+        {
+          "name": "t",
+          "type": "number",
+          "label": "Time",
+          "unit": "s",
+          "minimum": 0.1,
+          "maximum": 5,
+          "step": null,
+          "default": 2
+        },
+        {
+          "name": "scenario",
+          "type": "enum",
+          "label": "Situation",
+          "unit": null,
+          "minimum": null,
+          "maximum": null,
+          "step": null,
+          "default": "dropped"
+        }
+      ]
+    },
+    {
+      "id": "physics.newtons-second-law",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.68aca4cfbde0.html",
+        "browser": "./browser.67b50121936b.js",
+        "grader": "./grader.d883df13d62e.js",
+        "style": "./style.676c2ce82855.css"
+      },
+      "bytes": {
+        "browser": 13274,
+        "grader": 8480,
+        "total": 22557
+      },
+      "defaultHeight": 320,
+      "minHeight": 240,
+      "parameters": [
+        {
+          "name": "force",
+          "type": "number",
+          "label": "Net force",
+          "unit": "N",
+          "minimum": 0,
+          "maximum": 60,
+          "step": null,
+          "default": 12
+        },
+        {
+          "name": "mass",
+          "type": "number",
+          "label": "Mass",
+          "unit": "kg",
+          "minimum": 0.5,
+          "maximum": 20,
+          "step": null,
+          "default": 3
+        },
+        {
+          "name": "solveFor",
+          "type": "enum",
+          "label": "Find the",
+          "unit": null,
+          "minimum": null,
+          "maximum": null,
+          "step": null,
+          "default": "acceleration"
+        },
+        {
+          "name": "showArrow",
+          "type": "boolean",
+          "label": "Show the force arrow",
+          "unit": null,
+          "minimum": null,
+          "maximum": null,
+          "step": null,
+          "default": true
+        },
+        {
+          "name": "accel",
+          "type": "number",
+          "label": "Acceleration",
+          "unit": "m/s²",
+          "minimum": 0.5,
+          "maximum": 20,
+          "step": null,
+          "default": 4
+        }
+      ]
+    }
+  ]
+}
