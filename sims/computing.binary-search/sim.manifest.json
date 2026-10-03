@@ -1,0 +1,97 @@
+{
+  "id": "computing.binary-search",
+  "version": "1.0.0",
+  "title": "Counting binary search comparisons",
+  "summary": "Watch a binary search narrow a list, and count how many comparisons it takes.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["computing"],
+  "tags": ["algorithms", "search", "binary-search"],
+  "ageRange": [13, 18],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A row of numbered cells that are searched one at a time, and a box for the number of comparisons.",
+    "reducedMotion": true,
+    "textAlternative": "A sorted list of numbers and a value to search for are given, together with the rule for choosing the middle of the remaining range. The task is to work out how many comparisons the search makes."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "target": {
+        "type": "number",
+        "label": "Search for",
+        "unit": "",
+        "minimum": -99,
+        "maximum": 99,
+        "default": 8
+      },
+      "length": {
+        "type": "number",
+        "label": "List length",
+        "unit": "",
+        "minimum": 1,
+        "maximum": 64,
+        "default": 8
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": true,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 360,
+    "minHeight": 240,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "target": 8,
+            "length": 8
+          }
+        }
+      }
+    ],
+    "type": {
+      "comparisons": 4
+    },
+    "expect": {
+      "value": {
+        "min": 4,
+        "max": 5
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "EXACT",
+    "maxPoints": 4,
+    "rationaleTemplate": "You said {answer} comparisons; the search makes {expected}.",
+    "partialCredit": false
+  }
+}

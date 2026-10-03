@@ -90,7 +90,17 @@ export function withinTolerance(
   const magnitude = Math.max(Math.abs(given), Math.abs(expected));
   const relative = (spec.rel ?? 0) * magnitude;
   const absolute = spec.abs ?? 0;
-  if (absolute === 0 && relative === 0) return false;
+  // ZERO TOLERANCE MEANS EXACT, NOT "NOTHING IS WITHIN IT".
+  //
+  // This guard existed to stop an ABSENT tolerance accepting everything, and it keyed on the value being
+  // zero rather than on it being undefined -- so it also rejected a deliberately exact one. A grader that
+  // wrote `abs: 0, rel: 0`, which is the natural way to say "this is a count, match it exactly", scored
+  // every CORRECT answer zero: `withinTolerance(4, 4, {abs: 0, rel: 0})` was `false`.
+  //
+  // `difference <= 0` is the honest reading and it is STRICTER than the old guard, not looser: an absent
+  // spec now accepts only an exact match rather than rejecting everything. No simulation declared a zero
+  // tolerance until the tenth one, which is why this sat unnoticed through nine gold simulations and a
+  // green matrix.
   return difference <= Math.max(absolute, relative);
 }
 

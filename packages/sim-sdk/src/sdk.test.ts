@@ -732,3 +732,28 @@ describe('tolerance partial credit', () => {
     expect(narrow.points).toBe(0);
   });
 });
+describe('a zero tolerance is an EXACT match, not a rejection', () => {
+  it('accepts an exact answer when both tolerances are zero', () => {
+    expect(withinTolerance(4, 4, { abs: 0, rel: 0 })).toBe(true);
+    expect(tolerance(4, 4, { abs: 0, rel: 0, maxPoints: 4 }).points).toBe(4);
+  });
+
+  // The defect: `withinTolerance` returned false for ANY pair when both tolerances were zero, so a
+  // grader declaring `abs: 0, rel: 0` -- the natural way to say "this is a count, match it exactly" --
+  // scored every correct answer zero.
+  it('still rejects an inexact answer when both tolerances are zero', () => {
+    expect(withinTolerance(4, 5, { abs: 0, rel: 0 })).toBe(false);
+    expect(tolerance(4, 5, { abs: 0, rel: 0, maxPoints: 4 }).points).toBe(0);
+  });
+
+  it('is STRICTER for an absent spec than the old guard was', () => {
+    expect(withinTolerance(4, 4, {})).toBe(true);
+    expect(withinTolerance(4, 4.5, {})).toBe(false);
+  });
+
+  it('gives no partial credit at all for a count, because one step out is a quarter of the answer', () => {
+    const spec = { abs: 0, rel: 0, maxPoints: 4, partialCredit: false };
+    expect(tolerance(3, 4, spec).points).toBe(0);
+    expect(tolerance(4, 4, spec).points).toBe(4);
+  });
+});
