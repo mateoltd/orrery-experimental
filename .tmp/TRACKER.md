@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `2a44116` | **15 of 24 built.** Every sim's declared `conformance.script`, `expect`, `conformance.type` and `reset` are honoured and checked against the simulation's real fields and states; randomised sims are checked for a seeded question; the manifest's capabilities are checked against the grader's. EIGHT subjects represented. |
+| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `5e3eda4` | **16 of 24 built.** Every sim's declared `conformance.script`, `expect`, `conformance.type` and `reset` are honoured and checked against the simulation's real fields and states; randomised sims are checked for a seeded question; the manifest's capabilities are checked against the grader's. **All eight declared subjects are now represented.** |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -2152,6 +2152,44 @@ mounts a randomised simulation twice with the same seed and requires the same st
 biology.mitosis-order as declaring `randomised: false` while containing `Math.random`, and the occurrences
 were prose explaining why they do not call it. A grep is not an audit, and a defect found by grep alone is
 often a defect in the grep.
+
+#### P6-T11: gold sim 16, and two integration failures that were not product bugs
+
+**`general-science.energy-budget` — THE FIRST ANSWER THAT IS A CONSERVATION INVARIANT.** The model asserts
+the split sums to the input, as a **relative** error, because `===` fails for reasons unconnected to physics
+across four orders of magnitude. The bar is **refused rather than drawn** when it does not balance: a
+diagram whose halves do not fill it teaches a student that energy is not conserved, which is the one thing
+this simulation exists to say it is. The declared range reaches 100%, where the waste vanishes and the
+answer stops being a division.
+
+**ALL EIGHT DECLARED SUBJECTS ARE NOW REPRESENTED** — maths, physics, chemistry, biology, astronomy,
+geography, computing and computing-science, plus general-science.
+
+**TWO INTEGRATION FAILURES THAT WERE NOT PRODUCT BUGS**, both surfaced only after the Postgres container was
+restarted and the machine was warm:
+
+1. **A FIVE-SECOND PRISMA TRANSACTION TIMEOUT, READ AS A DATABASE FAULT.** Prisma's interactive transactions
+   default to 5s and the vitest `testTimeout` of 60s **does not apply to them** — it is a separate deadline
+   inside the call. Twenty-seven files in parallel against one database blew it, and the message
+   `Transaction already closed: ... expired transaction` names a fault rather than a deadline.
+
+   **AND `RepeatableRead` WAS THE WRONG TOOL FOR THE PROBLEM ITS OWN COMMENT DESCRIBED.** That stops a row
+   *changing* under a read; it does not stop a row being *inserted* — a phantom. Repeatable reads of nothing
+   are still repeatable. The comparison is now scoped to the test's own subtree, and **the leaf was given a
+   parent** — it used to be a root, so "a node above an occupied leaf is occupied too" was never being
+   exercised, and scoping to a one-node subtree would have made that permanent.
+
+2. **`contentGaps` RANKS GLOBALLY.** The terms were random so they could not collide, but they still had to
+   appear in the **top 200** gaps in the database, at the mercy of what the other 26 files were inserting.
+   The failure read `expected undefined to be 9`, which looks like a content bug and is a capacity one. The
+   limit is raised to 5000, which **narrows the window rather than closing it** — the real fix is a database
+   per test file, and that is a change to the suite's shape, not something to smuggle in while chasing a
+   flake. Recorded rather than claimed solved.
+
+#### P6-T11 evidence
+- 16 of 24 gold sims. `pnpm sim:conformance` **304/304**; `pnpm test:sims` 157/157; **1681 unit**;
+  336 db integration across **three consecutive runs**; 3 e2e; 9/9 container gates; lint 0; typecheck 0;
+  `pnpm test` 22/22; `gate:browser` green (12/12 escapes, 304/304 cells).
 
 #### P6-T11: gold sim 15, and an absolute tolerance that meant 100%
 
