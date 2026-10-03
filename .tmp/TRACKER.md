@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims (re-costed ≈240h: 24 × 10h, the first sims built against a brand-new SDK, template and conformance harness)           | **IN PROGRESS** | `a0d287c` | 3 of 24 built. The `expect.answer` gap is CLOSED — the runner submits through the sim's own control, so the declared field is satisfiable for all 24. | (`maths.projectile-motion`). The declared `conformance.script` is now honoured, which is the machinery 24 sims need; it caught two defects on its first run. OPEN QUESTION: `plans/10` gives a scripted host no way to ask a sim for its answer. |
+| P6-T11 24 gold sims (re-costed ≈240h: 24 × 10h, the first sims built against a brand-new SDK, template and conformance harness)           | **IN PROGRESS** | *(next commit)* | 4 of 24 built. The `expect.answer` gap is CLOSED — the runner submits through the sim's own control, so the declared field is satisfiable for all 24. | (`maths.projectile-motion`). The declared `conformance.script` is now honoured, which is the machinery 24 sims need; it caught two defects on its first run. OPEN QUESTION: `plans/10` gives a scripted host no way to ask a sim for its answer. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -1899,6 +1899,46 @@ directions before being believed.
 **THE SPEC DOC'S CLAIM WAS CORRECTED RATHER THAN LEFT.** `sims/maths.projectile-motion/sim.spec.md` said the
 field was unsatisfiable. That was true of the runner and false of the platform, and a stale claim sitting
 in a repository is how the next person re-derives a problem that no longer exists.
+
+
+#### P6-T11: gold sim 4, and the grader signature was wrong in THREE sims
+
+**`physics.newtons-second-law` — three parameters where the one being SOLVED FOR is ignored.** Because
+`m = F/a` with `a` computed as `F/m` is circular: the first version handed back the mass it had been given,
+and a beautifully wrong answer. The answer also NAMES its quantity, so the right *number* for the wrong
+*quantity* is 0 with feedback saying which was asked for.
+
+**`defineSim`'s GRADER HALF IS `grade(state, params, answer)`.** Three positional arguments, no context
+object. Three of my gold sims were written as `grade(answer, context)`, so the SDK handed them the
+PARAMETERS as the answer and the answer as the parameters: `parseAnswer` failed, **every answer scored 0**,
+and the conformance cell that grades in bare Node printed a confident number derived from the wrong things.
+It passed for the projectile sim because that one had it right, and for the other two because **neither
+declared `expect.grade`** — so a broken grading path was never once compared against a claim. That is the
+whole argument for a declared expectation being honoured rather than ignored.
+
+**THE TOLERANCE IS THE SIM'S, NOT THE CALLER'S.** `grade(state, params, answer)` has no tolerance argument,
+because the per-item tolerance a teacher sets in P7 belongs to the grading service. All three sims declare
+`TOLERANCE` once, matching their manifests.
+
+**`F = 0` AT A NON-ZERO ACCELERATION GIVES A MASS OF ZERO, WHICH IS NOT A MASS.** The first version returned
+`0` and told a student who had correctly said "there is none" that *"the mass is 0 kg"*.
+
+**THE RUNNER LEARNED THREE THINGS THIS SIM NEEDED AND THE REMAINING TWENTY WILL TOO:**
+
+- **`conformance.type`** — what a *student* would enter, kept separate from `conformance.expect` because
+  they answer different questions. Two shapes of simulation need different things from a scripted host: one
+  that COMPUTES its answer has nothing to type, and one that asks the student for a number has nothing to
+  submit without it. Typing `expect.answer` into the field and then asserting the sim reports it would be a
+  test that cannot fail for the reason anyone would write it.
+- **`expect.answer.quantity: {in: ['mass']}`** — set membership, for enum-valued answers.
+- **PARAMS ARE A RECORD FOR THE GRADER.** `gradeStoredState` runs them through `clampParams`, which reads by
+  name; given the registry's array of `{name, default}`, every value came back `undefined`, every
+  parameter fell to its fallback, and the grader confidently reported that the student had been asked for
+  the acceleration.
+
+#### P6-T11 evidence
+- 4 of 24 gold sims. `pnpm sim:conformance` **60/60 cells** across all four; `pnpm test:sims` 22/22.
+- 1495 unit, 336 db integration, 8/8 container gates, lint 0, typecheck 0, `gate:browser` green.
 
 
 #### P6-T6 correction (the host could listen and never speak)
