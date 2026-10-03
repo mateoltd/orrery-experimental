@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims (re-costed ≈240h: 24 × 10h, the first sims built against a brand-new SDK, template and conformance harness)       | **IN PROGRESS** | `ebc149a` | 2 of 24 built (`maths.projectile-motion`). The declared `conformance.script` is now honoured, which is the machinery 24 sims need; it caught two defects on its first run. OPEN QUESTION: `plans/10` gives a scripted host no way to ask a sim for its answer. |
+| P6-T11 24 gold sims (re-costed ≈240h: 24 × 10h, the first sims built against a brand-new SDK, template and conformance harness)         | **IN PROGRESS** | *(next commit)* | 3 of 24 built (`maths.projectile-motion`). The declared `conformance.script` is now honoured, which is the machinery 24 sims need; it caught two defects on its first run. OPEN QUESTION: `plans/10` gives a scripted host no way to ask a sim for its answer. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -1838,6 +1838,41 @@ the exact failure mode that file exists to prevent. So it exits 1 with the comma
 - 2 of 24 gold sims. `pnpm sim:conformance` **30/30 cells** across both; `pnpm test:sims` 8/8.
 - 1495 unit, 336 db integration, 8/8 container gates, lint 0, typecheck 0, image builds green,
   `gate:browser` green (escape 12/12 + conformance 30/30).
+
+
+#### P6-T11: gold sim 3 — chemistry, and a unit that is part of the answer
+
+**`chem.ideal-gas-law` — T = PV/nR, with `R` deliberately NOT a parameter.** The gas constant is a fact
+about the universe, not a choice; making it configurable would let a teacher "solve" the law with a number
+that is not the gas constant, and the student would learn the shape of the law without the law. Same
+reasoning that keeps `g` out of the projectile sim, and the rule generalises: **a value that is not a
+choice is not a parameter.**
+
+**A CELSIUS READING IS A DIFFERENT QUESTION, NOT AN ARITHMETIC ERROR.** 100 °C is 373 K, so a student who
+types `0` because the gas is at 0 °C has not divided badly. Both obvious responses are wrong: marking it 0
+teaches them the field rejects their unit, and converting it silently teaches them the field ignores it.
+So it is graded as the answer it *is* — converted, compared, full credit — with feedback naming the
+conversion. The student gets the mark and learns why the unit mattered.
+
+**THE RELATIVE TOLERANCE IS 0.5% HERE AND 2% EVERYWHERE ELSE, ON PURPOSE.** A percentage is the right
+shape for a quantity with a meaningful zero, and 2% of 273 K is 5.5 K of slack. On an absolute scale 5 K is
+not a rounding error; it is a visibly different answer. Tightened to 0.5% (1.4 K at these values), with
+`absolute: 1` alongside. Caught by a test asserting a *specific mark*, not a shape — the same class of
+check that found `NaN` grading in sim 2.
+
+**AN EMPTY FIELD MUST NOT FALL INTO ABSOLUTE ZERO.** `Number('')` is `0`, and 0 K is absolute zero — so
+the submit handler sends `NaN` for a blank field rather than 0. A blank box is not a claim about the
+temperature, and a student should have to mean it.
+
+**IT BUILT AND PASSED CONFORMANCE ON THE FIRST RUN**, which is the thing worth recording about the pipeline:
+three sims, three different shapes — ballistic motion with a timeline, a graph with no timeline and a
+`null` answer, and a chemistry rearrangement with a fixed constant — through one scaffolder, one validator,
+one builder, one conformance matrix and one escape gate, with no per-sim configuration anywhere.
+
+#### P6-T11 evidence
+- 3 of 24 gold sims. `pnpm sim:conformance` **45/45 cells** across all three; `pnpm test:sims` 15/15.
+- 1495 unit, 336 db integration, 8/8 container gates, lint 0, typecheck 0, image builds green,
+  `gate:browser` green, playground smoke green.
 
 
 #### P6-T6 correction (the host could listen and never speak)

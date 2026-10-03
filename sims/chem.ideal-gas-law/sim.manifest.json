@@ -1,0 +1,112 @@
+{
+  "id": "chem.ideal-gas-law",
+  "version": "1.0.0",
+  "title": "Ideal gas law",
+  "summary": "Set the pressure, volume and amount of a gas, then calculate its temperature in kelvin.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["chemistry"],
+  "tags": ["gases", "kinetics"],
+  "ageRange": [14, 18],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A piston with three dials for pressure, volume and amount, and the resulting temperature in kelvin and Celsius.",
+    "reducedMotion": true,
+    "textAlternative": "1 moles of gas at 101.3 kilopascals in 22.4 litres reach 273.15 kelvin, which is 0 degrees Celsius."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "p": {
+        "type": "number",
+        "label": "Pressure",
+        "unit": "kPa",
+        "minimum": 50,
+        "maximum": 300,
+        "default": 101.3
+      },
+      "v": {
+        "type": "number",
+        "label": "Volume",
+        "unit": "L",
+        "minimum": 1,
+        "maximum": 60,
+        "default": 22.4
+      },
+      "n": {
+        "type": "number",
+        "label": "Amount",
+        "unit": "mol",
+        "minimum": 0.1,
+        "maximum": 5,
+        "default": 1
+      },
+      "showFormula": {
+        "type": "boolean",
+        "label": "Show the rearranged law",
+        "default": true
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 340,
+    "minHeight": 240,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "p": 101.3,
+            "v": 22.4,
+            "n": 1
+          }
+        }
+      },
+      {
+        "command": "command",
+        "args": {
+          "name": "loadScenario"
+        }
+      }
+    ],
+    "expect": {}
+  },
+  "grading": {
+    "strategy": "TOLERANCE",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 1.0,
+      "relative": 0.005
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You said {answer.kelvin} K; the gas reaches {expected.kelvin} K."
+  }
+}
