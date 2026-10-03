@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `f0ed7da` | **13 of 24 built.** Every sim's declared `conformance.script` (which may press the simulation's own controls), `expect`, `conformance.type` and `reset` are honoured and checked against the simulation's real fields and states; a randomised simulation is checked for a seeded, reproducible question. Six subjects represented. |
+| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `90ff7de` | **14 of 24 built.** Every sim's declared `conformance.script` (which may press the simulation's own controls), `expect`, `conformance.type` and `reset` are honoured and checked against the simulation's real fields and states; a randomised simulation is checked for a seeded, reproducible question; the manifest's capabilities are checked against the grader's. Seven subjects represented. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -2152,6 +2152,43 @@ mounts a randomised simulation twice with the same seed and requires the same st
 biology.mitosis-order as declaring `randomised: false` while containing `Math.random`, and the occurrences
 were prose explaining why they do not call it. A grep is not an audit, and a defect found by grep alone is
 often a defect in the grep.
+
+#### P6-T11: gold sim 14, and a numeric enum that became the default
+
+**`geography.map-scale-distance` — THE TRAP IS A UNIT LADDER, NOT A RATIO.** The arithmetic is trivial:
+multiply the map distance by the scale denominator. Almost every wrong answer comes from the units on the
+way, and from the scale denominator itself, which students read as "divide by 50,000" because they have
+seen `1:50,000` as a fraction their whole life. **Dividing gives a real distance SMALLER than the map** —
+obviously wrong, and the cheapest self-check a student can make — so there is a test that it scores **zero
+at every scale**, because the simulation ought to agree with the check. The step students miss next is
+centimetres to metres, which is 100,000 times too large: a *different* mistake with its own test.
+
+**A NUMERIC ENUM SENT AS A STRING BECAME THE DEFAULT, SILENTLY.** `clampParams` compared with
+`values.includes(raw)`. A manifest may only declare **string** enum values — the schema requires it — so a
+host configuring an enum of numbers can only put a string on the wire, and `'250000'` did not match
+`250000`. It logged a coercion, used the **default**, and carried on: the simulation answered for
+1:50,000 while the page displayed 1:250,000, and the grader agreed with the default, so **every cell and
+every test passed**. Nothing caught it because every enum so far held strings: `physics.kinematics` sets
+`scenario: 'thrown'` and works.
+
+`EnumParamSpec.values` was typed `readonly string[]`, which was a **lie rather than a restriction** —
+`choice()` is generic enough to accept numbers and nothing complained until a simulation used one. A map
+scale, a resolution setting and a version number are all naturally numeric.
+
+**WHAT MADE IT FINDABLE: THE ASSERTION THAT COULD NOT EXPLAIN ITSELF.** The conformance note now carries
+the answer and the params it graded — `expect.grade was 4, the grader awarded 0 (answer 10, params
+{"mapCm":4,"ratio":"250000"})`. Three earlier hypotheses (the grader, the expectation, the scenario) were
+all wrong, and each was cheap to test and useless to diagnose. A failure message that cannot explain
+itself needs more words, not fewer.
+
+**`frame.name` IS THE COMMAND, SO `args.name` IS NEVER THE SCENARIO NAME** — the second time that
+collision has cost a simulation. Reading it made this one look for a map scale called `"loadScenario"` and
+correctly refuse to find one.
+
+#### P6-T11 evidence
+- 14 of 24 gold sims. `pnpm sim:conformance` **266/266** with **13 skips reported as skips**;
+  `pnpm test:sims` 135/135; **1657 unit**; 336 db integration; 3 e2e; 9/9 container gates; lint 0;
+  typecheck 0; `pnpm test` 22/22; `gate:browser` green (12/12 escapes, 266/266 cells); image builds green.
 
 #### P6-T11: gold sim 13, and a relationship that runs backwards
 
