@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `35cc67d` | **8 of 24 built.** Every sim's declared `conformance.script` and `expect` are honoured and checked; `conformance.type` records what a student enters and `expect.value` covers a scalar answer. `defineSim` enforces the grader arity. Multi-part partial credit, set grading, enums, seeded randomness, null answers, units and scenarios are all exercised by real sims rather than only by the SDK's tests. |
+| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `650acc8` | **9 of 24 built.** Every sim's declared `conformance.script` and `expect` are honoured and checked; `conformance.type` records what a student enters, and it is checked against the fields the simulation actually has. `expect.value` covers a scalar answer, `expect.answer` a keyed one. `defineSim` enforces the grader arity. Multi-part partial credit, set grading, enums, seeded randomness, null answers, units, scenarios and derived answers are all exercised by real sims rather than only by the SDK's tests. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -2055,6 +2055,42 @@ than the minimum has its control bar clipped, and a clipped control is a control
 - **1477 unit**, 336 db integration, 8/8 container gates, lint 0, typecheck 0, `gate:browser` green,
   image builds green.
 
+
+#### P6-T11: gold sim 9, and the unit error that was in the ANSWER
+
+**chem.mole-concentration — a question whose answer is not on the screen.** A burette is read in
+CENTIMETRES and delivered into a volumetric flask, and the answer is neither of the numbers on screen:
+23.4 cm is 234 mL before anything can be divided by anything. Every other gold simulation asks the
+student to read a number off a display or compute one from a formula. This one asks what the display is
+FOR. `plans/20` gives every chemistry question a simulator, most of them look like this, and a platform
+that has only ever graded "what the widget says" has not been tested against a student who has to decide
+what the widget is asking. There is a test asserting the answer is not any of the three inputs.
+
+**A THOUSANDFOLD UNIT ERROR, IN THE ANSWER ITSELF.** Moles divided by a volume in MILLILITRES is
+mol/mL. The model returned `9.36e-5` where the answer is `0.0936 mol/L`, and the grader would have
+accepted `9.36e-5` as CORRECT — confidently, every time. A dilution question that reports the wrong unit
+is worse than no question, because the student is graded against a value nothing in chemistry has ever
+meant. There is a test that rejects exactly the number the buggy version called right.
+
+**THE FEEDBACK WAS ROUNDING AWAY THE FIGURE THE STUDENT NEEDS.** Three decimal places printed
+`0.0234 mol` as `0.023` — a different number from the one on their page, with the digit they needed to
+check against gone. Six SIGNIFICANT figures now, because a titration spans four orders of magnitude and
+the rounding has to follow the magnitude rather than sit a fixed offset from zero.
+
+**`expect.value` WENT INTO BOTH SCHEMAS THIS TIME, IN ONE SHAPE REFERENCED TWICE.** They had already
+drifted: the runner — which nothing validates — accepted `expect.value` while the JSON Schema and the
+Zod mirror both refused it, and `gate:schema` caught the difference. A contract only one of three
+consumers enforces is not a contract.
+
+**THE GATE ALSO CAUGHT `conformance.type` NAMING A FIELD THAT DOES NOT EXIST** — "the sim has no
+`#sim-id` field". I wrote the student field's name from memory instead of from the simulation, and a
+declaration nobody checks is a comment.
+
+#### P6-T11 evidence
+- 9 of 24 gold sims. `pnpm sim:conformance` **144/144** across all nine; `pnpm test:sims` 69/69.
+- **1572 unit**, 336 db integration, 3 e2e, **9/9 container gates** (the ninth is `gate:tracker`),
+  lint 0, typecheck 0, `pnpm test` 22/22 tasks, `gate:browser` green, image builds green.
+- `pnpm verify` now includes the unit count, so the figure above is reproducible rather than remembered.
 
 #### P6-T11: the verification scripts that could not do what they claimed
 
