@@ -1,0 +1,103 @@
+{
+  "id": "general-science.energy-budget",
+  "version": "1.0.0",
+  "title": "Where the energy goes",
+  "summary": "Split an energy supply into useful work and heat, and check the total is conserved.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["general-science"],
+  "tags": ["energy", "efficiency", "conservation"],
+  "ageRange": [13, 16],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "An energy input in joules and an efficiency percentage, a bar split into useful work and heat, and a box for the useful energy.",
+    "reducedMotion": true,
+    "textAlternative": "An energy supply in joules and a percentage efficiency are given. The useful work produced and the heat released are shown as parts of the whole. Work out how many joules of useful energy are produced."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "inputJ": {
+        "type": "number",
+        "label": "Energy supplied",
+        "unit": "J",
+        "minimum": 1,
+        "maximum": 1000000,
+        "default": 1000,
+        "step": 1
+      },
+      "efficiency": {
+        "type": "number",
+        "label": "Efficiency",
+        "unit": "%",
+        "minimum": 5,
+        "maximum": 100,
+        "default": 25,
+        "step": 1
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 320,
+    "minHeight": 240,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "inputJ": 2000,
+            "efficiency": 40
+          }
+        }
+      }
+    ],
+    "type": {
+      "useful": 800
+    },
+    "expect": {
+      "value": {
+        "min": 792,
+        "max": 808
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "NUMERIC",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0,
+      "relative": 0.01
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You said {answer} J; the useful energy is {expected} J."
+  }
+}

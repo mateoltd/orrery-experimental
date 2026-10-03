@@ -327,15 +327,28 @@ describe.skipIf(!DATABASE_URL)('P3-T3 subject tree counts', () => {
     // this a tautology — it would agree with a broken rollup whenever `subtreeOf` shared the
     // same bug, which is exactly the `bySlug` failure.
     const owner = await user();
-    const leaf = await subject('AgreeLeaf', null);
+    // A PARENT, so the ancestor walk is still exercised. The leaf used to be a root, which made the
+    // "a node above an occupied leaf is occupied too" claim untested -- and scoping the comparison to a
+    // subtree of one node would have made that permanent.
+    const parent = await subject('AgreeParent', null);
+    const leaf = await subject('AgreeLeaf', parent.id);
     await publicResource(owner, leaf.id);
 
-    // ONE SNAPSHOT for both reads. This assertion compares the tree's JS rollup against a SQL
-    // group-by, and vitest runs test files in parallel against one shared database — so another
-    // file inserting a public resource between the two reads makes the sets differ and the
-    // failure reads as "the rollup and the predicate disagree", which is exactly the bug this
-    // test exists to catch and is much more expensive to chase when it is a test artefact.
-    // REPEATABLE READ is the fix; see the same note in `public-urls.integration.test.ts`.
+    // SCOPED TO THIS TEST'S OWN SUBTREE, and that is the fix.
+    //
+    // This assertion compares the tree's JS rollup against a SQL group-by, and vitest runs test files in
+    // parallel against ONE shared database -- so another file publishing a resource anywhere in the tree
+    // changes the SQL side and the failure reads as "the rollup and the predicate disagree", which is
+    // exactly the bug this test exists to catch and is much more expensive to chase when it is an
+    // artefact. It failed under load for precisely that reason.
+    //
+    // The earlier fix was `RepeatableRead`, and it was the WRONG tool: in Postgres that stops a row
+    // changing underneath a read, but it does **not** stop a row being INSERTED -- a phantom -- so a
+    // concurrent commit still altered the group-by. Repeatable reads of nothing are still repeatable.
+    //
+    // What the test actually wants to know is whether the rollup agrees with the predicate for the
+    // subjects it populated. So BOTH sides are restricted to this test's subtree, and the comparison is
+    // then hermetic: another file can publish whatever it likes.
     const nodes = await prisma().$transaction(
       async (tx) => {
         const tree = await subjectTree(tx as never);
@@ -343,6 +356,7 @@ describe.skipIf(!DATABASE_URL)('P3-T3 subject tree counts', () => {
         const grouped = await tx.resource.groupBy({
           by: ['subjectId'],
           where: {
+            subjectId: { in: [parent.id, leaf.id] },
             status: 'PUBLISHED',
             visibility: 'PUBLIC',
             archivedAt: null,
@@ -356,7 +370,14 @@ describe.skipIf(!DATABASE_URL)('P3-T3 subject tree counts', () => {
           byId: await tx.subject.findMany({ select: { id: true, slug: true } }),
         };
       },
-      { isolationLevel: 'RepeatableRead' },
+      // AND A TIMEOUT THAT MATCHES THE MACHINE.
+      //
+      // Prisma's interactive transactions default to FIVE SECONDS, and the vitest `testTimeout` of 60s
+      // does not apply to them -- they are a separate deadline inside the call. With 27 test files running
+      // in parallel against one Postgres, `subjectTree` plus a group-by regularly exceeded five seconds on
+      // a cold or loaded database, and the failure was `Transaction already closed: ... expired
+      // transaction`, which reads like a database fault rather than a deadline.
+      { isolationLevel: 'RepeatableRead', timeout: 30_000 },
     );
     const truth = nodes.grouped;
     const parentOf = new Map(nodes.tree.map((n) => [n.slug, n.parentSlug]));
@@ -372,7 +393,16 @@ describe.skipIf(!DATABASE_URL)('P3-T3 subject tree counts', () => {
       }
     }
 
-    const claimed = new Set(nodes.tree.filter((n) => !n.empty).map((n) => n.slug));
+    // `claimed` is restricted to the same subtree. The tree's `empty` flags are computed globally, so
+    // without this another file's resource would ADD to the rollup's claims while the scoped SQL side
+    // stayed still -- the mirror image of the original artefact.
+    const subtree = new Set<string>([leaf.slug]);
+    for (let at = parentOf.get(leaf.slug) ?? null; at !== null; at = parentOf.get(at) ?? null) {
+      subtree.add(at);
+    }
+    const claimed = new Set(
+      nodes.tree.filter((n) => !n.empty && subtree.has(n.slug)).map((n) => n.slug),
+    );
     expect(claimed, 'the JS rollup and the SQL predicate disagree about the tree').toEqual(
       occupied,
     );

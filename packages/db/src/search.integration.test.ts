@@ -472,7 +472,17 @@ describe.skipIf(!DATABASE_URL)('P3-T4 search integration, against real Postgres'
     await recordZeroResult(prisma(), `wanted ${light}`, { requestId: randomUUID() });
     await recordZeroResult(prisma(), `wanted ${light}`, { requestId: randomUUID() });
 
-    const gaps = await contentGaps(prisma(), { limit: 200 });
+    // A GENEROUS LIMIT, because `contentGaps` ranks GLOBALLY.
+    //
+    // The terms are already random, so they cannot collide -- but they still have to be IN the list.
+    // `contentGaps` returns the top N gaps across every zero-result row in the database, and vitest runs
+    // 27 files in parallel against one Postgres, so a limit of 200 put this file's terms at the mercy of
+    // whatever the other 26 were inserting: `retry ${heavy}` came back `undefined` and the failure read as
+    // "expected undefined to be 9", which is a content bug and not a capacity one.
+    //
+    // This narrows the window rather than closing it. The real fix is a database per file, which is a
+    // change to the suite's shape and not something to smuggle in while chasing a flake.
+    const gaps = await contentGaps(prisma(), { limit: 5000 });
     const retry = gaps.find((g) => g.term === `retry ${heavy}`);
     const wanted = gaps.find((g) => g.term === `wanted ${light}`);
     expect(retry?.searches).toBe(9);
