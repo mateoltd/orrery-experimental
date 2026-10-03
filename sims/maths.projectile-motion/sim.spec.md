@@ -21,23 +21,24 @@ parameter: a simulation about projectiles that lets a teacher set gravity is a d
 `{ range, time }`, both rounded to two decimal places. Graded with `TOLERANCE`, absolute 0.5 m,
 max 4 points, partial credit.
 
-## A FINDING ABOUT `conformance.expect`, NOT AN OMISSION
+## `conformance.expect` IS SATISFIED, AND NOT BY A PROTOCOL CHANGE
 
-This manifest declares a `conformance.script` and an EMPTY `conformance.expect`, and that emptiness is a
-result rather than a gap in the work.
+`plans/10` fixes the host command vocabulary to `reset | play | pause | step | loadScenario | focus |
+setTheme`, and **none of those asks a simulation for its answer** — an answer is submitted through the
+simulation's own control, which is right for a lesson and unreachable for a script.
 
-`plans/10` fixes the host's command vocabulary to `reset | play | pause | step | loadScenario | focus |
-setTheme`. None of those asks a simulation for its answer — an answer is submitted by the student through
-the simulation's own control, which is correct for a lesson and unreachable for a script. So
-`conformance.expect.answer` and `conformance.expect.grade`, which the schema permits, cannot be
-satisfied by any declared script, and filling them in would have been a promise nothing could keep.
+So this manifest originally declared an empty `expect`, and its spec recorded the field as unsatisfiable.
+That was true of the *runner*, not of the platform. The conformance runner now submits the way a student
+does, through the simulation's own `#sim-submit` control, after driving the declared script — which closes
+the gap for all twenty-four gold sims without touching a protocol the plan has already ratified.
 
-The conformance matrix obtains the answer the way a student does — by activating the submit control — and
-grades it in bare Node, so both claims are still checked. This one is not.
+It is clicked through Playwright's frame API rather than `contentDocument`, because the frame is a
+sandboxed opaque origin and the parent document cannot see inside it. The first version reached for
+`contentDocument`, reported "no #sim-submit control" for a simulation that has one, and would have
+persuaded a future author that the field was again unsatisfiable.
 
-**P6-T11 should close this.** Twenty-four gold sims each need a way to be *asked* for their answer, or
-every one of them carries an expectation field that cannot be satisfied, and the field teaches authors to
-write checks that never run.
+And the cell can fail: an `expect.answer.range` of `{min: 900, max: 999}` is reported as
+*"expect.answer.range was {min:900, max:999}, the sim answered 63.71"*.
 
 ## What the declared script caught
 

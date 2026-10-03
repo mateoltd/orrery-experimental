@@ -99,6 +99,14 @@
         }
       }
     ],
-    "expect": {}
+    "expect": {
+      "answer": {
+        "range": {
+          "min": 60,
+          "max": 68
+        }
+      },
+      "grade": 4
+    }
   }
 }

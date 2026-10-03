@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims (re-costed ≈240h: 24 × 10h, the first sims built against a brand-new SDK, template and conformance harness)           | **IN PROGRESS** | `eeb6b00` | 3 of 24 built (`maths.projectile-motion`). The declared `conformance.script` is now honoured, which is the machinery 24 sims need; it caught two defects on its first run. OPEN QUESTION: `plans/10` gives a scripted host no way to ask a sim for its answer. |
+| P6-T11 24 gold sims (re-costed ≈240h: 24 × 10h, the first sims built against a brand-new SDK, template and conformance harness)           | **IN PROGRESS** | *(next commit)* | 3 of 24 built. The `expect.answer` gap is CLOSED — the runner submits through the sim's own control, so the declared field is satisfiable for all 24. | (`maths.projectile-motion`). The declared `conformance.script` is now honoured, which is the machinery 24 sims need; it caught two defects on its first run. OPEN QUESTION: `plans/10` gives a scripted host no way to ask a sim for its answer. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -1873,6 +1873,32 @@ one builder, one conformance matrix and one escape gate, with no per-sim configu
 - 3 of 24 gold sims. `pnpm sim:conformance` **45/45 cells** across all three; `pnpm test:sims` 15/15.
 - 1495 unit, 336 db integration, 8/8 container gates, lint 0, typecheck 0, image builds green,
   `gate:browser` green, playground smoke green.
+
+
+#### P6-T11: the open spec question, CLOSED — without changing the protocol
+
+**THE GAP WAS REAL AND IT WAS IN THE RUNNER, NOT THE PLATFORM.** `plans/10` fixes the host command
+vocabulary and none of it asks a simulation for its answer, so every gold sim's `conformance.expect.answer`
+was unsatisfiable and I had recorded that as a spec gap for P6-T11 to close. It did not need a protocol
+change: the conformance runner now submits **the way a student does**, through the simulation's own
+`#sim-submit` control, after driving the declared script. Twenty-four sims get a satisfiable
+`expect.answer` and the ratified protocol is untouched.
+
+**`contentDocument` IS NULL, AND THAT IS THE SANDBOX WORKING.** The first implementation reached into the
+frame with `contentDocument.getElementById('sim-submit')` and reported *"no #sim-submit control"* for a
+simulation that has one — which would have persuaded the next author that the field was unsatisfiable all
+over again. Clicking goes through Playwright's frame API instead, the same route the matrix's own
+interaction cell uses. That cell worked and the new one did not, and the difference was the entire lesson.
+
+**THE PROJECTILE MANIFEST NOW DECLARES WHAT IT PROMISES**: `expect.answer.range` of `{min: 60, max: 68}`
+and `expect.grade: 4`, both checked. **And the cell can fail** — an expectation of `{min: 900, max: 999}`
+is reported as *"expect.answer.range was {min:900, max:999}, the sim answered 63.71"*. A declared check
+that cannot fail is the failure mode this whole cell exists to prevent, so it was demonstrated in both
+directions before being believed.
+
+**THE SPEC DOC'S CLAIM WAS CORRECTED RATHER THAN LEFT.** `sims/maths.projectile-motion/sim.spec.md` said the
+field was unsatisfiable. That was true of the runner and false of the platform, and a stale claim sitting
+in a repository is how the next person re-derives a problem that no longer exists.
 
 
 #### P6-T6 correction (the host could listen and never speak)

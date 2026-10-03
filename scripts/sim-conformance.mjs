@@ -148,7 +148,7 @@ const gradeInNode = async (entry, answer, state = null) => {
  * field useful at scale — twenty-four gold sims cannot each rely on a human reading a manifest to work out
  * whether the thing behaves.
  */
-const runManifestScript = async (page, entry, manifest) => {
+const runManifestScript = async (page, frame, entry, manifest) => {
   const steps = manifest?.conformance?.script ?? [];
   if (steps.length === 0) return { ok: true, note: 'no script declared' };
 
@@ -188,7 +188,44 @@ const runManifestScript = async (page, entry, manifest) => {
   }
 
   // A script that drives the sim but leaves no answer is a script that found nothing.
-  const answers = await page.evaluate((n) => globalThis.__conformance.log.answers.slice(n), before);
+  let answers = await page.evaluate((n) => globalThis.__conformance.log.answers.slice(n), before);
+
+  // `plans/10` fixes the host command vocabulary, and NOTHING in it asks a simulation for its answer: an
+  // answer is submitted through the simulation's own control, which is right for a lesson and unreachable
+  // for a script. Rather than change the protocol for the convenience of a test, the runner submits the
+  // way a student does.
+  //
+  // Every gold sim exposes `#sim-submit`, and one without it now fails with a sentence saying so, rather
+  // than an `expect.answer` that quietly never arrives.
+  const declared = manifest?.conformance?.expect ?? {};
+  if (declared.answer !== undefined && answers.length === 0) {
+    // Through PLAYWRIGHT'S frame API, not `contentDocument`. The frame is a sandboxed opaque origin --
+    // that is the entire point of it -- so the parent document cannot see inside, and the first version
+    // of this reported "no #sim-submit control" for a sim that has one. This is the same route the matrix's
+    // own interaction cell uses, which is why that cell worked and this one did not.
+    let clicked = false;
+    try {
+      await frame.locator('#sim-submit').click({ timeout: 4000 });
+      clicked = true;
+    } catch {
+      clicked = false;
+    }
+    if (!clicked) {
+      return {
+        ok: false,
+        note: 'expect.answer is declared but the sim exposes no clickable #sim-submit control',
+      };
+    }
+    const expired = deadline(4000);
+    for (;;) {
+      answers = await page.evaluate((n) => globalThis.__conformance.log.answers.slice(n), before);
+      if (answers.length > 0) break;
+      if (expired())
+        return { ok: false, note: 'the submit control was activated but no answer arrived' };
+      await page.waitForTimeout(100);
+    }
+  }
+
   const expect = manifest?.conformance?.expect ?? {};
   const tolerance = Number(manifest?.grading?.tolerance?.absolute ?? 0);
 
@@ -273,8 +310,8 @@ const CELLS = [
   {
     name: "the manifest's OWN conformance script runs and its `expect` holds",
     why: 'a declared check nobody runs is not a check',
-    run: async ({ page, entry, manifest }) => {
-      const outcome = await runManifestScript(page, entry, manifest);
+    run: async ({ page, frame, entry, manifest }) => {
+      const outcome = await runManifestScript(page, frame, entry, manifest);
       return outcome.ok ? null : outcome.note;
     },
   },
@@ -570,12 +607,23 @@ const run = async () => {
       throw error;
     }
 
+    // The sim's own `Frame`, for the declared-script cell. Taken here rather than inside a cell so a
+    // missing frame is caught once, with the sim's name attached, instead of once per cell.
+    const simFrame = page.frames().find((candidate) => candidate !== page.mainFrame());
+    if (simFrame === undefined) {
+      process.stderr.write(`${c.red(`no frame for ${String(entry.id)}`)}\n`);
+      process.exitCode = 1;
+      await page.close();
+      continue;
+    }
+
     process.stdout.write(`\n${c.bold(String(entry.id))} ${c.dim(String(entry.version))}\n`);
     for (const cell of CELLS) {
       let failure = null;
       try {
         failure = await cell.run({
           page,
+          frame: simFrame,
           simOrigin: sim.origin,
           entry,
           manifest: manifests.get(String(entry.id)),
