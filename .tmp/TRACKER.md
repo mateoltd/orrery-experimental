@@ -2851,6 +2851,39 @@ review and grading · P10 atomic release and results · P11 item analysis and gr
 simulation scale-out to 220 · P13 accessibility and i18n · P14 security, privacy, compliance ·
 P15 reliability, performance, DR · P16 interop (QTI/xAPI/LTI/OneRoster) · P17 pilot and GA.
 
+### P7 — Quiz runtime, question types & auto-grading · **NOT STARTED** (72h est., 14 tasks)
+
+**Every phase below P6 is unstarted.** This section exists because the tracker's silence about them made the
+plan look nearly finished, which is the one thing an authoritative tracker must never do. Scope is read from
+`plans/20-PHASE-PACKETS.md` and is **not** a claim of progress: the tasks are listed so the remaining work is
+visible and countable, not to imply any of it has been touched.
+
+| Phase | Tasks | Est. | Status |
+|---|---|---|---|
+| P7 Quiz runtime, question types & auto-grading | 14 | 72h | NOT STARTED |
+| P8 Exam runtime & integrity | 16 | 108h | NOT STARTED |
+| P9 Teacher review & grading workspace | 10 | 64h | NOT STARTED |
+| P10 Atomic release & student results | 10 | 46h | NOT STARTED |
+| P11 Item analysis, gradebook & integrity reporting | 19 | 58h | NOT STARTED |
+| P13 Accessibility (WCAG 2.2 AA) & i18n | — | 60h | NOT STARTED |
+| P14 Security, privacy & compliance | 10 | 60h | NOT STARTED |
+| P15 Reliability, performance, load & DR | 8 | 72h | NOT STARTED |
+| P16 Interoperability: QTI, xAPI, LTI 1.3, OneRoster | — | 56h | NOT STARTED |
+| P17 Pilot, seed content, docs & GA | 7 | 64h | NOT STARTED |
+
+**94 tasks and roughly 660 estimated hours remain.** Two phases (P13, P16) show no task count because their
+packets are written as checklists rather than ID'd rows; their hour estimates are the plan's own.
+
+The first unstarted task is `P7-T1`: a `QuestionSpec` union in contracts with `publicQuestionSpec()` and
+`teacherQuestionSpec()`, exhaustively typed. It depends on `P2-T1` (the content model), and P7-T2 -- the
+`@orrery/grading` core, which must be **pure, total, bounded and versioned at 100% branch coverage** -- is
+the largest single item in the phase at XL.
+
+**WHAT "DONE" LOOKS LIKE FOR P7**, quoted from the packet, so the bar is written down before the work starts
+rather than negotiated afterwards: a 30-question mixed quiz with 2 sim questions survives a hard refresh and a
+simulated network drop; all auto-grades match the hand-computed fixtures; `audit:seals` green; and the public
+projection of every question type is asserted to contain no key material.
+
 ## Carried-forward gaps (recorded before the move, re-confirmed where possible)
 
 - **`readImpersonation()` returns `null`** because signed-cookie verification is not wired. It
