@@ -32,7 +32,14 @@ import { z } from 'zod';
 export const simIdSchema = z
   .string()
   .max(80)
-  .regex(/^[a-z][a-z0-9]*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)+$/u, 'must be subject.slug');
+  // The first segment is the SUBJECT, and the subject enum contains `computing-science` and
+  // `general-science`, so it has to be allowed a hyphen. It was not, which meant a simulation on
+  // either of those subjects could not be given an id beginning with its own subject -- found by
+  // `sim:validate` refusing `computing-science.download-time`.
+  .regex(
+    /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)+$/u,
+    'must be subject.slug, where the subject is one of the declared subjects',
+  );
 
 export const semverSchema = z
   .string()

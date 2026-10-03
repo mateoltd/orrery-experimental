@@ -1,0 +1,103 @@
+{
+  "id": "computing-science.download-time",
+  "version": "1.0.0",
+  "title": "How long does the download take?",
+  "summary": "Set a file size and a connection speed, and work out the download time.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["computing-science"],
+  "tags": ["bits", "bytes", "units", "bandwidth"],
+  "ageRange": [13, 16],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A file size in megabytes, a connection speed in megabits per second, and a box for the time in seconds.",
+    "reducedMotion": true,
+    "textAlternative": "A file size in megabytes and a connection speed in megabits per second are given. A megabyte is 1024 times 1024 bytes, a megabit is 1000 times 1000 bits, and there are 8 bits in a byte. Work out how many seconds the download takes."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "sizeMb": {
+        "type": "number",
+        "label": "File size",
+        "unit": "MB",
+        "minimum": 0.1,
+        "maximum": 10000,
+        "default": 100,
+        "step": 0.1
+      },
+      "speedMbps": {
+        "type": "number",
+        "label": "Connection speed",
+        "unit": "Mbit/s",
+        "minimum": 0.1,
+        "maximum": 10000,
+        "default": 100,
+        "step": 0.1
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 300,
+    "minHeight": 220,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "sizeMb": 100,
+            "speedMbps": 100
+          }
+        }
+      }
+    ],
+    "type": {
+      "seconds": 8
+    },
+    "expect": {
+      "value": {
+        "min": 7.5,
+        "max": 8.5
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "NUMERIC",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0,
+      "relative": 0.02
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You said {answer} s; the download takes {expected} s."
+  }
+}

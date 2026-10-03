@@ -311,9 +311,51 @@ describe('grading', () => {
     expect(tolerance(4, 5, { abs: 0.1, maxPoints: 4 }).points).toBe(0);
     // And there is no default that grants it: the flag has to be passed.
     expect(tolerance(4.5, 5, { abs: 0.1, maxPoints: 4 }).points).toBe(0);
+    // An ABSOLUTE-only tolerance now scales partial credit too, and this assertion used to pass for the
+    // wrong reason: `spec.rel > 0 ? spec.rel : 1` made the unit 1 -- a 100% tolerance -- so a 10% miss sat
+    // inside it and the formula returned 5.6 of a possible 4. `4.5` against a tolerance of `0.1` on a value
+    // of `5` is ten tolerances out, so it earns nothing; a near miss earns a little.
+    expect(tolerance(4.5, 5, { abs: 0.1, maxPoints: 4, partialCredit: true }).points).toBe(0);
     expect(
-      tolerance(4.5, 5, { abs: 0.1, maxPoints: 4, partialCredit: true }).points,
+      tolerance(4.55, 5, { abs: 0.5, maxPoints: 4, partialCredit: true }).points,
     ).toBeGreaterThan(0);
+    expect(
+      tolerance(4.55, 5, { abs: 0.5, maxPoints: 4, partialCredit: true }).points,
+    ).toBeLessThanOrEqual(4);
+  });
+
+  // THE FORMULA COULD RETURN MORE THAN THE MAXIMUM.
+  //
+  // `relativeError` can be smaller than the tolerance unit while `withinTolerance` still says no -- when an
+  // absolute tolerance is the one in force the two disagree -- and `1 - past` then exceeded 1. A grade is
+  // capped downstream by `finish`, so the student never saw 4.2 of 4, but the rationale said so.
+  it('never awards more than the maximum, whatever the tolerance', () => {
+    for (const spec of [
+      { abs: 0.5, maxPoints: 4, partialCredit: true },
+      { abs: 0.1, rel: 0.001, maxPoints: 4, partialCredit: true },
+      { rel: 0.5, maxPoints: 10, partialCredit: true },
+    ]) {
+      for (const given of [0, 0.5, 1, 4.9, 5, 5.1, 50, -50]) {
+        const grade = tolerance(given, 5, spec);
+        expect(grade.points).toBeLessThanOrEqual(spec.maxPoints);
+        expect(grade.points).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  // A TOLERANCE OF `rel: 0` MEANS ZERO RELATIVE TOLERANCE, NOT AN UNLIMITED ONE.
+  it('treats an explicit `rel: 0` as zero rather than as no limit', () => {
+    // `computing-science.download-time` grades a duration with `abs: 0.5, rel: 0`. With the old fallback
+    // the unit was 1, so an answer 88% wrong was inside tolerance and scored full marks.
+    expect(
+      tolerance(1, 8.388608, { abs: 0.5, rel: 0, maxPoints: 4, partialCredit: true }).points,
+    ).toBe(0);
+    expect(
+      tolerance(8, 8.388608, { abs: 0.5, rel: 0, maxPoints: 4, partialCredit: true }).points,
+    ).toBe(4);
+    expect(
+      tolerance(8.39, 8.388608, { abs: 0.5, rel: 0, maxPoints: 4, partialCredit: true }).points,
+    ).toBe(4);
   });
 
   it('every grade carries a rationale a TEACHER can paste into a comment', () => {

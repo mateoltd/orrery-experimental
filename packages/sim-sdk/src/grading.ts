@@ -143,11 +143,35 @@ export function tolerance(given: unknown, expected: unknown, spec: ToleranceSpec
     // So credit decays linearly from the tolerance boundary and reaches zero `PARTIAL_CREDIT_BAND`
     // tolerances further out. The declared tolerance is the unit, the band is the end of it, and a wild
     // guess scores nothing at all.
-    const toleranceUnit = spec.rel !== undefined && spec.rel > 0 ? spec.rel : 1;
+    // THE UNIT IS THE TOLERANCE THAT WAS ACTUALLY DECLARED.
+    //
+    // It used to be `spec.rel > 0 ? spec.rel : 1`, and the `1` is a 100% tolerance: a grader declaring
+    // `abs: 0.5, rel: 0` -- an ABSOLUTE tolerance, which is the only kind that makes sense for a count or
+    // a duration -- got a tolerance unit of one, so an answer 88% wrong sat inside it and scored FULL
+    // MARKS. `computing-science.download-time` found it the moment it graded a transfer time.
+    //
+    // An absolute-only tolerance therefore measures in units of the absolute tolerance, and if neither
+    // tolerance is declared there is nothing to decay from and nothing is credited.
+    const relativeUnit = spec.rel !== undefined && spec.rel > 0 ? spec.rel : null;
+    const absoluteUnit = spec.abs !== undefined && spec.abs > 0 ? spec.abs / scale : null;
+    const toleranceUnit = relativeUnit ?? absoluteUnit;
+    if (toleranceUnit === null || toleranceUnit <= 0) {
+      return finish(
+        0,
+        spec.maxPoints,
+        'TOLERANCE',
+        `${String(a)} is outside tolerance of ${String(b)} and no tolerance was declared to scale ` +
+          'partial credit from',
+      );
+    }
     const band = spec.partialCreditBand ?? PARTIAL_CREDIT_BAND;
     const past = (relativeError - toleranceUnit) / (toleranceUnit * band);
+    // CLAMPED AT BOTH ENDS. `relativeError` can be SMALLER than `toleranceUnit` while `withinTolerance`
+    // still said no -- when the absolute tolerance is the one in force, `max(abs, rel)` and the relative
+    // test disagree -- and `1 - past` then exceeded 1, so the answer scored MORE than the maximum.
+    const credit = Math.min(1, Math.max(0, 1 - past));
     return finish(
-      spec.maxPoints * Math.max(0, 1 - Math.min(1, past)),
+      spec.maxPoints * credit,
       spec.maxPoints,
       'TOLERANCE',
       `${String(a)} is not within tolerance of ${String(b)}; partial credit from the ${(relativeError * 100).toFixed(1)}% error`,

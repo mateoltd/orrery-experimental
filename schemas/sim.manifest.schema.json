@@ -128,26 +128,46 @@
   },
   "$defs": {
     "simId": {
-      "description": "subject.slug. Two dots is an error, because every id is exactly one.",
+      "description": "subject.slug. Two dots is an error, because every id is exactly one. The subject segment allows a hyphen because the subject enum contains `computing-science` and `general-science`, so an id must be able to start with the subject it belongs to.",
       "type": "string",
-      "pattern": "^[a-z][a-z0-9]*(?:\\.[a-z0-9]+(?:-[a-z0-9]+)*)+$",
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:\\.[a-z0-9]+(?:-[a-z0-9]+)*)+$",
       "maxLength": 80
     },
     "expectation": {
       "description": "How a conformance cell judges one value: an exact number, a range, membership in a list, or a set compared without order.",
       "anyOf": [
-        { "type": "number" },
+        {
+          "type": "number"
+        },
         {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "min": { "type": "number" },
-            "max": { "type": "number" },
-            "in": { "type": "array", "minItems": 1 },
-            "set": { "type": "array", "minItems": 1 },
-            "sequence": { "type": "array", "minItems": 1 },
-            "exact": { "type": "string" },
-            "prefix": { "type": "string", "minLength": 4 }
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            },
+            "in": {
+              "type": "array",
+              "minItems": 1
+            },
+            "set": {
+              "type": "array",
+              "minItems": 1
+            },
+            "sequence": {
+              "type": "array",
+              "minItems": 1
+            },
+            "exact": {
+              "type": "string"
+            },
+            "prefix": {
+              "type": "string",
+              "minLength": 4
+            }
           }
         }
       ]
@@ -441,7 +461,9 @@
           "properties": {
             "answer": {
               "type": "object",
-              "additionalProperties": { "$ref": "#/$defs/expectation" }
+              "additionalProperties": {
+                "$ref": "#/$defs/expectation"
+              }
             },
             "value": {
               "description": "For an answer that IS a number, which is most of them. `answer` is keyed, for `{quantity, value}` and `{roots: [...]}`, and there was no way to say 'the answer is 9.38' -- so the first simulation whose answer is a bare number could not declare a checked expectation at all.",
