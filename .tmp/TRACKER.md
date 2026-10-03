@@ -2853,6 +2853,8 @@ P15 reliability, performance, DR · P16 interop (QTI/xAPI/LTI/OneRoster) · P17 
 
 ### P7 — Quiz runtime, question types & auto-grading · **NOT STARTED** (72h est., 14 tasks)
 
+| P7-T1 | `QuestionSpec` union + `publicQuestionSpec()` / `teacherQuestionSpec()`, exhaustively typed | **DONE** | `34af68f` | Ten types as a discriminated union over `type`. Each projection returns its OWN narrower shape with a `never` check, so a new type is a COMPILE ERROR rather than a runtime `undefined` on a student's screen. **The leak test caught a real `INV-Q-1` violation on the first run:** `publicCommon` was written as `({ modelAnswer, ...rest }: QuestionCommon) => rest`, which is correct to TypeScript and wrong at RUNTIME -- the parameter is annotated `QuestionCommon` so the compiler believes `modelAnswer` is the only extra field, but the value passed is the whole spec, so `{...rest}` copied `key`, `rubric` and `conceptHints` into every student payload. A destructuring pattern cannot remove a property it was never told about, and the compiler does not complain because it believes there is nothing else there. Every common field is now NAMED, which turns a future field on `QuestionCommon` into a compile error until someone decides whether a student may see it. |
+
 **Every phase below P6 is unstarted.** This section exists because the tracker's silence about them made the
 plan look nearly finished, which is the one thing an authoritative tracker must never do. Scope is read from
 `plans/20-PHASE-PACKETS.md` and is **not** a claim of progress: the tasks are listed so the remaining work is
@@ -2860,7 +2862,7 @@ visible and countable, not to imply any of it has been touched.
 
 | Phase | Tasks | Est. | Status |
 |---|---|---|---|
-| P7 Quiz runtime, question types & auto-grading | 14 | 72h | NOT STARTED |
+| P7 Quiz runtime, question types & auto-grading | 14 | 72h | IN PROGRESS (1/14) |
 | P8 Exam runtime & integrity | 16 | 108h | NOT STARTED |
 | P9 Teacher review & grading workspace | 10 | 64h | NOT STARTED |
 | P10 Atomic release & student results | 10 | 46h | NOT STARTED |
