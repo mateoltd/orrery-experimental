@@ -70,10 +70,27 @@ try {
 if (previous !== null) {
   const before = headings(previous).length;
   const now = headings(current).length;
-  if (now < before) {
+  // UNIQUE headings, because a DUPLICATE is not content.
+  //
+  // This fired on a splice that removed a repeated `#### P6-T11 evidence` section -- an artefact of an
+  // earlier insert, not a section anyone lost -- and reported "the tracker lost sections" about a change
+  // that deleted a duplicate. A control that cannot tell a duplicate from a deletion cries wolf, and a gate
+  // that cries wolf is a gate people learn to ignore. So the comparison counts DISTINCT headings, and the
+  // duplicate count is reported so a real duplicate cannot hide either.
+  const distinct = (text) => new Set(headings(text)).size;
+  const distinctBefore = distinct(previous);
+  const distinctNow = distinct(current);
+  if (distinctNow < distinctBefore) {
     bad(
-      `the tracker lost sections: ${String(before)} at HEAD, ${String(now)} now. A splice anchored on a\n` +
-        '    heading that turned out not to be unique deletes silently and leaves a file that still parses.',
+      `the tracker lost sections: ${String(distinctBefore)} distinct at HEAD, ${String(distinctNow)} now ` +
+        `(${String(before)} -> ${String(now)} headings). A splice anchored on a heading that turned out not\n` +
+        '    to be unique deletes silently and leaves a file that still parses.',
+    );
+  }
+  const duplicates = before - distinctBefore;
+  if (duplicates > 0) {
+    process.stderr.write(
+      `note: HEAD carries ${String(duplicates)} duplicate section heading(s); they are not counted as content\n`,
     );
   }
 }

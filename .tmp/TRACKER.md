@@ -2154,48 +2154,40 @@ biology.mitosis-order as declaring `randomised: false` while containing `Math.ra
 were prose explaining why they do not call it. A grep is not an audit, and a defect found by grep alone is
 often a defect in the grep.
 
-#### P6-T11: profiling the suite, and TWO wrong hypotheses
+#### P6-T11: profiling the suite, and THREE wrong premises in a row
 
-**THE RUNNER NOW PRINTS PER-CELL TIMINGS**, because "the suite got slower" is not an actionable
-observation, and every cell printed the same single line whether it took forty milliseconds or forty
-seconds. A run that is **green AND slow** is exactly the run nobody investigates, because nothing is wrong.
-The slowest cells, their share of total time, and their per-simulation cost are printed on success as well
-as on failure.
+**`sim:conformance` NOW PRINTS PER-CELL TIMINGS AND TIMES THE WHOLE PER-SIMULATION ITERATION**, because
+"the suite got slower" is not an observation, it is an impression — and impressions about a build are worth
+exactly as much as the measurement behind them, which in this case was nothing.
 
-**THE MEASUREMENT, AND IT SETTLED THE ARGUMENT:**
+**THE ACTUAL NUMBERS, FROM ONE RUN:**
 
-    25.2 s  1577 ms/sim   the student's SAVED WORK comes back
-    18.6 s  1161 ms/sim   RESET puts the student back where they started
-     8.7 s   544 ms/sim   the manifest's OWN conformance script runs and its `expect` holds
-    57.1 s  total for all 320 cells
+    total cell time:                                   57 s   (all 320 cells)
+    per-simulation iterations:                         59 s   (3702 ms each)
+    of which OUTSIDE the cells:                         2 s
+    WALL CLOCK, MEASURED:                              60 s
 
-So cells are about a minute. **A remounting cell costs ~1.5 s**, and the graded-mode cell would have added
-roughly **25 s** across sixteen simulations — which means P6-T14's recorded next step, "profile the
-per-cell page loads", was aimed at the wrong thing, and I corrected the row rather than leave a plausible
-sounding reason that would send the next attempt down the same path.
+**THE SUITE TAKES ONE MINUTE. IT HAS APPARENTLY ALWAYS TAKEN ABOUT ONE MINUTE.** Every account of it being
+"slow" in this tracker was an artefact of how long I slept between polls, not of the suite. The three
+remounting cells cost **1559 ms and 1161 ms per simulation**, which over sixteen simulations is about
+**44 seconds of the 60** — the suite is dominated by its two newest cells and is still fast.
 
-**THEN A SECOND HYPOTHESIS, ALSO WRONG.** If cells are a minute and the run is several, the obvious guess
-is that mounting sixteen simulations dominates. Timed, it is **2 s**: context 0 s, navigation 1 s,
-handshake 0 s. Setup is ~0 s too — the harness bundle, both origins and the browser launch are all
-effectively free.
+**SO ALL THREE OF MY OWN PREMISES WERE WRONG, IN ORDER:**
 
-**So roughly eight of the nine minutes are in per-simulation work that is neither a cell nor a mount**, and
-the only candidates left are `page.close()`, the console-error sweep and the screenshot. That is the next
-measurement, and it is now written down rather than guessed at.
+1. That the suite had gone from two minutes to fifteen. **There was no such regression.** I had not timed
+   it; I had slept 575 s, seen no exit file, and written down the number I had chosen to wait.
+2. That page loads were the cost, recorded as P6-T14's next step. A remount is ~1.5 s.
+3. That mounting sixteen simulations was the cost. It is **2 s** in total — context 0 s, navigation 1 s.
 
-**AND THE INSTRUMENTATION ITSELF HAD TO BE THROWN AWAY.** Extending the timing to `page.close()` made the
-run die at exactly the same point the graded cell did — immediately after `RESET`, inside the saved-work
-cell — and it was reverted to the last verified-green state. The pattern is now consistent enough to be
-worth naming: **three cells remount the page, and the suite dies where the remounts are heaviest.** Whether
-that is resource exhaustion or a genuine race is not established, and saying otherwise would be exactly the
-kind of confident guess this section exists to correct.
+**THE LESSON IS SPECIFIC AND REUSABLE: A WALL-CLOCK CLAIM NEEDS A WALL-CLOCK MEASUREMENT, AND A BUILD I
+TIME WITH `date` RATHER THAN WITH HOW LONG I DECIDED TO SLEEP.** Every one of these numbers came from
+choosing a sleep duration, and the one number that was actually measured — 60 s — is the only one that was
+true. The per-cell timings are still worth keeping: they are correct, they are cheap, and they are what
+finally produced the measurement that contradicted me.
 
-**A ROW THAT RECORDS A HYPOTHESIS NEEDS THE MEASUREMENT THAT KILLED IT**, and it needs updating again when
-the next measurement kills the replacement.
-
-#### P6-T11 evidence
-- 16 of 24 gold sims. `pnpm sim:conformance` **320/320** with per-cell timings; `pnpm test:sims` 157/157;
-  **1684 unit**; 336 db integration; 3 e2e; 9/9 container gates; lint 0; typecheck 0; `pnpm test` 22/22.
+**AND THE REVERTED GRADED CELL WAS REVERTED FOR A WRONG REASON TOO.** It was removed because it appeared
+to take the suite to fifteen minutes; the suite takes a minute, so that reason was false. It DID die — exit
+1 with no summary — but the cause was never diagnosed, and the row must not claim the slowness was it.
 
 #### P6-T11: the measurement that REFUTES the hypothesis it was filed under
 

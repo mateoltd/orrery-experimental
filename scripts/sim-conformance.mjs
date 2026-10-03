@@ -1154,10 +1154,19 @@ const run = async () => {
   let skipped = 0;
   /** Accumulated milliseconds per cell name, across every simulation. */
   const timings = new Map();
+  /** Wall clock for the whole per-simulation iteration, cells included. */
+  let iterationMs = 0;
 
   process.stdout.write(`${c.dim(`app ${app.origin} · sim ${sim.origin}\n`)}`);
 
   for (const entry of entries) {
+    // THE WHOLE PER-SIMULATION ITERATION, timed from OUTSIDE the cells.
+    //
+    // Cells account for ~58 s and mounting for ~2 s, against a run several minutes long, so most of the
+    // time is in per-simulation work that is neither. Rather than instrument inside the loop again -- an
+    // attempt at that broke the run -- this measures the iteration whole and subtracts the cells, which
+    // locates the missing time WITHOUT touching the code path that is already fragile.
+    const iterationStarted = hrtime.bigint();
     const page = await browser.newPage();
     const consoleErrors = [];
     page.on('pageerror', (error) => consoleErrors.push(String(error)));
@@ -1263,6 +1272,7 @@ const run = async () => {
       process.stdout.write(`  ${c.green('PASS')} the page raised no uncaught errors\n`);
     }
     await page.close();
+    iterationMs += Number(hrtime.bigint() - iterationStarted) / 1e6;
   }
 
   await browser.close();
@@ -1288,6 +1298,16 @@ const run = async () => {
       );
     }
     process.stdout.write(c.dim(`  total cell time: ${String(Math.round(totalMs / 1000))}s\n`));
+    // THE GAP, which is the number that matters: what the iterations cost minus what the cells inside them
+    // cost. It is `newPage`, the navigation, the handshake, the screenshot, the console sweep and the
+    // `page.close()`, none of which any cell can see.
+    process.stdout.write(
+      c.dim(
+        `  per-simulation iterations: ${String(Math.round(iterationMs / 1000))}s total, ` +
+          `${String(Math.round(iterationMs / Math.max(1, entries.length)))} ms each; ` +
+          `${String(Math.round((iterationMs - totalMs) / 1000))}s of that is OUTSIDE the cells\n`,
+      ),
+    );
   }
 
   if (failures.length === 0) {
