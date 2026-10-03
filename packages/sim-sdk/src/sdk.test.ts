@@ -830,3 +830,49 @@ describe('orderMatch', () => {
     expect(grade.rationale).toMatch(/nothing was expected/);
   });
 });
+describe('a numeric enum sent as a STRING', () => {
+  const numeric = {
+    ratio: choice({
+      name: 'ratio',
+      label: 'Scale',
+      values: [25_000, 50_000, 250_000],
+      default: 50_000,
+    }),
+  };
+  const textual = {
+    scenario: choice({
+      name: 'scenario',
+      label: 'Situation',
+      values: ['dropped', 'thrown', 'rolled'],
+      default: 'dropped',
+    }),
+  };
+
+  // THE DEFECT.
+  //
+  // A manifest may only declare STRING enum values, so a host configuring an enum of numbers can only put
+  // a string on the wire. `values.includes(raw)` found no match, logged a coercion and used the DEFAULT --
+  // so the simulation answered for the default while the page displayed something else, and every check
+  // downstream agreed with the default.
+  it('matches the number the string names, instead of falling back to the default', () => {
+    expect(clampParams(numeric, { ratio: '250000' }).values.ratio).toBe(250_000);
+    expect(clampParams(numeric, { ratio: '25000' }).values.ratio).toBe(25_000);
+  });
+
+  it('reports a coercion only when the value really is not in the enum', () => {
+    expect(clampParams(numeric, { ratio: '250000' }).coerced).toEqual([]);
+    expect(clampParams(numeric, { ratio: '999' }).coerced).toHaveLength(1);
+    expect(clampParams(numeric, { ratio: '999' }).values.ratio).toBe(50_000);
+  });
+
+  it('still takes a string enum as a string', () => {
+    expect(clampParams(textual, { scenario: 'thrown' }).values.scenario).toBe('thrown');
+    expect(clampParams(textual, { scenario: 'nope' }).values.scenario).toBe('dropped');
+  });
+
+  it('does not let a numeric string smuggle a value past an enum of STRINGS', () => {
+    // 'dropped' is not a number, so no coercion is possible; and a numeric-looking value that is not in
+    // the list is refused rather than coerced to something adjacent.
+    expect(clampParams(textual, { scenario: '0' }).values.scenario).toBe('dropped');
+  });
+});

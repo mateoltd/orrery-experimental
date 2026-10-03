@@ -468,7 +468,9 @@ const runManifestScript = async (page, frame, entry, manifest) => {
     if (typeof points === 'number' && Math.abs(points - expect.grade) > tolerance) {
       return {
         ok: false,
-        note: `expect.grade was ${String(expect.grade)}, the grader awarded ${String(points)}`,
+        note:
+          `expect.grade was ${String(expect.grade)}, the grader awarded ${String(points)} ` +
+          `(answer ${JSON.stringify(answers[0])}, params ${JSON.stringify(scriptedParams(entry, manifest))})`,
       };
     }
   }

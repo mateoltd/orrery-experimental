@@ -1,0 +1,100 @@
+{
+  "id": "geography.map-scale-distance",
+  "version": "1.0.0",
+  "title": "Real distance from a map scale",
+  "summary": "Measure a route on a map and work out how far it is in real life.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["geography"],
+  "tags": ["scale", "maps", "distance"],
+  "ageRange": [11, 16],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A measured distance on a map, the scale the map is printed at, and a box for the real distance.",
+    "reducedMotion": true,
+    "textAlternative": "A route is measured on a map, and the scale the map is printed at is given. The scale means one centimetre on the map is the same number of centimetres in reality. Work out how far the route is in real life, in kilometres."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "mapCm": {
+        "type": "number",
+        "label": "On the map",
+        "unit": "cm",
+        "minimum": 0.5,
+        "maximum": 20,
+        "default": 4,
+        "step": 0.1
+      },
+      "ratio": {
+        "type": "enum",
+        "label": "Scale",
+        "enumValues": ["25000", "50000", "250000"],
+        "default": "50000"
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": ["25k", "50k", "250k"]
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 330,
+    "minHeight": 240,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "mapCm": 4,
+            "ratio": "250000"
+          }
+        }
+      }
+    ],
+    "type": {
+      "realdistance": 10
+    },
+    "expect": {
+      "value": {
+        "min": 9.9,
+        "max": 10.1
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "NUMERIC",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0,
+      "relative": 0.01
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You said {answer} km; the real distance is {expected} km."
+  }
+}

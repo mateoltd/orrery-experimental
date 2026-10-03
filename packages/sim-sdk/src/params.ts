@@ -58,8 +58,21 @@ export interface StringParamSpec extends ParamSpecBase {
 
 export interface EnumParamSpec extends ParamSpecBase {
   readonly type: 'enum';
-  readonly values: readonly string[];
-  readonly default: string;
+  /**
+   * Strings OR NUMBERS.
+   *
+   * This said `readonly string[]`, which was a LIE rather than a restriction: `choice()` is generic
+   * enough to accept `[25_000, 50_000, 250_000]` and nothing complained until a simulation actually used a
+   * numeric enum and the call was flagged in `clampParams`. A map scale, a resolution setting and a
+   * version number are all naturally numeric, and pretending otherwise only moved the failure somewhere
+   * less obvious.
+   *
+   * It matters because a MANIFEST may only declare string enum values -- the schema requires it -- so a
+   * host configuring a numeric enum can only put a string on the wire, and `clampParams` has to
+   * recognise `'250000'` as the number 250000 rather than falling back to the default.
+   */
+  readonly values: readonly (string | number)[];
+  readonly default: string | number;
 }
 
 export type ParamSpec = NumberParamSpec | BooleanParamSpec | StringParamSpec | EnumParamSpec;
@@ -268,8 +281,22 @@ export function clampParams(
           values[name] = spec.default;
           continue;
         }
-        if (typeof raw === 'string' && spec.values.includes(raw)) {
-          values[name] = raw;
+        // A NUMERIC ENUM, SENT AS A STRING, MUST STILL MATCH.
+        //
+        // A manifest can only declare STRING enum values -- the schema says so -- so a host configuring a
+        // simulation whose enum holds numbers can only put a string on the wire. Comparing it with
+        // `values.includes(raw)` found no match, logged a coercion, and silently used the DEFAULT: the
+        // simulation answered for 1:50 000 while the page was displaying 1:250 000, and the grader agreed
+        // with the default, so every cell and every test passed.
+        //
+        // Nothing caught it because every enum so far held strings. `physics.kinematics` sets
+        // `scenario: 'thrown'` and works; `geography.map-scale-distance` sets `ratio: '250000'` and did not.
+        const asNumber = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : Number.NaN;
+        if (
+          (typeof raw === 'string' && spec.values.includes(raw)) ||
+          (Number.isFinite(asNumber) && spec.values.includes(asNumber))
+        ) {
+          values[name] = Number.isFinite(asNumber) ? asNumber : raw;
           continue;
         }
         coerced.push(`${name}: ${asText} -> default "${spec.default}"`);
