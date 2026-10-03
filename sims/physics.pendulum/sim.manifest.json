@@ -1,0 +1,98 @@
+{
+  "id": "physics.pendulum",
+  "version": "1.0.0",
+  "title": "How long is one swing of a pendulum?",
+  "summary": "Watch a pendulum swing, and work out how long one complete swing takes from its length.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["physics"],
+  "tags": ["oscillation", "pendulum", "period"],
+  "ageRange": [13, 18],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A swinging pendulum drawn as a line, with step and play buttons, an energy graph, and a box for the period in seconds.",
+    "reducedMotion": true,
+    "textAlternative": "A pendulum swings back and forth on a line of a given length, released from an angle given in degrees. The task is to work out how many seconds one complete swing takes."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "length": {
+        "type": "number",
+        "label": "length",
+        "unit": "m",
+        "minimum": 0.2,
+        "maximum": 4,
+        "default": 1
+      },
+      "start": {
+        "type": "number",
+        "label": "start angle",
+        "unit": "rad",
+        "minimum": -1.0471975512,
+        "maximum": 1.0471975512,
+        "default": 0.5
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 440,
+    "minHeight": 340,
+    "aspectRatio": "4/3"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "length": 1,
+            "start": 0.5
+          }
+        }
+      }
+    ],
+    "type": {
+      "answer": "2.04"
+    },
+    "expect": {
+      "value": 2.04,
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "TOLERANCE",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0.01,
+      "relative": 0.002
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You said {answer} s; this pendulum's swing takes 2.04 s. The small-angle formula 2*pi*sqrt(L/g) gives 2.01 s, and the gap is the angle it was released from."
+  }
+}

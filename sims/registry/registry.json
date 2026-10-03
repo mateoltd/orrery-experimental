@@ -1,6 +1,6 @@
 {
   "generatedFrom": "1970-01-01",
-  "digest": "39cfa66c4a3e842de238dee2cfa492727fdeadab0aba8ac969474a06a73e2e43",
+  "digest": "b75010b8673a901e2f6a7222eedf0162b1236288492654c61b360d39580cd451",
   "entries": [
     {
       "id": "astronomy.orrery",
@@ -616,13 +616,13 @@
       "bundle": {
         "page": "./sim.77e071b1b264.html",
         "browser": "./browser.f3597ff6bbc5.js",
-        "grader": "./grader.58065b0968cf.js",
+        "grader": "./grader.525ea63d2246.js",
         "style": "./style.13aa5dcedc33.css"
       },
       "bytes": {
         "browser": 14140,
-        "grader": 7816,
-        "total": 24385
+        "grader": 7928,
+        "total": 24497
       },
       "defaultHeight": 480,
       "minHeight": 380,
@@ -1010,6 +1010,48 @@
           "maximum": 20,
           "step": null,
           "default": 4
+        }
+      ]
+    },
+    {
+      "id": "physics.pendulum",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.ae9a7c2633fb.html",
+        "browser": "./browser.4e1063db38ef.js",
+        "grader": "./grader.47c1d3f28720.js",
+        "style": "./style.13aa5dcedc33.css"
+      },
+      "bytes": {
+        "browser": 13799,
+        "grader": 9016,
+        "total": 25248
+      },
+      "defaultHeight": 460,
+      "minHeight": 360,
+      "parameters": [
+        {
+          "name": "length",
+          "type": "number",
+          "label": "length",
+          "unit": "m",
+          "minimum": 0.2,
+          "maximum": 4,
+          "step": null,
+          "default": 1
+        },
+        {
+          "name": "start",
+          "type": "number",
+          "label": "start angle",
+          "unit": "rad",
+          "minimum": -1.05,
+          "maximum": 1.05,
+          "step": null,
+          "default": 0.5
         }
       ]
     }
