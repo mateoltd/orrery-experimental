@@ -157,6 +157,8 @@ const expectationSchema = z.union([
       in: z.array(z.unknown()).min(1).optional(),
       set: z.array(z.unknown()).min(1).optional(),
       sequence: z.array(z.unknown()).min(1).optional(),
+      /** A TEXT answer, compared verbatim. */
+      exact: z.string().optional(),
       prefix: z.string().min(4).optional(),
     })
     .strict(),

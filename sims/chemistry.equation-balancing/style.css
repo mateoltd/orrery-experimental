@@ -1,0 +1,31 @@
+/* Deliberately tiny. */
+#sim-root {
+  font:
+    14px / 1.4 system-ui,
+    sans-serif;
+  color: #1f2933;
+}
+#sim-question {
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  margin: 10px 0;
+}
+#sim-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+#sim-equation {
+  flex: 1 1 240px;
+  padding: 4px 6px;
+  font: inherit;
+}
+#sim-status {
+  margin: 6px 0 0;
+  min-height: 1.4em;
+}
+#sim-text-alternative {
+  margin: 4px 0 0;
+  color: #52606d;
+}

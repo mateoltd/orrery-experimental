@@ -365,6 +365,14 @@ const runManifestScript = async (page, frame, entry, manifest) => {
    * sixty metres".
    */
   const matches = (want, got) => {
+    // `{ exact: "..." }` -- a TEXT answer, compared verbatim.
+    //
+    // Added for the first simulation whose answer is a sentence rather than a value. Every other form of
+    // expectation here compares numbers, sets or sequences, so a simulation graded on a line of chemical
+    // algebra could not declare a checked expectation at all.
+    if (want !== null && typeof want === 'object' && typeof want.exact === 'string') {
+      return want.exact === got;
+    }
     if (typeof want === 'number' && typeof got === 'number') {
       return Math.abs(want - got) <= tolerance;
     }
@@ -844,7 +852,43 @@ const CELLS = [
     run: async ({ page, entry, simOrigin, appOrigin }) => {
       const baselineConfig = new URL(page.url()).searchParams.get('cfg');
       const parameter = (entry.parameters ?? []).find((p) => p.default !== undefined);
-      if (parameter === undefined) return 'the simulation declares no parameter to perturb';
+      // A simulation with NO PARAMETERS is a legitimate thing, not a gap in the test. chemistry's
+      // equation-balancing takes no parameters at all, and refusing to check its `reset` because there was
+      // nothing to perturb would have left the one button every student presses unchecked on exactly the
+      // simulation with the least state to get wrong.
+      if (parameter === undefined) {
+        const baseline = await (async () => {
+          await page.goto(`${appOrigin}/?cfg=${baselineConfig}`, { waitUntil: 'load' });
+          await page.waitForFunction(() => globalThis.__conformance?.ready === true, undefined, {
+            timeout: 15_000,
+          });
+          await waitForStatus(page, ['READY', 'DEGRADED']);
+          return captureState(page);
+        })();
+        if (baseline === null || typeof baseline.checksum !== 'string') {
+          return 'this simulation declares no parameters and reported no state to reset to';
+        }
+        const afterReset = await page.evaluate(async () => {
+          const target = globalThis.document.querySelector('iframe')?.contentWindow;
+          const log = globalThis.__conformance.log;
+          const nonce = [...log.inbound].reverse().find((f) => f.type === 'sim:ready')?.nonce;
+          const before = log.states.length;
+          if (target === null || target === undefined || nonce === undefined) return null;
+          target.postMessage({ type: 'sim:command', name: 'reset', args: {}, nonce }, '*');
+          await new Promise((done) => setTimeout(done, 200));
+          target.postMessage({ type: 'sim:requestState', reason: 'save', nonce }, '*');
+          const until = Date.now() + 6000;
+          for (;;) {
+            if (log.states.length > before) return log.states[log.states.length - 1];
+            if (Date.now() > until) return null;
+            await new Promise((done) => setTimeout(done, 100));
+          }
+        });
+        if (afterReset === null) return 'reset produced no state';
+        return afterReset.checksum === baseline.checksum
+          ? null
+          : `reset left ${String(afterReset.checksum)}; a fresh mount is ${String(baseline.checksum)}`;
+      }
 
       const perturbedValue =
         parameter.type === 'number'

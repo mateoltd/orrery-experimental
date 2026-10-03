@@ -1,0 +1,74 @@
+{
+  "id": "chemistry.equation-balancing",
+  "version": "1.0.0",
+  "title": "Balancing a chemical equation",
+  "summary": "Type the balanced form of an unbalanced equation and have it checked.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["chemistry"],
+  "tags": ["stoichiometry", "equations", "balancing"],
+  "ageRange": [13, 16],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "An unbalanced equation, a single text box for the balanced equation, and a button to check it.",
+    "reducedMotion": true,
+    "textAlternative": "An unbalanced chemical equation is given. Write the balanced equation on one line. Whole numbers are acceptable and the equation may be written in either direction."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 300,
+    "minHeight": 220,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "requestState",
+        "args": {}
+      }
+    ],
+    "type": {
+      "equation": "O2 + 2H2 = 2H2O"
+    },
+    "expect": {
+      "value": {
+        "exact": "O2 + 2H2 = 2H2O"
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "EXACT",
+    "maxPoints": 4,
+    "partialCredit": false,
+    "rationaleTemplate": "Your equation: {answer}."
+  }
+}

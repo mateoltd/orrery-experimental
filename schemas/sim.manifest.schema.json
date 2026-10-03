@@ -146,6 +146,7 @@
             "in": { "type": "array", "minItems": 1 },
             "set": { "type": "array", "minItems": 1 },
             "sequence": { "type": "array", "minItems": 1 },
+            "exact": { "type": "string" },
             "prefix": { "type": "string", "minLength": 4 }
           }
         }
