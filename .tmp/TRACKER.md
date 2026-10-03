@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `e742b8d` | **12 of 24 built.** Every sim's declared `conformance.script` (which may press the simulation's own controls), `expect`, `conformance.type` and `reset` are honoured and checked against the simulation's real fields and states. Strategies exercised by real sims: EXACT, TOLERANCE, NUMERIC, SET and ORDER; answers exercised: numbers, units, sets, ordered lists, scalars, and free TEXT. Five subjects represented. |
+| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `f0ed7da` | **13 of 24 built.** Every sim's declared `conformance.script` (which may press the simulation's own controls), `expect`, `conformance.type` and `reset` are honoured and checked against the simulation's real fields and states; a randomised simulation is checked for a seeded, reproducible question. Six subjects represented. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -2132,6 +2132,52 @@ two unrelated cells started failing the moment it sat second in the list. A cell
 - 9 of 24 gold sims. `pnpm sim:conformance` **153/153** across **three consecutive runs**; `pnpm test:sims`
   69/69; **1575 unit**; 336 db integration; 3 e2e; 9/9 container gates; lint 0; typecheck 0;
   `pnpm test` 22/22; `gate:browser` green; image builds green.
+
+#### P6-T11: a SKIP must not look like a PASS, and randomness must be seeded
+
+**A CELL THAT SKIPPED PRINTED THE SAME GREEN LINE AS A CELL THAT PASSED.** Returning `null` for "not
+applicable" and `null` for "verified" produced identical output, so a matrix full of skips reads exactly
+like a matrix full of proofs. The new determinism cell skips for every simulation that does not declare
+randomness — all but one — and **I could not tell from the output whether it had checked anything at
+all**. Cells may now return `{ skip }`, which prints SKIP with its reason, and the summary counts them:
+"12 cells SKIPPED — green lines count only what was checked". This is the same failure mode as the
+blur-capture cell once reading another cell's evidence, and it is worth catching structurally rather than
+by remembering to look.
+
+**A SIMULATION CALLING `Math.random()` PUTS A DIFFERENT QUESTION IN FRONT OF EVERY STUDENT**, breaks save
+and restore, makes its own tests impossible, and declares `randomised: true` while doing it. The new cell
+mounts a randomised simulation twice with the same seed and requires the same state checksum.
+
+**BOTH SIMULATIONS THAT MENTION `Math.random` MENTION IT IN A COMMENT.** A scan flagged
+biology.mitosis-order as declaring `randomised: false` while containing `Math.random`, and the occurrences
+were prose explaining why they do not call it. A grep is not an audit, and a defect found by grep alone is
+often a defect in the grep.
+
+#### P6-T11: gold sim 13, and a relationship that runs backwards
+
+**`astronomy.parallax-distance` — THE FIRST WHOSE ANSWER SHRINKS AS ITS INPUT GROWS.** A bigger parallax is
+a closer star, so a student who treats the formula like the others divides instead of inverting and is
+wrong by a factor of the answer's own magnitude, which no tolerance absorbs. A test asserts the reciprocal
+mistake scores **zero** at both ends of the range rather than "nearly".
+
+**SMALL ANSWERS ARE WHERE AN ABSOLUTE TOLERANCE GOES WRONG.** The declared range gives 0.5 to 20 parsecs,
+and half a parsec of tolerance is a tenth of the whole range at one end and half the answer at the other.
+Grading is relative, and a test asserts the *same* relative error is treated identically at 0.5 and at 20.
+
+**There is no arithmetic in the unit at all.** One parsec is *defined* as the distance at which a parallax
+is one arcsecond, so the number is the reciprocal and the unit comes from the definition. Light years are a
+conversion rather than a definition, so asking for them is a different question — and a parsec answer is
+**not** accepted when light years were requested.
+
+Printed with **significant figures**, not decimal places: three decimals would show 10 parsecs as `10.000`.
+
+The manifest's enum values are strings and the SDK's `choice()` takes the values it will send, so a boolean
+enum is a schema error; the first version declared booleans and the validator said so.
+
+#### P6-T11 evidence
+- 13 of 24 gold sims. `pnpm sim:conformance` **247/247** with **12 skips reported as skips**;
+  `pnpm test:sims` 122/122; **1640 unit**; 336 db integration; 3 e2e; 9/9 container gates; lint 0;
+  typecheck 0; `pnpm test` 22/22; `gate:browser` green (12/12 escapes, 247/247 cells).
 
 #### P6-T11: gold sim 12, and the answer that is a SENTENCE
 
