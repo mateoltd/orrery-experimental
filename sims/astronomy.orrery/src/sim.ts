@@ -25,12 +25,14 @@ import {
   type BridgeHandlers,
   clampParams,
   connectSim,
+  createStepper,
   describeControl,
   focusEntryPoint,
   num,
   type ParamValues,
   type SimCapabilities,
   type SimConnection,
+  type Stepper,
 } from '@orrery/sim-sdk';
 import {
   clamp,
@@ -41,7 +43,6 @@ import {
   positionAt,
   round,
   SUN,
-  step,
 } from './model.js';
 
 const SIM_ID = 'astronomy.orrery';
@@ -100,7 +101,26 @@ export function startSim(
   });
 
   let params = paramsFrom({});
-  let t = 0;
+
+  /**
+   * THE CLOCK IS THE SDK STEPPER'S `t`, AND THAT IS THE POINT OF `stepper: true`.
+   *
+   * The first version declared `stepper: true` in the capabilities and then hand-rolled a `step` command,
+   * so the claim was about a manifest rather than about the code. The capabilities cell cross-checks the
+   * manifest against the GRADER and never against the simulation's own source, so nothing caught it: a
+   * capability flag can say true while nothing implements it, and that is precisely the failure the cell
+   * exists to prevent -- one layer short of where the lie actually is.
+   *
+   * `maxTime` and `stepSize` are the SDK's, and the host's step/pause/scrub all drive the same object the
+   * slider does. One clock, one source of truth, and `INV-TIME-1` is respected because the sim never reads a
+   * wall clock to advance -- it reads the stepper's `t`, which only the host or the user moves.
+   */
+  const stepper: Stepper = createStepper({
+    maxTime: MAX_TIME,
+    stepSize: STEP_SIZE,
+    allowMotion: false,
+  });
+  const t = (): number => stepper.get().t;
 
   /**
    * THE STARFIELD, IN WEBGL, AND THE FALLBACK IF THERE IS NO CONTEXT.
@@ -200,7 +220,7 @@ export function startSim(
       flat.height = PANEL;
       const context = flat.getContext('2d');
       if (context === null) return;
-      drawFlat(context, params, t);
+      drawFlat(context, params, t());
     }
   };
 
@@ -217,7 +237,7 @@ export function startSim(
     context.arc(toX(SUN.x), toY(SUN.y), 7, 0, Math.PI * 2);
     context.fill();
 
-    const where = positionAt(next, t);
+    const where = positionAt(next, t());
     context.fillStyle = '#4fd1c5';
     context.beginPath();
     context.arc(toX(where.x), toY(where.y), 6, 0, Math.PI * 2);
@@ -299,9 +319,13 @@ export function startSim(
 
   const setTime = (next: number): void => {
     // `clampTime` first: a slider dragged past the end, or a `NaN` from a host, must not reach the model.
-    t = clampTime(next);
-    slider.value = String(t);
-    readout.textContent = `${format(round(t))} days`;
+    // SET THE CLOCK ON THE STEPPER AND READ IT BACK. One clock, and the value the student sees is the value
+    // the host would report, rather than a second copy that can disagree.
+    const now = clampTime(next);
+    stepper.dispatch({ type: 'scrubTo', t: now });
+    const at = t();
+    slider.value = String(at);
+    readout.textContent = `${format(round(at))} days`;
     draw();
   };
 
@@ -343,7 +367,8 @@ export function startSim(
       }
       // THE STEPPER'S OWN COMMAND, and it SATURATES rather than accumulating.
       if (name === 'step') {
-        setTime(step(t, Number(args.dt ?? STEP_SIZE)));
+        stepper.dispatch({ type: 'step', direction: args.direction === -1 ? -1 : 1 });
+        setTime(t());
         return;
       }
     },
@@ -376,7 +401,7 @@ export function startSim(
       a: params.a,
       e: params.e,
       period: params.period,
-      t,
+      t: t(),
       answer: answerBox.value,
     }),
   };

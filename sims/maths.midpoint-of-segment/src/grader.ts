@@ -125,9 +125,9 @@ export function parseAnswer(answer: unknown): Parsed {
 
 /** `{x, y}`, `{midpoint: [x, y]}`, or `{x, y, extra}` — all the same pair. */
 function objectPair(record: Record<string, unknown>): unknown[] | null {
-  const midpoint = record['midpoint'];
+  const midpoint = record.midpoint;
   if (Array.isArray(midpoint)) return midpoint;
-  if ('x' in record || 'y' in record) return [record['x'], record['y']];
+  if ('x' in record || 'y' in record) return [record.x, record.y];
   return null;
 }
 

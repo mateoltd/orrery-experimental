@@ -1,6 +1,6 @@
 {
   "generatedFrom": "1970-01-01",
-  "digest": "8b386b46aae2a2a8742b9c9e284d976f8ac3ea6eb6e4eb8649d76cd7da6effcc",
+  "digest": "3acb35ab5f484f7efbdb472c576e35f59b5ccefb371099eb59fac0d54cfcf85f",
   "entries": [
     {
       "id": "astronomy.orrery",
@@ -9,15 +9,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.31d57d7afbba.html",
-        "browser": "./browser.3bd1fe89faf5.js",
+        "page": "./sim.5a2b1f7b0159.html",
+        "browser": "./browser.beb39b5d35b2.js",
         "grader": "./grader.13fc889d03de.js",
         "style": "./style.75a5f5513d82.css"
       },
       "bytes": {
-        "browser": 14245,
+        "browser": 16430,
         "grader": 7295,
-        "total": 22406
+        "total": 24591
       },
       "defaultHeight": 420,
       "minHeight": 320,
