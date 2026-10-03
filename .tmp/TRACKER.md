@@ -1361,7 +1361,7 @@ lint 0, typecheck 0, image builds.** Fifteen tasks, fifteen commits, zero summar
 | P6-T8 Registry: `simId@version`, install/disable/deprecate, `replacedById`, metadata index | **DONE** | `38fda9a` | `packages/sim-registry/`, emitted by `sim:build` to `sims/registry/{registry,index}.json`. The catalogue index carries NO bundle path. The catalogue PAGE is deferred with Sim Studio. |
 | P6-T9 Conformance matrix over every registered sim | **DONE** | `8fad090` | `scripts/sim-conformance.mjs` + Chromium: **14/14 cells**. `dcf7293` found the missing nonce on every host frame but `sim:init`. |
 | P6-T10 Authoring docs, `sims/_template`, `pnpm sim:new`, dev playground with a protocol inspector   | **DONE** | `c6c35d4` | `scripts/sim-playground.mjs`: a real second origin, a real sandbox, every frame both ways listed live, one button per host frame. `--once` is a smoke test, not a demo. |
-| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `90ff7de` | **14 of 24 built.** Every sim's declared `conformance.script` (which may press the simulation's own controls), `expect`, `conformance.type` and `reset` are honoured and checked against the simulation's real fields and states; a randomised simulation is checked for a seeded, reproducible question; the manifest's capabilities are checked against the grader's. Seven subjects represented. |
+| P6-T11 24 gold sims (re-costed ~240h: 24 x 10h - the first sims built against a brand-new SDK, template and conformance harness) | **IN PROGRESS** | `2a44116` | **15 of 24 built.** Every sim's declared `conformance.script`, `expect`, `conformance.type` and `reset` are honoured and checked against the simulation's real fields and states; randomised sims are checked for a seeded question; the manifest's capabilities are checked against the grader's. EIGHT subjects represented. |
 | P6-T13 Sandbox escape test as a permanent CI gate | **DONE** | `157595d` | `scripts/sim-sandbox-escape.mjs`, in `pnpm gates`: 12 escapes attempted from inside the frame, 12 blocked, negative control recorded. |
 
 
@@ -2152,6 +2152,48 @@ mounts a randomised simulation twice with the same seed and requires the same st
 biology.mitosis-order as declaring `randomised: false` while containing `Math.random`, and the occurrences
 were prose explaining why they do not call it. A grep is not an audit, and a defect found by grep alone is
 often a defect in the grep.
+
+#### P6-T11: gold sim 15, and an absolute tolerance that meant 100%
+
+**`computing-science.download-time` — TWO TRAPS THAT PULL IN OPPOSITE DIRECTIONS.** A connection speed is in
+BITS per second and a file size is in BYTES, so the missing conversion makes the answer eight times too
+small. Separately, a "megabyte" from a file manager is `2^20` and a "megabit" from a speed test is `10^6`.
+A student who has memorised one and not the other produces answers that are wrong by a factor of eight and
+by about 5% respectively, and **cannot tell which mistake they made** — so the feedback names the
+factor-of-eight one explicitly, and there is a test that a *different* wrong answer is not accused of it.
+
+**AN ABSOLUTE TOLERANCE MEANT A 100% TOLERANCE.** `const toleranceUnit = spec.rel > 0 ? spec.rel : 1` made
+the `1` a *one hundred percent* tolerance. A grader declaring `abs: 0.5, rel: 0` — the only kind that makes
+sense for a count or a duration, and therefore **the first kind anything actually used** — got a unit of
+one, so an answer 88% wrong sat inside it and scored **full marks**. The unit is now whichever tolerance was
+declared, with an absolute one divided by the magnitude; with neither declared there is nothing to decay
+from, so nothing is credited.
+
+**THE GRADE COULD EXCEED THE MAXIMUM.** `relativeError` can be *smaller* than the tolerance unit while
+`withinTolerance` still says no, because when an absolute tolerance is in force the two disagree. `1 - past`
+then exceeded 1. `finish` capped it downstream so no student ever saw 4.2 of 4 — but the rationale said so.
+Clamped at both ends, with a test across a spread of inputs and tolerances.
+
+**A TEST HAD BEEN PASSING FOR THE WRONG REASON.** `tolerance(4.5, 5, {abs: 0.1, partialCredit: true})`
+asserted "greater than zero" and was returning **5.6 of a possible 4**. It now asserts what is true.
+
+**THE GRADER ROUNDED ITS OWN EXPECTATION AND THEN PUNISHED THE PRECISE ANSWER.** Judging against a rounded
+`8` with a 2% relative tolerance scored the exact transfer time, `8.388608`, at **2.23 of 4**. The rounding
+belongs in the feedback; the tolerance is the rounding.
+
+**AND THE FEEDBACK CALLED TWO FUNCTIONS IT NEVER IMPORTED** — `bytes()` and `bitsPerSecond()`. A correct
+answer never builds the feedback string, so nothing noticed until a wrong answer did. The same class of bug
+as the two-argument graders: code on a path only the failing case reaches.
+
+**`computing-science` COULD NOT BE AN ID AT ALL.** The id pattern's subject segment was `[a-z][a-z0-9]*`
+with no hyphen, while the subject enum contains `computing-science` and `general-science`. Two declarations
+of one naming rule, disagreeing; found by `sim:validate` refusing `computing-science.download-time`. Both
+are widened now, and `gate:schema` confirms they still agree.
+
+#### P6-T11 evidence
+- 15 of 24 gold sims. `pnpm sim:conformance` **285/285** with **14 skips reported as skips**;
+  `pnpm test:sims` 145/145; **1669 unit**; 336 db integration; 3 e2e; 9/9 container gates; lint 0;
+  typecheck 0; `pnpm test` 22/22; `gate:browser` green (12/12 escapes, 285/285 cells).
 
 #### P6-T11: gold sim 14, and a numeric enum that became the default
 
