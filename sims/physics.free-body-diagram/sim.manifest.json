@@ -1,0 +1,120 @@
+{
+  "id": "physics.free-body-diagram",
+  "version": "1.0.0",
+  "title": "Free-body diagram of a crate",
+  "summary": "Say which forces act on a crate pulled at constant speed, how big each one is, and which way it points.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["physics"],
+  "tags": ["forces", "free-body-diagram", "vectors"],
+  "ageRange": [13, 18],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A crate on a floor with a rope pulling it, a box for each force, and a button to submit for marking.",
+    "reducedMotion": true,
+    "textAlternative": "A crate resting on a horizontal floor with a rope pulling it to the right, moving at constant speed. The task is to state which forces act on the crate, how large each is in newtons, and which way it points."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "mass": {
+        "type": "number",
+        "label": "crate mass",
+        "unit": "kg",
+        "minimum": 0.5,
+        "maximum": 20,
+        "default": 2
+      },
+      "friction": {
+        "type": "number",
+        "label": "friction",
+        "unit": "N",
+        "minimum": 0,
+        "maximum": 20,
+        "default": 3
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 400,
+    "minHeight": 300,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "mass": 2,
+            "friction": 3
+          }
+        }
+      },
+      {
+        "command": "click",
+        "args": {
+          "selector": "#sim-weight-acts"
+        }
+      },
+      {
+        "command": "click",
+        "args": {
+          "selector": "#sim-normal-acts"
+        }
+      },
+      {
+        "command": "click",
+        "args": {
+          "selector": "#sim-friction-acts"
+        }
+      },
+      {
+        "command": "click",
+        "args": {
+          "selector": "#sim-submit"
+        }
+      }
+    ],
+    "type": {},
+    "expect": {
+      "answer": {
+        "note": {
+          "exact": "rubric-marked: a person decides these marks"
+        }
+      },
+      "grade": 0
+    }
+  },
+  "grading": {
+    "strategy": "RUBRIC",
+    "maxPoints": 4,
+    "partialCredit": false,
+    "rationaleTemplate": "Submitted for marking: {answer}. This simulation does not score free-body diagrams — a person decides, using the published bands."
+  }
+}
