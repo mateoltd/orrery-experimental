@@ -2863,7 +2863,7 @@ P15 reliability, performance, DR · P16 interop (QTI/xAPI/LTI/OneRoster) · P17 
 | P7-T13 | Property tests over grader, shuffler, deadline math | **PARTIAL -- GRADER DONE, SHUFFLER + DEADLINE DEFERRED** | `448633d` | Seventeen properties, 300 runs each, in `packages/contracts/src/grading/properties.test.ts`. **Generators are built from the grader's own `HANDLED` and `METHODS`**, not from a list typed in the test, so a seventh question type or method arrives already inside every property. **A property found a CONTRADICTION IN plans/07 §3.** Counterexample `["RI", ["b"], ["c"]]`: the test reached for `PENALISING_METHODS` and found RI was absent from it. **There are two similarly named exports answering different questions** -- `PENALISING_METHODS` is NG+PM and exists for §3.3's select-all publish guard (does select-all pay under it), while `canGoNegative` is NG+PM+**RI** (can this score go below zero). Using the wrong list would have asserted something false and read as a pass. **The plan's gloss is wrong and the code follows the formula.** §3's table says RI produces NO negative raw scores "(the size clause saves it)", but the clause fires only when the response is LARGER than the key, so a same-size entirely-wrong response goes to +0 −1 = −1. `SU` is the method that cannot go negative, because it refuses the response outright rather than scoring it. **Recorded as a plan-text discrepancy for sign-off, not fixed here** -- changing published scoring semantics is not the grader author's decision, but leaving code matching a gloss that claims the opposite is not acceptable either. The size clause is asserted to be the ONLY thing separating NG from RI (select-all-3 against key-1: NG −4, RI 0); if they ever agree they are one method. **Properties are phrased as what they forbid**, including the ones no fixture table can express: `points` is never NaN (asserted apart from the bounds, since `NaN >= 0` is false but the failure reads as a sign problem), `rawPoints` is finite because it is stored, output is byte-identical across three calls and unaffected by `variant`/`seed` because the grader DRAWS nothing, and **every refusal carries a flag while every remaining zero is an INCORRECT, PARTIAL or BLANK the student earned** -- BOUNDED is satisfied perfectly well by a silent zero, which is why that last one is stated as its own property. **`fast-check` is now a declared devDependency** rather than a hoisted transitive one. Lint caught a `Math.random` left in a generator (INV-RNG-1) and, in catching it, caught the property being written to match a wrong constant. **DEFERRED, AND THE PACKET IS WHY:** P7-T13 is "property tests over grader, shuffler, deadline math" but lists only P7-T3 as a dependency, and the shuffler and deadline math do not exist yet -- they arrive with P7-T8, unstarted. Those two follow P7-T8; the task is PARTIAL, not DONE on the convenient part. |
 | P7-T6 | Student attempt runtime: one-at-a-time or all-at-once, lock-after-answer, navigation, flags, autosave, outbox | NOT STARTED | -- | Depends on P7-T1 and P0-T6. **This is the largest unblocked item left in P7** and the first thing that has to exist before a student can take anything at all. |
 | P7-T7 | Renderers + interaction for all 10 types incl. file upload and sim response, keyboard and AT support | NOT STARTED | -- | Depends on P7-T6. The only automated check that a canvas-based or drag-based interaction is keyboard-reachable and has a text alternative is per `plans/17` §3.3, so this is where accessibility for question types is won or lost. |
-| P7-T8 | Policy engine v1: attempts, shuffle, per-question time, total time, window, navigation, reveal policy, **practice attempt** | NOT STARTED | -- | Depends on P0-T6. **Produces the shuffler and the deadline math that P7-T13 is waiting on**, so this is the task that unblocks the rest of P7-T13. |
+| P7-T8 | Policy engine v1: attempts, shuffle, per-question time, total time, window, navigation, reveal policy, **practice attempt** | **DONE** | `24c8bc0` | **THE RESOLUTION AND VALIDATION ALREADY EXISTED** -- `policy/index.ts` had `resolvePolicy`, `validatePolicy`, `profileFor`, `extraTimePercent`, `freezePolicy`, `readPolicySnapshot`, `isPublishable` and its own passing test file, with importers in `packages/db`. So six of the packet's eight items were built. **What was missing is what P7-T13 was waiting for**: the deadline arithmetic (`deadline.ts`) and the shuffles (`shuffle.ts`). **THE DEADLINE ARITHMETIC** implements `plans/01` §9.1 exactly, and the ORDER of the clauses in `evaluateWrite` is the message a student receives. A **duplicate idempotency key is checked FIRST**, before status and before both deadlines, because a client that submits and then retries its last save would otherwise be refused for work the server already holds -- which is the normal shape of a submit. **Attempt deadline before question deadline**, because when both have passed the attempt is what ended the paper and telling a student to fix one question cannot be acted on (this pair was backwards; a test caught it). **`<=`, not `<`, everywhere** -- an exclusive comparison makes the last millisecond of every paper a refusal, visible only under load and only for the students who submit latest. **A LATE ANSWER IS REJECTED, NOT ZEROED** (`INV-LATE-1`): accepting it believes a student with a drifted clock; zeroing it lets a late retry destroy an answer given on time, because the first accepted value is the student's work and a later write is a duplicate. **THE SHUFFLES, AND THE DECISION OF WHETHER TO PERMUTE.** `Rng.shuffle` existed; the decision did not, and it is the interesting part. `plans/06`'s caution is implemented as REFUSALS: never shuffle a question with a catch-all option (it is a claim about the option LIST, so permuting it moves the answer's position, and a student who learned that it tends to be right has a real strategy a shuffle invalidates), and never shuffle an ordered scale (a Likert row shuffled backwards inverts the scale, so an honest student is marked wrong and nothing explains why). Both detected from option TEXT rather than a flag, because an imported bank has no flags, and anchored so "Call the titration" is not read as a catch-all. **QUESTION ORDER DEFAULTS THE OTHER WAY** -- a permuted option list is a within-question nuisance, a permuted paper changes what the student can do, so papers keep their order unless they opt in. **Every lever forks by LABEL**, so adding a lever cannot retroactively change another lever's permutation for a student who already sat the paper. **`@orrery/rng` is now a contracts dependency** rather than a copy of the algorithm, since `INV-RNG-1` requires one seeded PRNG and a local FNV-1a plus Fisher-Yates would be a second one. |
 | P7-T9 | Submit: idempotent, auto-grade, `AnswerRevision` chain, receipt hash | NOT STARTED | -- | Depends on P7-T2, P7-T6, P7-T8. Idempotent submit is the point: a retry on a flaky connection must not create a second attempt. |
 | P7-T10 | Sealed grades gate + `audit:seals` | NOT STARTED | -- | Depends on P7-T9. |
 | P7-T11 | Multi-tab / multi-device: session header, second-tab warning, revision 409 UX | NOT STARTED | -- | Depends on P7-T6. Two tabs writing one attempt is a data-loss bug that only appears in real use. |
@@ -2879,7 +2879,7 @@ not started the task is a guess wearing a number's clothes.
 
 | Phase | Tasks | Est. | Status |
 |---|---|---|---|
-| P7 Quiz runtime, question types & auto-grading | 15 | 74h | IN PROGRESS (6/15; 1 partial, 1 blocked on a person) |
+| P7 Quiz runtime, question types & auto-grading | 15 | 74h | IN PROGRESS (7/15; 1 partial, 1 blocked on a person) |
 | P8 Exam runtime & integrity | 16 | 108h | NOT STARTED |
 | P9 Teacher review & grading workspace | 10 | 64h | NOT STARTED |
 | P10 Atomic release & student results | 10 | 46h | NOT STARTED |
@@ -2938,3 +2938,52 @@ cd apps/web && pnpm run build   # produces app-build-manifest.json for the bundl
 Integration tests need `DATABASE_URL=postgresql://orrery:orrery@localhost:55432/orrery`. The
 database is **shared across runs with no cleanup**, so every test uses a per-run UUID-derived
 slug or token; and a test count that has not moved is not evidence.
+
+---
+
+## Process findings — things that went wrong in the tracker itself, recorded because the tracker is the thing that is supposed to prevent them
+
+### PF-1 · A task row reading NOT STARTED was wrong for a task that was six-eighths built
+
+**P7-T8** is where this surfaced, and it is a defect in how this file was written rather than in the code.
+
+`policy/index.ts` had existed for some time with `resolvePolicy`, `validatePolicy`, `profileFor`,
+`extraTimePercent`, `freezePolicy`, `readPolicySnapshot` and `isPublishable`, its own passing test file, and
+importers in `packages/db`. The P7-T8 row read `NOT STARTED`.
+
+The row was written from `plans/20-PHASE-PACKETS.md` and from the absence of a commit *whose message named
+P7-T8*. Nothing ever checked whether the described work existed. For a task whose work is a set of exported
+functions, that is the wrong instrument: the work is greppable, and not grepping it is what produced the error.
+
+**Consequence, and it was not cosmetic:** I read the row, concluded nothing existed, and wrote a fresh
+`policy/index.ts` **over the top of the real one.** The 16 existing policy tests failed with
+`resolvePolicy is not a function`, which is how it was caught — after the overwrite, not before. Recovery was
+`git show HEAD:…`; three files that duplicated existing functionality were deleted and the new deadline module
+was rewritten against the real schema.
+
+**Two changes follow, and the first is the important one.**
+
+1. **A NOT STARTED row is no longer written from the packet alone.** Before a row may claim NOT STARTED for work
+   that produces named exports, the named exports must be grepped for, and the row records the grep. A row that
+   cannot survive that check is not evidence of anything.
+
+2. **The packet's task descriptions are read as CHECK LISTS, not as summaries.** "Policy engine v1: attempts,
+   shuffle, per-question time, total time, window, navigation, reveal policy, practice attempt" is eight
+   checkable claims. Six were already built and two were not, and that ratio was knowable in under a minute by
+   looking for the eight. Reading the description as prose is what hid the six.
+
+The general rule this establishes: **this tracker's failure mode is confidently wrong, not quietly wrong.** A
+quiet error gets caught by a test. The P7-T8 error was a confident claim — a table cell asserting `NOT STARTED`
+with no evidence behind it — and it survived until it destroyed a file.
+
+### PF-2 · A coverage threshold is a claim too, and an unthresholded file is an unexamined one
+
+`policy/index.ts` has no per-path coverage entry, and had none before this task. So its four uncovered branches
+are invisible, and there is nothing that would ever report them.
+
+That is not automatically wrong — the packet did not ask for 100% on the policy module, only on the grader. But
+it is a *choice*, and an unrecorded choice reads as an oversight. The grading files are at 100% because
+`plans/07` §4 demands it and the threshold makes it true. The policy module is not at 100% and nothing says
+whether that is deliberate. **Recorded here as an open question rather than quietly fixed**, because raising a
+threshold is a gate change with its own convention and its own review, and doing it as a side effect of adding
+sibling files would be exactly the kind of unexamined move this section exists to prevent.
