@@ -2056,6 +2056,47 @@ than the minimum has its control bar clipped, and a clipped control is a control
   image builds green.
 
 
+#### P6-T11: gold sim 7, the first MULTI-PART answer
+
+**`maths.quadratic-roots` — the first gold sim with MORE THAN ONE GRADED QUANTITY**, so the first to
+exercise partial credit *across parts*. `plans/20` needs that in P7 for every multi-part question, and
+building it here means the multi-part path is exercised by a simulation rather than only by the grading
+service's own tests. A grading service whose first multi-part question is a production incident is one
+that was only ever tested on single-value answers.
+
+**THREE SHAPES OF ANSWER FROM ONE QUESTION**, which is why the sim exists at all: two distinct roots, one
+REPEATED root, or none at all — and **leaving both boxes empty is the only correct answer** in that last
+case.
+
+**THE ORDER THE ROOTS ARE WRITTEN IN IS NOT PART OF THE ANSWER.** `1, 3` and `3, 1` are the same answer,
+and matching is done against the SET of expected roots, each given root against the nearest **unused**
+expected root — so one correct root cannot be "found" twice. A positional comparison would mark a correct
+pair wrong half the time, and the manifest needed a `{set: [...]}` expectation form to say so.
+
+**A REPEATED ROOT SCORED HALF.** A fixed price per root meant `(x - 2)²` — one root, typed correctly as
+`2` — earned 2 of 4. The award is now **proportional to what was asked for**: `matched / expected.length`,
+so a single root is the whole question when there is only one.
+
+**THE TEXT-ALTERNATIVE TEST WAS WRONG BEFORE THE CODE WAS.** It asserted the alternative does not contain
+`"3"`, which fails on the *constant term* of `x² - 4x + 3`. The equation is the question and belongs
+there. What must not appear is a statement *of the answer*, so the test now requires the text never to say
+"roots are" while still requiring the shape claim.
+
+**MY DECLARED EXPECTATION WAS WRONG AND THE CELL SAID SO.** `expect.answer.roots` was `{-1, 3}` for
+`(x+1)(x-3)`, which is `x² - 2x - 3`, not the `x² - 4x + 3` the manifest set. The simulation was right; the
+manifest was wrong; the cell reported `the sim answered [1, 3]`. A declared expectation that is CHECKED is
+worth more than one that is trusted, which is the whole argument for this mechanism.
+
+**STABILITY CHECKED, NOT ASSUMED.** One Newton cell failed alongside the quadratic one and then passed
+without any change to it, which suggested order sensitivity in a shared answer log. Three consecutive full
+runs at 112/112 before the suite was believed.
+
+#### P6-T11 evidence
+- 7 of 24 gold sims. `pnpm sim:conformance` **112/112 cells** across all seven; `pnpm test:sims` 47/47.
+- **1487 unit**, 336 db integration, 8/8 container gates, lint 0, typecheck 0, `gate:browser` green,
+  image builds green.
+
+
 #### P6-T6 correction (the host could listen and never speak)
 
 The row was marked DONE on the strength of its CSP work. The host built six frames — `initFrame`,

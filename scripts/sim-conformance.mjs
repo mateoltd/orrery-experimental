@@ -292,6 +292,22 @@ const runManifestScript = async (page, frame, entry, manifest) => {
     if (typeof want === 'number' && typeof got === 'number') {
       return Math.abs(want - got) <= tolerance;
     }
+    // `{ set: [...] }` -- an order-independent collection. Needed for the first MULTI-PART gold answer:
+    // the two roots of a quadratic are the same answer whichever order they are typed in, and a
+    // positional expectation would mark a correct pair wrong half the time.
+    if (want !== null && typeof want === 'object' && Array.isArray(want.set)) {
+      const expected = want.set.map((candidate) => JSON.stringify(candidate));
+      const actual = Array.isArray(got) ? got.map((candidate) => JSON.stringify(candidate)) : null;
+      if (actual === null) return false;
+      if (actual.length !== expected.length) return false;
+      const remaining = [...expected];
+      for (const value of actual) {
+        const at = remaining.indexOf(value);
+        if (at < 0) return false;
+        remaining.splice(at, 1);
+      }
+      return true;
+    }
     // `{ in: [...] }` -- "the answer is one of these". Added for ENUM-valued answers, where the exact
     // value is an implementation detail but WHICH quantity was answered is the whole point: the first
     // Newton manifest declared `quantity: {in: ['mass']}` and the runner could not express it.

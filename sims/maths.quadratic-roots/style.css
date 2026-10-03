@@ -1,0 +1,27 @@
+/* Deliberately tiny. */
+#sim-root {
+  font:
+    14px / 1.4 system-ui,
+    sans-serif;
+  color: #1f2933;
+}
+#sim-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 8px 0;
+}
+#sim-root-one,
+#sim-root-two {
+  width: 7em;
+  padding: 3px 5px;
+}
+#sim-status {
+  margin: 6px 0 0;
+  min-height: 1.4em;
+}
+#sim-text-alternative {
+  margin: 4px 0 0;
+  color: #52606d;
+}

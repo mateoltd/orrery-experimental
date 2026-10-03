@@ -1,0 +1,112 @@
+{
+  "id": "maths.quadratic-roots",
+  "version": "1.0.0",
+  "title": "Roots of a quadratic",
+  "summary": "Read the coefficients of a quadratic, look at its curve, and type the roots it has.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["maths"],
+  "tags": ["algebra", "quadratics"],
+  "ageRange": [13, 18],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A parabola drawn on axes, with two boxes for the roots and a button to clear both.",
+    "reducedMotion": true,
+    "textAlternative": "A parabola drawn on a pair of axes, and a statement of how many times it crosses the x-axis. The task is to work out where."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "a": {
+        "type": "number",
+        "label": "x\u00b2 coefficient",
+        "unit": "",
+        "minimum": -5,
+        "maximum": 5,
+        "default": 1
+      },
+      "b": {
+        "type": "number",
+        "label": "x coefficient",
+        "unit": "",
+        "minimum": -12,
+        "maximum": 12,
+        "default": -4
+      },
+      "c": {
+        "type": "number",
+        "label": "constant",
+        "unit": "",
+        "minimum": -12,
+        "maximum": 12,
+        "default": 3
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 360,
+    "minHeight": 240,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "a": 1,
+            "b": -4,
+            "c": 3
+          }
+        }
+      }
+    ],
+    "type": {
+      "root-one": 1,
+      "root-two": 3
+    },
+    "expect": {
+      "answer": {
+        "roots": {
+          "set": [1.0, 3.0]
+        }
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "NUMERIC",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0.01,
+      "relative": 0.005
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You answered {answer}; the roots are {expected}."
+  }
+}
