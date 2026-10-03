@@ -126,6 +126,25 @@ const captureState = async (page) => {
  * Shared by the matrix cell and the manifest's `expect.grade`, so the declared grade and the graded grade
  * come from the same call rather than from two implementations that can drift.
  */
+/**
+ * The grader half's own `controls`, read from the built bundle.
+ *
+ * Loaded from `dist` for the same reason `gradeInNode` does: the registry's paths are relative to that
+ * directory, and reading the SOURCE would check a declaration the bundle does not actually ship.
+ */
+const declaredControls = async (entry) => {
+  const grader = join(
+    ROOT,
+    'sims',
+    String(entry.id),
+    'dist',
+    String(entry.bundle.grader).replace(/^\.\//, ''),
+  );
+  if (!existsSync(grader)) return null;
+  const { default: half } = await import(pathToFileURL(grader).href);
+  return half?.grader?.controls ?? null;
+};
+
 const gradeInNode = async (entry, answer, state = null, params = null) => {
   // From the sim's OWN dist, because the registry's bundle paths are relative to that directory.
   const grader = join(
@@ -764,6 +783,51 @@ const CELLS = [
       const name = `${String(entry.id)}-${String(entry.version)}.png`;
       await page.screenshot({ path: join(SHOTS, name), fullPage: true });
       return existsSync(join(SHOTS, name)) ? null : 'the screenshot was not written';
+    },
+  },
+  {
+    name: "the manifest's CAPABILITIES match what the grader declares",
+    why:
+      'a manifest can claim a capability the simulation never declared, and the browser cannot tell. ' +
+      'computing.binary-search shipped `stepper: true` in its manifest and said nothing about a stepper ' +
+      "in its grader, so defineSim's own check -- the one that refuses a stepper with no maxTime -- never " +
+      'fired, and two declarations of one fact had only one of them enforced',
+    run: async ({ entry, manifest }) => {
+      const controls = await declaredControls(entry);
+      if (controls === null) return 'the grader bundle could not be read';
+      const claimed = manifest?.capabilities ?? {};
+      const problems = [];
+
+      if (Boolean(claimed.stepper) !== Boolean(controls.stepper)) {
+        problems.push(
+          `stepper is ${String(Boolean(claimed.stepper))} in the manifest and ` +
+            `${String(Boolean(controls.stepper))} in the grader`,
+        );
+      }
+      // A stepper with no range cannot be stepped, and `defineSim` refuses that combination -- which is
+      // only a useful guard if the manifest and the grader agree that there IS a stepper.
+      if (controls.stepper === true && !(Number(controls.maxTime) > 0)) {
+        problems.push(`stepper is declared but maxTime is ${String(controls.maxTime)}`);
+      }
+
+      const claimedScenarios = Array.isArray(claimed.scenarios)
+        ? [...claimed.scenarios].sort()
+        : [];
+      const declaredScenarios = Array.isArray(controls.scenarios)
+        ? [...controls.scenarios].sort()
+        : [];
+      if (JSON.stringify(claimedScenarios) !== JSON.stringify(declaredScenarios)) {
+        problems.push(
+          `scenarios are [${claimedScenarios.join(', ')}] in the manifest and ` +
+            `[${declaredScenarios.join(', ')}] in the grader`,
+        );
+      }
+
+      if (claimed.audio === true && !('audio' in controls)) {
+        problems.push('the manifest claims audio and the grader declares nothing about it');
+      }
+
+      return problems.length === 0 ? null : problems.join('; ');
     },
   },
   // LAST, DELIBERATELY. This cell remounts the page three times through the host, and every cell that
