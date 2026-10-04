@@ -13,6 +13,10 @@
     "./evidence": {
       "types": "./dist/evidence.d.ts",
       "default": "./dist/evidence.js"
+    },
+    "./accommodations": {
+      "types": "./dist/accommodations.d.ts",
+      "default": "./dist/accommodations.js"
     }
   },
   "scripts": {

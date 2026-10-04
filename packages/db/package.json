@@ -137,6 +137,10 @@
     "./receipt-issue": {
       "types": "./dist/receipt-issue.d.ts",
       "default": "./dist/receipt-issue.js"
+    },
+    "./accommodations": {
+      "types": "./dist/accommodations.d.ts",
+      "default": "./dist/accommodations.js"
     }
   },
   "scripts": {
@@ -155,6 +159,7 @@
     "@orrery/auth": "workspace:*",
     "@orrery/clock": "workspace:*",
     "@orrery/contracts": "workspace:*",
+    "@orrery/exam-engine": "workspace:*",
     "@orrery/interop": "workspace:*",
     "@orrery/rng": "workspace:*",
     "@prisma/client": "6.19.3"
