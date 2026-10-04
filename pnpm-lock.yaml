@@ -157,6 +157,9 @@ importers:
 
   packages/analytics:
     dependencies:
+      '@orrery/clock':
+        specifier: workspace:*
+        version: link:../clock
       '@orrery/contracts':
         specifier: workspace:*
         version: link:../contracts
