@@ -48,6 +48,24 @@ export {
   SERVER_ONLY_EVENTS,
 } from './evidence.js';
 export type {
+  BulkClaimResult,
+  ClaimOutcome,
+  ClaimRefusal,
+  QueueCounts,
+  QueueFilter,
+  ReviewerScope,
+  ReviewQueueEntry,
+  ReviewTaskStatus,
+} from './review-queue.js';
+export {
+  ageIndicator,
+  bulkClaim,
+  canClaim,
+  compareQueueEntries,
+  matchesFilter,
+  queueCounts,
+} from './review-queue.js';
+export type {
   PreflightReport,
   PreflightVerdict,
   QuestionDeadlineDto,
