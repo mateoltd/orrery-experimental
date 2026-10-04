@@ -286,6 +286,10 @@ export interface SubmitInput {
 
 /** The minimum this module needs from a database. Narrow on purpose, so the pure decision can be tested alone. */
 export interface SubmitDb {
+  /** Used only for the fallback paper, when an attempt has no resolved `variantMap`. */
+  assessmentSlot: {
+    findMany(input: Record<string, unknown>): Promise<readonly unknown[]>;
+  };
   examAttempt: {
     findUnique(input: { where: { id: string }; select: Record<string, unknown> }): Promise<unknown>;
   };
@@ -310,6 +314,11 @@ const ATTEMPT_SELECT = {
   // `deadlineAt` would honour the deadline the student was given and ignore the extension their teacher granted.
   extensions: { select: { addedSec: true } },
   pausedAccumSec: true,
+  // P8-T11 integration: the ASSIGNED PAPER, which is the only thing that can answer "is this question in this
+  // attempt". `variantMap` is written once at attempt start and is authoritative; the fallback below covers an attempt
+  // whose paper was never resolved.
+  variantMap: true,
+  assignment: { select: { resourceVersionId: true } },
 } as const;
 
 /** Narrow an unknown row to the attempt shape, so the decision reads a typed value rather than `any`. */
@@ -318,6 +327,9 @@ interface AttemptRow {
   readonly status: string;
   readonly deadlineAt: Millis | null;
   readonly classroomId: string | null;
+  /** `Record<slotId, readonly questionId[]>`. `null` when the paper was never resolved. */
+  readonly variantMap: Record<string, readonly string[]> | null;
+  readonly assignment: { readonly resourceVersionId: string } | null;
   readonly extensions: readonly { readonly addedSec: number }[];
   readonly pausedAccumSec: number | null;
 }
@@ -354,6 +366,35 @@ const effectiveDeadline = (attempt: AttemptRow): Millis | null => {
  * through, because both would read "not a duplicate" before either committed — and a double-appended answer means a
  * revision number the client never saw, which is the C18 desync all over again.
  */
+/**
+ * THE ATTEMPT'S ASSIGNED PAPER, as a set of question ids.
+ *
+ * `variantMap` first, because `plans/05`/`P5-T9` is explicit that "every subsequent read of 'what did this student
+ * get' comes from `variantMap`, never from re-running the draw" -- re-resolving here could produce a different paper
+ * than the one the student was actually served, which would reject correct answers and accept wrong ones.
+ */
+const assignedPaper = async (db: SubmitDb, attempt: AttemptRow): Promise<ReadonlySet<string>> => {
+  if (attempt.variantMap !== null && attempt.variantMap !== undefined) {
+    return new Set(Object.values(attempt.variantMap).flat());
+  }
+
+  const resourceVersionId = attempt.assignment?.resourceVersionId;
+  if (resourceVersionId === null || resourceVersionId === undefined) return new Set();
+
+  const slots = (await db.assessmentSlot.findMany({
+    where: { resourceVersionId },
+    select: { kind: true, questionId: true },
+  })) as readonly { kind: string; questionId: string | null }[];
+
+  const ids = new Set<string>();
+  for (const slot of slots) {
+    // A POOLED slot names a pool, not a question; its resolved ids live in the `variantMap` this fallback exists
+    // because there isn't one. Counting the pool's `questionId` here would be a null, never a membership.
+    if (slot.kind === 'FIXED' && slot.questionId !== null) ids.add(slot.questionId);
+  }
+  return ids;
+};
+
 export async function submitAnswer(
   db: SubmitDb,
   input: SubmitInput,
@@ -398,7 +439,23 @@ export async function submitAnswer(
     select: { revision: true, answer: true, questionId: true },
   })) as { revision: number; answer: unknown; questionId: string } | null;
 
-  // 2. DECIDE.
+  // 2. IS THIS QUESTION IN THE ATTEMPT'S PAPER?  (P8-T11 integration)
+  //
+  // **IT WAS `stored !== null`, WHICH MEANT NO FIRST ANSWER COULD EVER BE ACCEPTED.**
+  //
+  // A response row exists only after a successful write, so on a first write `stored` is null, membership came out
+  // false, and every student saving their first answer was rejected with `QUESTION_NOT_IN_ATTEMPT` -- a rejection
+  // whose message talks about the paper while the actual fault is that membership was inferred from the very table
+  // the write was supposed to create. The unit tests could not see it: they call `decideWrite` directly and pass
+  // `questionInAttempt: true`.
+  //
+  // Membership is assigned-variant membership, as the field's own doc says, so it comes from the attempt's resolved
+  // `variantMap` -- written once at attempt start and authoritative thereafter. Falling back to the resource version's
+  // FIXED slots covers an attempt whose paper was never resolved, rather than refusing every write on it.
+  const assignedQuestionIds = await assignedPaper(db, attempt);
+  const questionInAttempt = assignedQuestionIds.has(input.questionId);
+
+  // 3. DECIDE.
   const decision = decideWrite({
     attemptStatus: attempt.status as AttemptStatus,
     questionDeadlineAt: null,
@@ -407,12 +464,12 @@ export async function submitAnswer(
     storedRevision: stored?.revision ?? -1,
     isDuplicate: false,
     storedResponseBody: stored?.answer,
-    questionInAttempt: stored !== null,
+    questionInAttempt,
     graceMs,
     clock,
   });
 
-  // 3. REJECTION: an event, never a ledger row.
+  // 4. REJECTION: an event, never a ledger row.
   //
   // Narrowed on `ok !== true` rather than `ok === false`, because `decideWrite`'s union also has the `'replayed'`
   // variant. That variant is unreachable here -- the ledger was read above and `isDuplicate` is therefore false --

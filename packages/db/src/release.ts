@@ -62,6 +62,27 @@ export interface ComputedScore {
 }
 
 /** Round to 2dp without the float drift of `Math.round(x * 100) / 100` on values like 1.005. */
+/**
+ * PRISMA'S `Decimal` IS NOT A `number`, AND ADDING ONE TO THE OTHER GIVES `NaN`.
+ *
+ * `Decimal` has a `toJSON` that renders `"2"`, which is why it survives a `console.log` looking like a value, and a
+ * `toNumber` that arithmetic does NOT use -- so `0 + someDecimal` is `NaN`, silently. A `Decimal` column read into a
+ * variable typed `number` compiles perfectly and computes to nothing.
+ *
+ * `Number(value)` is used rather than `value.toNumber()` because `toNumber()` THROWS on a value that is out of
+ * range or too many decimal places, and a release that throws halfway leaves the batch in the state `INV-RELEASE-1`
+ * exists to make impossible. Falling back to `0` for an unusable mark is also the conservative direction: it lowers a
+ * score, and `planRelease`'s provisional check catches the case where a mark was still expected.
+ */
+const scoreNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return value;
+  const withToNumber = value as { toNumber?: () => number };
+  const converted =
+    typeof withToNumber.toNumber === 'function' ? withToNumber.toNumber() : Number(value);
+  return Number.isFinite(converted) ? converted : null;
+};
+
 export const round2 = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
 
 /**
@@ -272,14 +293,22 @@ export async function releaseBatch(
       select: {
         id: true,
         status: true,
-        holdUntil: true,
+        // `minHoldUntil`, NOT `holdUntil`. The column is `minHoldUntil` and the internal input field is `holdUntil`,
+        // and the two were conflated -- so `releaseBatch` threw `Invalid tx.releaseBatch.findUnique() invocation` on
+        // EVERY call, against a real database.
+        //
+        // **The unit tests could not have caught this.** They pass a hand-written mock whose `findUnique` returns
+        // whatever the test says, so a field name that does not exist in the schema is indistinguishable from one
+        // that does. INV-RELEASE-1 was, in other words, completely untested as a transaction: the pure planning was
+        // proven and the part that touches the database had never been executed.
+        minHoldUntil: true,
         overrideReason: true,
         members: { select: { attemptId: true } },
       },
     })) as {
       id: string;
       status: string;
-      holdUntil: Date | null;
+      minHoldUntil: Date | null;
       overrideReason: string | null;
       members: readonly { attemptId: string }[];
     } | null;
@@ -328,16 +357,18 @@ export async function releaseBatch(
           questionId: string;
           isExcused: boolean;
           needsHuman: boolean;
-          autoScore: number | null;
-          manualScore: number | null;
-          question: { points: number };
+          /** A Prisma `Decimal`, NOT a number. `scoreNumber` is what makes it one. */
+          autoScore: unknown;
+          /** A Prisma `Decimal`, NOT a number. */
+          manualScore: unknown;
+          question: { points: unknown };
         }[];
       };
     }[];
 
     const plan = planRelease({
       batchStatus: batch.status,
-      holdUntil: batch.holdUntil === null ? null : batch.holdUntil.getTime(),
+      holdUntil: batch.minHoldUntil === null ? null : batch.minHoldUntil.getTime(),
       hasOverrideReason: batch.overrideReason !== null,
       latePenaltyPercent: input.latePenaltyPercent,
       clock: input.clock,
@@ -349,8 +380,19 @@ export async function releaseBatch(
           questionId: row.questionId,
           // A manual mark wins over the auto mark. `finalScore` is the DERIVED value: this is not a stored truth, and
           // computing it here is what keeps `finalScore`/`autoScore`/`manualScore` from becoming three truths.
-          finalScore: row.manualScore ?? row.autoScore,
-          points: row.question.points,
+          //
+          // **THROUGH `scoreNumber`, BECAUSE PRISMA RETURNS `Decimal` OBJECTS AND `number + Decimal` IS `NaN`.**
+          //
+          // This is the second defect the integration test found in this function, and the more dangerous one: the
+          // local type said `autoScore: number` and so did the cast, so the compiler agreed with an assumption the
+          // database never made. `computeScore` then summed `0 + Decimal` into `NaN`, `maxTotal > 0` was false,
+          // `percentage` came out `null`, and EVERY batch was refused with `SCORE_NOT_COMPUTABLE`.
+          //
+          // **THE RELEASE TRANSACTION HAS THEREFORE NEVER RELEASED ANYTHING.** The unit tests passed because they
+          // pass plain numbers into `planRelease`, which is the correct input -- the bug lived entirely in the
+          // translation from a Prisma row to that input, and a cast is not a translation.
+          finalScore: scoreNumber(row.manualScore) ?? scoreNumber(row.autoScore),
+          points: scoreNumber(row.question.points) ?? 0,
           isExcused: row.isExcused,
           needsHuman: row.needsHuman,
         })),
@@ -376,11 +418,21 @@ export async function releaseBatch(
       });
     }
 
-    // ONE call, so the batch cannot end up half-visible.
-    await tx.releaseBatchMember.updateMany({
-      where: { batchId: input.batchId },
-      data: { status: 'RELEASED' },
-    });
+    /**
+     * **THERE IS NO PER-MEMBER WRITE, AND THE ONE THAT WAS HERE COULD NOT HAVE RUN.**
+     *
+     * `ReleaseBatchMember` has exactly three columns: `batchId`, `attemptId`, `addedAt`. There is no `status`, so
+     * `updateMany({ data: { status: 'RELEASED' } })` throws -- which the pure unit tests could not see, because their
+     * mock accepted whatever it was handed.
+     *
+     * **AND IT WAS NOT NEEDED.** `B16` makes student visibility `EXISTS(... batch status = 'RELEASED')`, so the batch's
+     * own status IS the visibility switch. Flipping per-member rows would have been a second source of truth for one
+     * fact, and the two would have been able to disagree.
+     *
+     * It is worth naming why the comment above it claimed to prevent a half-visible batch: the update was a
+     * *symptom* of the design, not the design. The single status write below is the whole mechanism, and it is the last
+     * statement in the transaction, so a batch is either entirely invisible or entirely visible.
+     */
 
     await tx.releaseBatch.update({
       where: { id: input.batchId },
