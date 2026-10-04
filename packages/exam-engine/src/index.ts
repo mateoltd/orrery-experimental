@@ -83,3 +83,17 @@ export type {
   SessionRefusal,
 } from './session.js';
 export { buildSyncPayload, checkSession, evaluatePreflight } from './session.js';
+export type { OverflowResponse, WriteClass, WritePath } from './shedding.js';
+/**
+ * `P8-T9b`: the shedding policy. Exported because a write path in another package has to be able to ask whether it may
+ * shed, and a rule that can only be read in one file is a rule the next write path will not read.
+ */
+export {
+  mayShed,
+  NEVER_SHED,
+  overflowResponseFor,
+  SHEDDABLE,
+  SHEDDING_DOCTRINE,
+  WRITE_PATHS,
+  writeClassOfEvidence,
+} from './shedding.js';
