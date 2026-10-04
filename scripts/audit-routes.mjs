@@ -22,7 +22,7 @@
  * tracker row rather than glossed.
  */
 
-import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -100,8 +100,18 @@ for (const path of listed.keys()) {
 
 /** A DECLARED SCORE-FREE ROUTE MAY NOT CARRY A SCORE-BEARING KEY IN ITS OWN FILES. */
 const SCORE_BEARING = [
-  'finalScore', 'autoScore', 'manualScore', 'maxScore', 'rawScore', 'rawTotal',
-  'percentage', 'letterGrade', 'correctCount', 'numCorrect', 'correctAnswer', 'pointsAwarded',
+  'finalScore',
+  'autoScore',
+  'manualScore',
+  'maxScore',
+  'rawScore',
+  'rawTotal',
+  'percentage',
+  'letterGrade',
+  'correctCount',
+  'numCorrect',
+  'correctAnswer',
+  'pointsAwarded',
 ];
 
 for (const [path, entry] of listed) {
