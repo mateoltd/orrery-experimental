@@ -29,6 +29,25 @@ export {
   rungIndex,
 } from './escalation.js';
 export type {
+  BatcherOptions,
+  BatcherStats,
+  BatchTransport,
+  EventRule,
+  EvidenceRecord,
+  EvidenceType,
+  Severity,
+  SignedBatch,
+  StrikePolicyView,
+} from './evidence.js';
+export {
+  batchSigningInput,
+  canonicalEvent,
+  countsAsStrike,
+  EVIDENCE_RULES,
+  EvidenceBatcher,
+  SERVER_ONLY_EVENTS,
+} from './evidence.js';
+export type {
   PreflightReport,
   PreflightVerdict,
   QuestionDeadlineDto,
