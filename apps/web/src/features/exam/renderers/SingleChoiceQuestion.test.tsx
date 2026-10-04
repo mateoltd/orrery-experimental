@@ -23,7 +23,7 @@ import userEvent from '@testing-library/user-event';
  * independent of which transform a given run resolved -- which is not a hypothetical, since that is exactly what
  * happened here.
  */
-import React from 'react';
+import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { assertRendersContract, renderAndAudit } from './contractHarness';
 import { SingleChoiceQuestion } from './SingleChoiceQuestion';
@@ -36,6 +36,9 @@ import { SingleChoiceQuestion } from './SingleChoiceQuestion';
  * "Found multiple elements" and, worse, would have let an assertion pass against another test's DOM.
  */
 afterEach(cleanup);
+
+/** Referenced so the classic-runtime JSX requirement is a REAL use rather than a stripped import. */
+void React;
 
 const spec: SingleChoiceSpec = {
   type: 'single_choice',

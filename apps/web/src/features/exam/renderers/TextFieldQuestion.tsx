@@ -20,7 +20,7 @@
  */
 
 import type { NumericSpec, ShortTextSpec } from '@orrery/contracts/question';
-import React, { useId } from 'react';
+import * as React from 'react';
 
 export interface TextFieldProps {
   readonly spec: NumericSpec | ShortTextSpec;
@@ -46,7 +46,7 @@ export function TextFieldQuestion({
   disabled = false,
   hint,
 }: TextFieldProps) {
-  const inputId = useId();
+  const inputId = React.useId();
   const hintId = `${inputId}-hint`;
   const numeric = spec.type === 'numeric';
 

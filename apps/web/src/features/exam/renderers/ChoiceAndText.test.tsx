@@ -17,7 +17,7 @@ import type {
 } from '@orrery/contracts/question';
 import { cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import React from 'react';
+import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChoiceGroupQuestion } from './ChoiceGroupQuestion';
 import { assertRendersContract, renderAndAudit } from './contractHarness';

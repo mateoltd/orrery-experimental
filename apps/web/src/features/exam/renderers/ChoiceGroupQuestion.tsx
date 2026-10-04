@@ -27,7 +27,7 @@
 
 import { contractFor } from '@orrery/contracts/a11y/questionInteraction';
 import type { MultiSelectSpec, TrueFalseSpec } from '@orrery/contracts/question';
-import React, { useId } from 'react';
+import * as React from 'react';
 
 export interface ChoiceGroupProps {
   readonly spec: MultiSelectSpec | TrueFalseSpec;
@@ -46,7 +46,7 @@ export function ChoiceGroupQuestion({
   disabled = false,
 }: ChoiceGroupProps) {
   const contract = contractFor(spec.type);
-  const groupId = useId();
+  const groupId = React.useId();
   const multiple = contract.role === 'group';
 
   const choices: readonly { id: string; text: string }[] =

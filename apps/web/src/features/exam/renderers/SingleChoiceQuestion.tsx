@@ -24,9 +24,8 @@
 
 import { contractFor } from '@orrery/contracts/a11y/questionInteraction';
 import type { SingleChoiceSpec } from '@orrery/contracts/question';
-// `React` imported explicitly rather than relying on the automatic runtime -- see the note in the test file. With
 // the classic transform its absence is a `ReferenceError` on the `return (`, which is an unhelpful place to find out.
-import React, { useId } from 'react';
+import * as React from 'react';
 
 export interface SingleChoiceProps {
   readonly spec: SingleChoiceSpec;
@@ -57,7 +56,7 @@ export function SingleChoiceQuestion({
   disabled = false,
 }: SingleChoiceProps) {
   const contract = contractFor('single_choice');
-  const headingId = useId();
+  const headingId = React.useId();
 
   return (
     <fieldset
