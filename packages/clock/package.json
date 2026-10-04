@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./skew": {
+      "types": "./dist/skew.d.ts",
+      "default": "./dist/skew.js"
     }
   },
   "scripts": {
