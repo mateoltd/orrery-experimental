@@ -196,6 +196,35 @@ for (const released of [false, true]) {
   }
 }
 
+/**
+ * THE RELEASE-BATCH STUDENT VIEW, and why it belongs in this gate rather than only in a test.
+ *
+ * P10-T1's `studentReleaseState` returns one frozen `{"state":"SEALED"}` for every non-released case and was audited
+ * by a test inside `packages/db`. A test is the right place to prove it, and the wrong place to leave the guarantee:
+ * a gate is what runs on every commit, and a guarantee that lives only in a test is one refactor away from being
+ * deleted along with the test. So the payload joins the corpus and the floor rises by one to match.
+ *
+ * `null` is passed deliberately rather than a real attempt id. The function's entire claim is that the sealed
+ * state is INDEPENDENT of the batch -- byte-identical for no batch, an unknown attempt id, `DRAFT`, `READY`,
+ * `RELEASING` and `CANCELED`, which `release-batch.integration.test.ts` asserts against the async wrapper. Auditing
+ * the `null` case audits the weakest one, which is the point: if the builder ever started branching on whether a
+ * batch exists, this is where it shows.
+ */
+const { studentReleaseState } = await import(
+  pathToFileURL(join(root, 'packages/db/dist/release-batch.js')).href
+);
+
+// `studentReleaseState`, NOT `attemptReleaseState`. The latter is the async query wrapper that needs a Prisma client;
+// the former is the pure boundary function that decides the payload, and it is the one whose output could grow a
+// score field. Auditing the payload builder is what this gate does everywhere else -- `publicQuestionSpec` rather
+// than the route, `buildStudentGrade` rather than the handler -- because the builder is where a field gets added and
+// the route is only where it becomes visible.
+audited += 1;
+sealedCount += 1;
+for (const violation of findScoreBearingKeys(studentReleaseState(null))) {
+  failures.push(`studentReleaseState(null): "${violation.key}" at ${violation.path}`);
+}
+
 process.stdout.write('SEALED GRADES GATE (INV-RELEASE-2)\n');
 process.stdout.write(`  score-bearing keys watched: ${String(SCORE_BEARING_KEYS.size)}\n`);
 process.stdout.write(
@@ -209,8 +238,9 @@ process.stdout.write(
  * That is the exact failure mode of a gate whose input has moved: it would have gone green for ever while auditing
  * nothing at all. A gate that cannot find its subject has lost it, and the honest report is that it did not run.
  *
- * The floor is `QUESTION_TYPES.length + 2` -- every type's student projection, plus one sealed and one released
- * grade -- so a type added without a representative spec fails here rather than being quietly skipped.
+ * The floor is `QUESTION_TYPES.length + 3` -- every type's student projection, plus a sealed grade, a released
+ * grade, and the release-batch student view -- so a type added without a representative spec fails here rather than
+ * being quietly skipped, and so does a student-facing payload added without joining this corpus.
  */
 if (audited === 0) {
   process.stdout.write('  NO PAYLOADS FOUND — the gate has no subject and cannot pass\n');
@@ -223,9 +253,9 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-if (audited < QUESTION_TYPES.length + 2) {
+if (audited < QUESTION_TYPES.length + 3) {
   process.stdout.write(
-    `\nFAILED — expected at least ${String(QUESTION_TYPES.length + 2)} payloads, audited ${String(audited)}\n`,
+    `\nFAILED — expected at least ${String(QUESTION_TYPES.length + 3)} payloads, audited ${String(audited)}\n`,
   );
   process.exit(1);
 }

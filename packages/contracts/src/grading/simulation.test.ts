@@ -136,7 +136,6 @@ describe('a timeout', () => {
     // `GRADER_UNREADABLE`: a sim grader returns a value synchronously, so a promise has no `points` on it.
     const outcome = await dispatchToSim(
       input({
-        // eslint-disable-next-line require-await -- a loader that never settles IS the case under test.
         loadGrader: async () => new Promise(() => {}) as never,
         timeoutMs: 30,
       }),

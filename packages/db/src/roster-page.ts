@@ -344,13 +344,46 @@ async function buildPage(
       where: { classroomId: query.classroomId, studentId: { in: studentIds } },
       select: { studentId: true, status: true, startedAt: true, submittedAt: true },
     }),
-    // THE INVARIANT, AS A PREDICATE. An unreleased grade is not selected at all, so there is no
-    // unreleased value in memory for a component, an export, or a `title` attribute to leak.
+    /**
+     * ⚠️ **THE GATE WAS ON THE ASSIGNMENT, NOT ON THE ATTEMPT, AND IT LEAKED A SEALED GRADE.**
+     *
+     * This read it as
+     *
+     * ```ts
+     * assignment: { releaseBatches: { some: { status: 'RELEASED' } } }
+     * ```
+     *
+     * which asks "does this assignment have ANY released batch" -- a fact about the assignment, not about this
+     * attempt. Release is **per batch membership** (`plans/01` §10: membership is frozen on `RELEASING`, and the
+     * whole point is that a batch releases exactly its own members), so the two are different questions and only
+     * one of them is the gate.
+     *
+     * The failure is concrete and needs no exotic setup: batch `B1` holds student S's attempt and is `RELEASED`;
+     * batch `B2` holds student T's attempt on the *same assignment* and is still `DRAFT`. T's attempt satisfies the
+     * predicate -- the assignment owns a released batch -- so `finalScore`, `maxScore` and `percentage` were read
+     * for an attempt nobody had released, and the roster row showed them. `INV-RELEASE-2` says no score is
+     * *inferable* before release, and a percentage on a teacher's roster is about as inferable as it gets.
+     *
+     * **IT WAS ALSO NOT A TYPE ERROR OR A CRASH.** The query is valid Prisma, the columns exist, and the row is
+     * only wrong when a second batch exists -- which is the normal state of any classroom releasing in more than one
+     * go. A gate this narrow passes every test written against a single batch, and there were several.
+     *
+     * **THE RELATION WAS ALREADY THERE.** `ExamAttempt.releaseMembers` has existed since `0001_init`, so the
+     * correct query was always writable -- one word different. That is worth recording precisely because the
+     * narrative I first reached for ("the schema was missing the relation") was wrong, and it is the more
+     * comfortable story: a missing schema feature looks like an oversight somebody can fix, whereas "the right
+     * query was available and a query chose a different one" means a gate can be wrong while everything it is
+     * built from is correct. Gates do not fail loudly. They fail quietly, and the wrongness is in the sentence
+     * nobody re-reads.
+     *
+     * The narrower reading is also the safer one in the other direction: membership is the ONLY thing that is
+     * frozen, so it is the only sound basis for a visibility decision.
+     */
     db.examAttempt.findMany({
       where: {
         classroomId: query.classroomId,
         studentId: { in: studentIds },
-        assignment: { releaseBatches: { some: { status: 'RELEASED' } } },
+        releaseMembers: { some: { batch: { status: 'RELEASED' } } },
       },
       select: {
         studentId: true,

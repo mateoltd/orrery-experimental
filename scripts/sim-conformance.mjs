@@ -1512,7 +1512,7 @@ const run = async () => {
     process.stdout.write(`\n${c.bold(String(entry.id))} ${c.dim(String(entry.version))}\n`);
     for (const cell of CELLS) {
       let failure = null;
-      // eslint-disable-next-line no-continue -- the click branch above deliberately continues
+
       // `hrtime`, NOT `Date.now()`: `INV-TIME-1` bans the wall clock outside `@orrery/clock`, and it is the
       // wrong tool anyway -- these are DURATIONS, and a clock adjustment mid-cell should not make a cell
       // look instant or endless. The file already has `deadline()` for exactly this reason.

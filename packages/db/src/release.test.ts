@@ -14,6 +14,7 @@ import {
   type ReleaseCheckInput,
   round2,
   type ScoredResponse,
+  waivedAttemptIdsOf,
 } from './release.js';
 
 const T0 = Date.parse('2026-03-01T12:00:00.000Z');
@@ -194,7 +195,7 @@ describe('planRelease', () => {
   const base = (over: Partial<ReleaseCheckInput> = {}): ReleaseCheckInput => ({
     batchStatus: 'DRAFT',
     holdUntil: null,
-    hasOverrideReason: false,
+    waivedAttemptIds: new Set(),
     latePenaltyPercent: 0,
     clock: new FrozenClock(T0),
     attempts: [
@@ -241,7 +242,7 @@ describe('planRelease', () => {
   it('accepts an override reason in place of `GRADED`, which is what it is for', () => {
     const plan = planRelease(
       base({
-        hasOverrideReason: true,
+        waivedAttemptIds: new Set(['a1']),
         attempts: [
           {
             attemptId: 'a1',
@@ -253,6 +254,25 @@ describe('planRelease', () => {
       }),
     );
     expect(plan.releasable).toBe(true);
+  });
+
+  it('waives ONLY the attempts the override names -- a later blocker is not covered by an earlier override', () => {
+    /**
+     * P10-T3. The override used to be a boolean, so an override recorded for `a1` released `a2` as well -- an attempt
+     * nobody had looked at when the decision was made. Reverting `waivedAttemptIds` to a batch-wide flag makes this
+     * test fail on `a2`.
+     */
+    const ungraded = (attemptId: string) => ({
+      attemptId,
+      status: 'SUBMITTED',
+      isLate: false,
+      responses: [response({ finalScore: 4, points: 5 })],
+    });
+    const plan = planRelease(
+      base({ waivedAttemptIds: new Set(['a1']), attempts: [ungraded('a1'), ungraded('a2')] }),
+    );
+    expect(plan.releasable).toBe(false);
+    expect(plan.refusals).toEqual([{ attemptId: 'a2', reason: 'ATTEMPT_NOT_GRADED' }]);
   });
 
   it('refuses a batch still holding the window, before saying anything about the attempts', () => {
@@ -298,7 +318,7 @@ describe('planRelease', () => {
   it('lets an override release a provisional attempt, which is the recorded human decision', () => {
     const plan = planRelease(
       base({
-        hasOverrideReason: true,
+        waivedAttemptIds: new Set(['a1']),
         attempts: [
           {
             attemptId: 'a1',
@@ -313,10 +333,10 @@ describe('planRelease', () => {
   });
 
   it('does NOT let an override manufacture a score that cannot be computed', () => {
-    // `overrideReason` waives the status check. It cannot produce a percentage for an all-excused paper.
+    // A waiver stands in for `GRADED`. It cannot produce a percentage for an all-excused paper.
     const plan = planRelease(
       base({
-        hasOverrideReason: true,
+        waivedAttemptIds: new Set(['a1']),
         attempts: [
           {
             attemptId: 'a1',
@@ -354,5 +374,44 @@ describe('planRelease', () => {
     const byId = new Map(plan.scores.map((entry) => [entry.attemptId, entry.score.finalScore]));
     expect(byId.get('on-time')).toBe(100);
     expect(byId.get('late')).toBe(50);
+  });
+});
+
+describe('waivedAttemptIdsOf', () => {
+  const complete = {
+    overrideReason: 'absent with a medical note',
+    overrideById: 'teacher-1',
+    overrideAt: new Date(T0),
+    overrideWaived: [{ attemptId: 'a1', reason: 'ATTEMPT_NOT_GRADED' }],
+  };
+
+  it('reads the attempts a complete override names', () => {
+    expect([...waivedAttemptIdsOf(complete)]).toEqual(['a1']);
+  });
+
+  it('waives NOTHING when the override has a reason and no author or no time', () => {
+    // The legacy shape: migration `0014`'s CHECK is `NOT VALID`, so a pre-existing row can still look like this. It
+    // is the override nobody can audit, and it must not be honoured just because it is there.
+    expect(waivedAttemptIdsOf({ ...complete, overrideById: null }).size).toBe(0);
+    expect(waivedAttemptIdsOf({ ...complete, overrideAt: null }).size).toBe(0);
+    expect(waivedAttemptIdsOf({ ...complete, overrideReason: null }).size).toBe(0);
+  });
+
+  it('drops anything in the JSON it cannot read, rather than guessing', () => {
+    // A cast to `{ attemptId: string }[]` would accept every one of these. Each would then "waive" `undefined`.
+    for (const overrideWaived of [
+      null,
+      'a1',
+      { attemptId: 'a1' },
+      [null, 7, 'a1', {}, { attemptId: 9 }],
+    ]) {
+      expect(waivedAttemptIdsOf({ ...complete, overrideWaived }).size).toBe(0);
+    }
+    expect([
+      ...waivedAttemptIdsOf({
+        ...complete,
+        overrideWaived: [{ attemptId: '' }, { attemptId: 'a2' }],
+      }),
+    ]).toEqual(['a2']);
   });
 });

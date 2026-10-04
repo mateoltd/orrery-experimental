@@ -21,8 +21,14 @@
 
 import type { PrismaClient } from '../prisma/generated/client/client.js';
 
-/** The minimum this needs: two raw-query round trips on one connection. */
-export type LockDb = Pick<PrismaClient, '$queryRawUnsafe'>;
+/**
+ * The minimum this needs: `$transaction`, because the lock and its unlock must run on ONE session.
+ *
+ * `$queryRawUnsafe` alone is no longer enough, and that is the defect this type now encodes: with only the raw-query
+ * method there is no way to pin a connection, and two raw queries on a pool are two connections whenever the pool
+ * decides otherwise. See the note on `runExclusive`.
+ */
+export type LockDb = Pick<PrismaClient, '$queryRawUnsafe' | '$transaction'>;
 
 export interface RunExclusiveOptions {
   /**
@@ -45,30 +51,59 @@ export async function runExclusive<T>(
   fn: () => Promise<T>,
   onDeclined?: (key: string) => void,
 ): Promise<T | null> {
-  const locked = await db.$queryRawUnsafe<{ locked: boolean }[]>(
-    'SELECT pg_try_advisory_lock(hashtext($1)) AS locked',
-    key,
-  );
+  /**
+   * ⚠️ **THE LOCK AND THE UNLOCK MUST SHARE ONE CONNECTION, AND FOR A WHILE THEY DID NOT.**
+   *
+   * This used to issue two independent `$queryRawUnsafe` calls on a pooled client. `pg_try_advisory_lock` is a
+   * **SESSION**-scoped lock, so it belongs to the connection that took it -- and `pg_advisory_unlock` from a
+   * *different* pooled connection does not release it. Two round trips on a pool are two connections whenever the
+   * pool decides otherwise, so the unlock silently became a no-op some fraction of the time and **the lock leaked**.
+   *
+   * WHAT A LEAKED SWEEP LOCK COSTS, since this is the whole argument for fixing it rather than documenting it. The
+   * lock is held by a session that stays in the pool, so every later `runExclusive` for that key is declined. The
+   * sweep then stops: expired attempts are never auto-submitted and per-question windows are never closed by cron.
+   * Nothing crashes. Nothing throws. `onDeclined` fires, which is exactly what it is for, and every tick after the
+   * first leak is a *correct* decline of a lock *nobody is using*. `INV-LATE-1`'s enforcement quietly stops being
+   * enforced, and the only symptom is a teacher's timeline that stops completing itself weeks later.
+   *
+   * The note this replaces claimed the opposite hazard -- that a lock taken inside a transaction "is released by
+   * that transaction's rollback". **That is wrong, and it is wrong in the reassuring direction.** It confuses
+   * `pg_advisory_lock` (session-scoped, survives rollback) with `pg_advisory_xact_lock` (transaction-scoped, released
+   * by rollback). So there was never a reason to keep the two statements apart, and a comment that named a false
+   * hazard is worse than none: it reads as a decision and stops anyone re-examining the code beneath it.
+   *
+   * `$transaction` is what pins the connection. It is not being used to make the work atomic -- `fn` opens its own
+   * transactions and those are unchanged -- only to hold ONE session for the length of the critical section, which is
+   * what an exclusive lock means anyway. A nested `$transaction` inside `fn` becomes a savepoint, so the sweep's own
+   * transaction still works.
+   *
+   * AND THE LEAK IS NOW SELF-HEALING, which is the second half of the fix: if a worker is SIGKILLed mid-sweep, the
+   * connection dies with it and Postgres drops the session lock with the session. The lock's lifetime is the
+   * connection's lifetime, so "a crashed pod holds the lock for ever" cannot happen -- while a leaked *statement* on
+   * a pooled connection could, which is the bug that was there.
+   */
+  return db.$transaction(async (tx) => {
+    const locked = await tx.$queryRawUnsafe<{ locked: boolean }[]>(
+      'SELECT pg_try_advisory_lock(hashtext($1)) AS locked',
+      key,
+    );
 
-  if (locked[0]?.locked !== true) {
-    onDeclined?.(key);
-    return null;
-  }
+    if (locked[0]?.locked !== true) {
+      onDeclined?.(key);
+      return null;
+    }
 
-  try {
-    return await fn();
-  } finally {
-    /**
-     * THE `FINALLY` IS THE LOAD-BEARING PART.
-     *
-     * A lock leaked by a throw would silently stop the sweep forever, and "a missed sweep is an alert" would be false
-     * because nothing would ever report a miss. The advisory unlock is idempotent, so this is also safe after an
-     * implicit release by a failed transaction.
-     *
-     * It is deliberately NOT inside the transaction `fn` opens. `pg_advisory_lock` is session-scoped, so a lock taken
-     * inside a transaction is released by that transaction's rollback -- which would let the next tick in while this
-     * one is still unwinding.
-     */
-    await db.$queryRawUnsafe('SELECT pg_advisory_unlock(hashtext($1))', key);
-  }
+    try {
+      return await fn();
+    } finally {
+      /**
+       * THE `FINALLY` IS STILL LOAD-BEARING, and it now runs on the SAME session that took the lock.
+       *
+       * A throw between the two is the ordinary way a lock leaks, and "a missed sweep is an alert" would be false
+       * because nothing would ever report a miss. `pg_advisory_unlock` is idempotent, so this is also safe after the
+       * implicit release of a failed transaction.
+       */
+      await tx.$queryRawUnsafe('SELECT pg_advisory_unlock(hashtext($1))', key);
+    }
+  });
 }

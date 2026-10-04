@@ -288,26 +288,33 @@ describe('perQuestionExpiry', () => {
   });
 
   it('SOFT accepts the write and RECORDS IT AS LATE, because editable is not on time', () => {
-    const decision = decideWrite(base({ ...timed('SOFT'), clock: clockAt('2026-03-01T10:02:00.001Z') }));
+    const decision = decideWrite(
+      base({ ...timed('SOFT'), clock: clockAt('2026-03-01T10:02:00.001Z') }),
+    );
     expect(decision.ok).toBe(true);
     // The `isLate` flag is what `plans/09` §7 means by "log only": the answer stands AND the lateness is kept.
     if (decision.ok === true) expect(decision.isLate).toBe(true);
   });
 
   it('LOCK refuses it, naming the QUESTION', () => {
-    const decision = decideWrite(base({ ...timed('LOCK'), clock: clockAt('2026-03-01T10:02:00.001Z') }));
+    const decision = decideWrite(
+      base({ ...timed('LOCK'), clock: clockAt('2026-03-01T10:02:00.001Z') }),
+    );
     expect(decision.ok).toBe(false);
     if (decision.ok === false) expect(decision.reason).toBe('QUESTION_DEADLINE_PASSED');
   });
 
   it('AUTO_SUBMIT refuses it as well -- so SOFT is the ONLY term that changes here', () => {
-    const decision = decideWrite(base({ ...timed('AUTO_SUBMIT'), clock: clockAt('2026-03-01T10:02:00.001Z') }));
+    const decision = decideWrite(
+      base({ ...timed('AUTO_SUBMIT'), clock: clockAt('2026-03-01T10:02:00.001Z') }),
+    );
     expect(decision.ok).toBe(false);
   });
 
   it('and the three terms are distinguishable, which is the only proof the term survived', () => {
     const outcomes = (['SOFT', 'LOCK', 'AUTO_SUBMIT'] as const).map(
-      (term) => decideWrite(base({ ...timed(term), clock: clockAt('2026-03-01T10:02:00.001Z') })).ok,
+      (term) =>
+        decideWrite(base({ ...timed(term), clock: clockAt('2026-03-01T10:02:00.001Z') })).ok,
     );
     // If this ever reads `[false, false, false]` the term has stopped carrying information and every agreement
     // test elsewhere would still be green, because they only compare modules against each other.

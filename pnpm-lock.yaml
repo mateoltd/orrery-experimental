@@ -227,6 +227,9 @@ importers:
       '@orrery/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@orrery/exam-engine':
+        specifier: workspace:*
+        version: link:../exam-engine
       '@orrery/interop':
         specifier: workspace:*
         version: link:../interop

@@ -561,24 +561,44 @@ describe('expiryVerdict — the single answer to "may this student still write t
   it('a `SOFT` question stays writable past its own window, flagged late', () => {
     // THE CELL THAT WAS IMPOSSIBLE BEFORE. `expiredInstruction` said `LOG_ONLY` and nothing asked it, so every
     // write path refused here -- which made `SOFT` and `LOCK` the same configuration.
-    expect(expiryVerdict(soft, { questionDeadlineAt: Q, deadlineAt: D, now: Q + GRACE + 1, graceMs: GRACE }))
-      .toEqual({ writable: true, isLate: true, refusedBecause: null });
+    expect(
+      expiryVerdict(soft, {
+        questionDeadlineAt: Q,
+        deadlineAt: D,
+        now: Q + GRACE + 1,
+        graceMs: GRACE,
+      }),
+    ).toEqual({ writable: true, isLate: true, refusedBecause: null });
   });
 
   it('`LOCK` refuses the same instant, and the refusal NAMES the question', () => {
-    expect(expiryVerdict(lock, { questionDeadlineAt: Q, deadlineAt: D, now: Q + GRACE + 1, graceMs: GRACE }))
-      .toEqual({ writable: false, isLate: false, refusedBecause: 'QUESTION_LOCKED' });
+    expect(
+      expiryVerdict(lock, {
+        questionDeadlineAt: Q,
+        deadlineAt: D,
+        now: Q + GRACE + 1,
+        graceMs: GRACE,
+      }),
+    ).toEqual({ writable: false, isLate: false, refusedBecause: 'QUESTION_LOCKED' });
   });
 
   it('`AUTO_SUBMIT` refuses it too -- the verdict is about WRITABILITY, and all three freeze', () => {
-    expect(expiryVerdict(auto, { questionDeadlineAt: Q, deadlineAt: D, now: Q + GRACE + 1, graceMs: GRACE }).writable)
-      .toBe(false);
+    expect(
+      expiryVerdict(auto, {
+        questionDeadlineAt: Q,
+        deadlineAt: D,
+        now: Q + GRACE + 1,
+        graceMs: GRACE,
+      }).writable,
+    ).toBe(false);
   });
 
   it('and the three terms are therefore not interchangeable', () => {
     const at = Q + GRACE + 1;
-    const verdicts = [soft, lock, auto].map((policy) =>
-      expiryVerdict(policy, { questionDeadlineAt: Q, deadlineAt: D, now: at, graceMs: GRACE }).writable,
+    const verdicts = [soft, lock, auto].map(
+      (policy) =>
+        expiryVerdict(policy, { questionDeadlineAt: Q, deadlineAt: D, now: at, graceMs: GRACE })
+          .writable,
     );
     // `SOFT` differs from the other two. If this ever reads `[false, false, false]` the term has stopped meaning
     // anything and the agreement tests elsewhere would still be green, because they only compare modules to each
@@ -588,21 +608,45 @@ describe('expiryVerdict — the single answer to "may this student still write t
 
   it('`SOFT` is NOT unbounded: the paper still governs it (INV-LATE-1)', () => {
     const afterEverything = D + GRACE + 1;
-    expect(expiryVerdict(soft, { questionDeadlineAt: Q, deadlineAt: D, now: afterEverything, graceMs: GRACE }))
-      .toEqual({ writable: false, isLate: false, refusedBecause: 'ATTEMPT_DEADLINE_PASSED' });
+    expect(
+      expiryVerdict(soft, {
+        questionDeadlineAt: Q,
+        deadlineAt: D,
+        now: afterEverything,
+        graceMs: GRACE,
+      }),
+    ).toEqual({ writable: false, isLate: false, refusedBecause: 'ATTEMPT_DEADLINE_PASSED' });
   });
 
   it('THE PAPER IS NAMED FIRST when both windows have passed, because that is the fixable fact', () => {
-    const verdict = expiryVerdict(lock, { questionDeadlineAt: Q, deadlineAt: D, now: D + GRACE + 1, graceMs: GRACE });
+    const verdict = expiryVerdict(lock, {
+      questionDeadlineAt: Q,
+      deadlineAt: D,
+      now: D + GRACE + 1,
+      graceMs: GRACE,
+    });
     expect(verdict.refusedBecause).toBe('ATTEMPT_DEADLINE_PASSED');
   });
 
   it('the closing millisecond is still inside the window, `<=` and not `<`', () => {
     // An exclusive comparison makes the last millisecond of every paper a refusal, visible only under load and only
     // for the students who submit latest.
-    expect(expiryVerdict(soft, { questionDeadlineAt: Q, deadlineAt: D, now: D, graceMs: GRACE }).writable).toBe(true);
-    expect(expiryVerdict(soft, { questionDeadlineAt: Q, deadlineAt: D, now: D + GRACE, graceMs: GRACE }).writable).toBe(true);
-    expect(expiryVerdict(soft, { questionDeadlineAt: Q, deadlineAt: D, now: D + GRACE + 1, graceMs: GRACE }).writable).toBe(false);
+    expect(
+      expiryVerdict(soft, { questionDeadlineAt: Q, deadlineAt: D, now: D, graceMs: GRACE })
+        .writable,
+    ).toBe(true);
+    expect(
+      expiryVerdict(soft, { questionDeadlineAt: Q, deadlineAt: D, now: D + GRACE, graceMs: GRACE })
+        .writable,
+    ).toBe(true);
+    expect(
+      expiryVerdict(soft, {
+        questionDeadlineAt: Q,
+        deadlineAt: D,
+        now: D + GRACE + 1,
+        graceMs: GRACE,
+      }).writable,
+    ).toBe(false);
   });
 
   it('a question with no window of its own is governed by the paper alone', () => {
@@ -612,21 +656,38 @@ describe('expiryVerdict — the single answer to "may this student still write t
      * `false` would have been asserting that a write arriving after the deadline looks perfectly on time, and the
      * implementation was right to disagree.
      */
-    expect(expiryVerdict(lock, { questionDeadlineAt: null, deadlineAt: D, now: D + 1, graceMs: GRACE }))
-      .toEqual({ writable: true, isLate: true, refusedBecause: null });
+    expect(
+      expiryVerdict(lock, { questionDeadlineAt: null, deadlineAt: D, now: D + 1, graceMs: GRACE }),
+    ).toEqual({ writable: true, isLate: true, refusedBecause: null });
     // `expiryInstruction` reads `NONE` with no per-question limit, so the term cannot bite where there is no window.
-    expect(expiryVerdict({ perQuestionExpiry: 'SOFT', perQuestionTimeLimitSec: null }, {
-      questionDeadlineAt: null, deadlineAt: D, now: D - 1, graceMs: GRACE,
-    })).toEqual({ writable: true, isLate: false, refusedBecause: null });
+    expect(
+      expiryVerdict(
+        { perQuestionExpiry: 'SOFT', perQuestionTimeLimitSec: null },
+        {
+          questionDeadlineAt: null,
+          deadlineAt: D,
+          now: D - 1,
+          graceMs: GRACE,
+        },
+      ),
+    ).toEqual({ writable: true, isLate: false, refusedBecause: null });
   });
 
   it('a write INSIDE the grace window is accepted AND flagged late -- the flag is the point', () => {
     // 40 s past the deadline with 60 s of grace: the answer stands and the lateness is recorded for the receipt and
     // the late-save audit. Asking only "past the deadline plus grace" would report this as perfectly on time.
-    expect(expiryVerdict(lock, { questionDeadlineAt: null, deadlineAt: D, now: D + 40_000, graceMs: GRACE }))
-      .toEqual({ writable: true, isLate: true, refusedBecause: null });
-    expect(expiryVerdict(lock, { questionDeadlineAt: null, deadlineAt: D, now: D - 1, graceMs: GRACE }).isLate)
-      .toBe(false);
+    expect(
+      expiryVerdict(lock, {
+        questionDeadlineAt: null,
+        deadlineAt: D,
+        now: D + 40_000,
+        graceMs: GRACE,
+      }),
+    ).toEqual({ writable: true, isLate: true, refusedBecause: null });
+    expect(
+      expiryVerdict(lock, { questionDeadlineAt: null, deadlineAt: D, now: D - 1, graceMs: GRACE })
+        .isLate,
+    ).toBe(false);
   });
 
   it('AN UNTIMED PAPER IS NOT AN UNTIMED QUESTION, and my first version of this test got that wrong', () => {
@@ -634,18 +695,35 @@ describe('expiryVerdict — the single answer to "may this student still write t
     // the QUESTION's window. That is false, and the implementation was right: `deadlineAt: null` removes the paper's
     // bound and does nothing to the question's own. Asserting it would have been asserting a hole -- an untimed
     // paper where `LOCK` silently admitted writes to an expired question.
-    expect(expiryVerdict(lock, { questionDeadlineAt: Q, deadlineAt: null, now: Q + 10 * GRACE, graceMs: GRACE }).writable)
-      .toBe(false);
+    expect(
+      expiryVerdict(lock, {
+        questionDeadlineAt: Q,
+        deadlineAt: null,
+        now: Q + 10 * GRACE,
+        graceMs: GRACE,
+      }).writable,
+    ).toBe(false);
     // What IS true, and is the useful half: with no paper deadline there is nothing left for `SOFT` to buy, so the
     // term stops mattering for a question that is still open.
     for (const policy of [soft, lock, auto]) {
-      expect(expiryVerdict(policy, { questionDeadlineAt: Q, deadlineAt: null, now: Q - 1, graceMs: GRACE }))
-        .toEqual({ writable: true, isLate: false, refusedBecause: null });
+      expect(
+        expiryVerdict(policy, {
+          questionDeadlineAt: Q,
+          deadlineAt: null,
+          now: Q - 1,
+          graceMs: GRACE,
+        }),
+      ).toEqual({ writable: true, isLate: false, refusedBecause: null });
     }
   });
 
   it('ZERO grace is a hard deadline on both windows', () => {
-    expect(expiryVerdict(lock, { questionDeadlineAt: Q, deadlineAt: D, now: Q, graceMs: 0 }).writable).toBe(true);
-    expect(expiryVerdict(lock, { questionDeadlineAt: Q, deadlineAt: D, now: Q + 1, graceMs: 0 }).writable).toBe(false);
+    expect(
+      expiryVerdict(lock, { questionDeadlineAt: Q, deadlineAt: D, now: Q, graceMs: 0 }).writable,
+    ).toBe(true);
+    expect(
+      expiryVerdict(lock, { questionDeadlineAt: Q, deadlineAt: D, now: Q + 1, graceMs: 0 })
+        .writable,
+    ).toBe(false);
   });
 });

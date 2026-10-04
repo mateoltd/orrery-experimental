@@ -134,6 +134,14 @@
       "types": "./dist/run-exclusive.d.ts",
       "default": "./dist/run-exclusive.js"
     },
+    "./release": {
+      "types": "./dist/release.d.ts",
+      "default": "./dist/release.js"
+    },
+    "./release-batch": {
+      "types": "./dist/release-batch.d.ts",
+      "default": "./dist/release-batch.js"
+    },
     "./receipt-issue": {
       "types": "./dist/receipt-issue.d.ts",
       "default": "./dist/receipt-issue.js"

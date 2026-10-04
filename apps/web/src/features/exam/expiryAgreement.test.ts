@@ -1,8 +1,8 @@
-import { evaluateAttempt } from '@orrery/exam-engine/deadlines';
+import type { Clock } from '@orrery/clock';
 import type { ExamPolicy } from '@orrery/contracts/policy';
 import { resolvePolicy } from '@orrery/contracts/policy';
-import type { Clock } from '@orrery/clock';
-import { type WriteDecisionInput, decideWrite } from '@orrery/db/answer-write';
+import { decideWrite, type WriteDecisionInput } from '@orrery/db/answer-write';
+import { evaluateAttempt } from '@orrery/exam-engine/deadlines';
 import { describe, expect, it } from 'vitest';
 
 import { type AttemptState, canAnswer, initialAttemptState, reduceAttempt } from './answerStore';
@@ -56,7 +56,15 @@ import { type AttemptState, canAnswer, initialAttemptState, reduceAttempt } from
 
 const T0 = 1_700_000_000_000;
 
-const clockAt = (now: number): Clock => ({ now: () => now });
+/**
+ * `monotonic` returns the same instant as `now`, deliberately.
+ *
+ * Every cell in this file is evaluated at ONE instant, so there is no elapsed time to measure and the monotonic
+ * reading is never consulted -- but `Clock` requires it, and returning a different number would be inventing a clock
+ * that disagrees with itself. The honest stand-in for "no time passes in this test" is that both report the same
+ * instant.
+ */
+const clockAt = (now: number): Clock => ({ now: () => now, monotonic: () => now });
 
 const TERMS = ['SOFT', 'LOCK', 'AUTO_SUBMIT'] as const;
 
@@ -129,7 +137,12 @@ const storeState = (
   return reduceAttempt(base, { type: 'OPEN_QUESTION', questionId: 'q1', at: T0 });
 };
 
-const acceptedBy = (term: (typeof TERMS)[number], now: number, qd: number | null, d: number | null): boolean => {
+const acceptedBy = (
+  term: (typeof TERMS)[number],
+  now: number,
+  qd: number | null,
+  d: number | null,
+): boolean => {
   const decision = decideWrite(writeInput(term, now, qd, d));
   // A replay is not a refusal and must not be read as one; the ledger is empty here so it cannot occur, and
   // asserting that keeps the helper honest if a future cell ever sets `isDuplicate`.
@@ -137,16 +150,17 @@ const acceptedBy = (term: (typeof TERMS)[number], now: number, qd: number | null
 };
 
 describe('INV: one expiry verdict, three callers', () => {
-  it.each(TERMS)('%s: decideWrite, canAnswer and evaluateAttempt agree at every instant', (term) => {
-    const policy = policyWith({ perQuestionExpiry: term, perQuestionTimeLimitSec: 60 });
-    const state0 = (t: (typeof TERMS)[number]): AttemptState =>
-      storeState(t, QUESTION_DEADLINE, ATTEMPT_DEADLINE);
+  it.each(TERMS)(
+    '%s: decideWrite, canAnswer and evaluateAttempt agree at every instant',
+    (term) => {
+      const policy = policyWith({ perQuestionExpiry: term, perQuestionTimeLimitSec: 60 });
+      const state0 = (t: (typeof TERMS)[number]): AttemptState =>
+        storeState(t, QUESTION_DEADLINE, ATTEMPT_DEADLINE);
 
-    for (const now of INSTANTS) {
-      const server = acceptedBy(term, now, QUESTION_DEADLINE, ATTEMPT_DEADLINE);
-      const client = canAnswer(state0(term), 'q1', now).allowed;
-      const engine =
-        evaluateAttempt(
+      for (const now of INSTANTS) {
+        const server = acceptedBy(term, now, QUESTION_DEADLINE, ATTEMPT_DEADLINE);
+        const client = canAnswer(state0(term), 'q1', now).allowed;
+        const engine = evaluateAttempt(
           policy,
           {
             attemptId: 'attempt-1',
@@ -158,10 +172,19 @@ describe('INV: one expiry verdict, three callers', () => {
           GRACE_MS,
         ).questions[0]?.writable;
 
-      expect({ now, side: 'client', writable: client }).toEqual({ now, side: 'client', writable: server });
-      expect({ now, side: 'engine', writable: engine }).toEqual({ now, side: 'engine', writable: server });
-    }
-  });
+        expect({ now, side: 'client', writable: client }).toEqual({
+          now,
+          side: 'client',
+          writable: server,
+        });
+        expect({ now, side: 'engine', writable: engine }).toEqual({
+          now,
+          side: 'engine',
+          writable: server,
+        });
+      }
+    },
+  );
 
   it('agrees with NO per-question window too, so a term cannot matter where there is no window', () => {
     for (const now of INSTANTS) {
@@ -190,7 +213,9 @@ describe('the term has to keep meaning something', () => {
   });
 
   it('and it records the write as LATE, because editable is not on time', () => {
-    const decision = decideWrite(writeInput('SOFT', pastQuestionWindow, QUESTION_DEADLINE, ATTEMPT_DEADLINE));
+    const decision = decideWrite(
+      writeInput('SOFT', pastQuestionWindow, QUESTION_DEADLINE, ATTEMPT_DEADLINE),
+    );
     expect(decision.ok).toBe(true);
     if (decision.ok === true) expect(decision.isLate).toBe(true);
   });
@@ -219,7 +244,11 @@ describe('the term has to keep meaning something', () => {
       pastQuestionWindow,
       GRACE_MS,
     );
-    expect(verdict.questions.every((question) => question.state === 'AUTO_SUBMITTED' || question.state === 'ATTEMPT_CLOSED')).toBe(true);
+    expect(
+      verdict.questions.every(
+        (question) => question.state === 'AUTO_SUBMITTED' || question.state === 'ATTEMPT_CLOSED',
+      ),
+    ).toBe(true);
     expect(verdict.isClosed).toBe(true);
   });
 
@@ -266,7 +295,7 @@ describe('the client is not silent', () => {
 
     expect(Object.hasOwn(after.answers, 'q1')).toBe(true);
     expect(after.queued).toHaveLength(1);
-    expect(after.revisions['q1']).toBe(1);
+    expect(after.revisions.q1).toBe(1);
   });
 
   it('a LOCK-expired answer is dropped -- and THAT is a refusal the store already had', () => {
@@ -291,8 +320,8 @@ describe('the client is not silent', () => {
     // I had forgotten it was there. `INV-LATE-1` is behaving correctly; it is the SOFT case above that was losing
     // work silently.
     expect(after.queued.map((write) => write.seq)).toEqual([1]);
-    expect(after.answers['q1']).toEqual({ choiceIds: ['a'] });
-    expect(after.revisions['q1']).toBe(1);
+    expect(after.answers.q1).toEqual({ choiceIds: ['a'] });
+    expect(after.revisions.q1).toBe(1);
   });
 
   it('the store never reports a negative remaining window, at any instant', () => {
@@ -308,11 +337,8 @@ describe('the client is not silent', () => {
         now,
         GRACE_MS,
       );
-      for (const question of verdict.questions) expect(question.remainingMs).toBeGreaterThanOrEqual(0);
+      for (const question of verdict.questions)
+        expect(question.remainingMs).toBeGreaterThanOrEqual(0);
     }
   });
 });
-
-/** `canAnswer` for one cell, with the policy the slot was built under rather than the one it was created with. */
-const canAnswerAt = (state: AttemptState, now: number, policy: ExamPolicy): boolean =>
-  canAnswer({ ...state, policy }, 'q1', now).allowed;

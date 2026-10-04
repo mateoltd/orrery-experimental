@@ -32,8 +32,8 @@
  * server decides what counts. A client that decided for itself would be a client that can lose a mark.
  */
 
-import { expiryVerdict } from '@orrery/contracts/policy/deadline';
 import type { ExamPolicy } from '@orrery/contracts/policy';
+import { expiryVerdict } from '@orrery/contracts/policy/deadline';
 
 /** One question's slot in the paper. The question's SPEC is not here -- it may be shuffled, and the spec is not trusted. */
 export interface AnswerSlot {
@@ -192,7 +192,12 @@ export const canAnswer = (
   now: number,
 ): {
   readonly allowed: boolean;
-  readonly why?: 'LOCKED' | 'QUESTION_DEADLINE_PASSED' | 'ATTEMPT_DEADLINE_PASSED' | 'ATTEMPT_OVER' | 'UNKNOWN_QUESTION';
+  readonly why?:
+    | 'LOCKED'
+    | 'QUESTION_DEADLINE_PASSED'
+    | 'ATTEMPT_DEADLINE_PASSED'
+    | 'ATTEMPT_OVER'
+    | 'UNKNOWN_QUESTION';
 } => {
   if (indexOf(state, questionId) === -1) return { allowed: false, why: 'UNKNOWN_QUESTION' };
   if (state.status === 'SUBMITTED') return { allowed: false, why: 'ATTEMPT_OVER' };
@@ -213,9 +218,10 @@ export const canAnswer = (
   if (!verdict.writable) {
     return {
       allowed: false,
-      why: verdict.refusedBecause === 'ATTEMPT_DEADLINE_PASSED'
-        ? 'ATTEMPT_DEADLINE_PASSED'
-        : 'QUESTION_DEADLINE_PASSED',
+      why:
+        verdict.refusedBecause === 'ATTEMPT_DEADLINE_PASSED'
+          ? 'ATTEMPT_DEADLINE_PASSED'
+          : 'QUESTION_DEADLINE_PASSED',
     };
   }
   return { allowed: true };

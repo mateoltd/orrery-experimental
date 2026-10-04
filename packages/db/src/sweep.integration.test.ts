@@ -74,14 +74,14 @@ const scopedTo = (attemptId: string): PrismaClient =>
                 // A test that verifies its own row and ignores its neighbours' is the shape of test that hides exactly
                 // this.
                 if (innerProperty === 'questionResponse') {
-                  const responses = inner['questionResponse'] as Record<string, unknown>;
+                  const responses = inner.questionResponse as Record<string, unknown>;
                   return new Proxy(responses, {
                     get(responseInner, method) {
                       if (method !== 'findMany') return responseInner[method as string];
                       return (args: Record<string, unknown>) =>
-                        (responseInner['findMany'] as (a: unknown) => Promise<unknown>)({
+                        (responseInner.findMany as (a: unknown) => Promise<unknown>)({
                           ...args,
-                          where: { ...(args['where'] as object), attemptId },
+                          where: { ...(args.where as object), attemptId },
                         });
                     },
                   });
@@ -91,14 +91,14 @@ const scopedTo = (attemptId: string): PrismaClient =>
                 // sweep threw `tx.examAttempt.update is not a function` -- which is at least a loud failure, but it
                 // rolled the transaction back only by accident of ordering. A wrapper that hides the methods it does not
                 // care about is a wrapper that breaks the code it is supposed to be letting run unmodified.
-                const model = inner['examAttempt'] as Record<string, unknown>;
+                const model = inner.examAttempt as Record<string, unknown>;
                 return new Proxy(model, {
                   get(modelInner, method) {
                     if (method !== 'findMany') return modelInner[method as string];
                     return (args: Record<string, unknown>) =>
-                      (modelInner['findMany'] as (a: unknown) => Promise<unknown>)({
+                      (modelInner.findMany as (a: unknown) => Promise<unknown>)({
                         ...args,
-                        where: { ...(args['where'] as object), id: attemptId },
+                        where: { ...(args.where as object), id: attemptId },
                       });
                   },
                 });
@@ -110,8 +110,41 @@ const scopedTo = (attemptId: string): PrismaClient =>
   }) as unknown as PrismaClient;
 
 /** How many `IN_PROGRESS` attempts exist that are not this test's. */
-const countOtherInProgress = (attemptId: string): Promise<number> =>
-  prisma().examAttempt.count({ where: { status: 'IN_PROGRESS', id: { not: attemptId } } });
+/**
+ * THE IDS OF EVERY OTHER `IN_PROGRESS` ATTEMPT, NOT A COUNT OF THEM.
+ *
+ * **This was a `count()` and it made the suite flaky -- roughly one run in three across the full integration run, and
+ * never in isolation.** The guarantee it was reaching for is "the sweep moved nothing outside this fixture", and it
+ * measured that with a global count taken twice:
+ *
+ * ```
+ * const others = await countOtherInProgress(f.attemptId);
+ * await runDeadlineSweep(scopedTo(f.attemptId), T0 + 61_000);
+ * expect(await countOtherInProgress(f.attemptId)).toBe(others);
+ * ```
+ *
+ * The sweep is scoped and did nothing to anyone else -- but the second count also counts rows **other test files
+ * create while this one is running**, and the integration suite runs 33 files in parallel against one shared database.
+ * So the assertion failed whenever another file happened to create an `IN_PROGRESS` attempt inside the window, and the
+ * failure read as "the sweep touched somebody else's data", which is precisely the incident this file exists to
+ * prevent. A test that cries wolf about the exact hazard it is guarding trains people to re-run it.
+ *
+ * Comparing ID SETS fixes it and strengthens it: every attempt that was open before must still be open, which is the
+ * claim, and rows created afterwards are simply not in the set. Direction, not magnitude.
+ *
+ * The scoping itself is NOT changed. `scopedTo` constrains the READ in the test rather than adding a scope parameter to
+ * production code, for the reason at the top of this file: a filter that exists only for tests is one nobody remembers
+ * to pass in the job that matters.
+ */
+const otherInProgressIds = async (attemptId: string): Promise<ReadonlySet<string>> =>
+  new Set(
+    (
+      await prisma().examAttempt.findMany({
+        where: { status: 'IN_PROGRESS', id: { not: attemptId } },
+        select: { id: true },
+      })
+    ).map((row) => row.id),
+  );
 
 /**
  * A fixture with an attempt whose deadline has passed and one open question window.
@@ -220,12 +253,21 @@ describe.skipIf(!process.env.DATABASE_URL)('the sweep, against real Postgres', (
      * would reintroduce that bug somewhere much harder to notice than a request handler.
      */
     const f = await fixture({ deadlineAt: new Date(T0) });
-    const others = await countOtherInProgress(f.attemptId);
+    const othersBefore = await otherInProgressIds(f.attemptId);
 
     const result = await runDeadlineSweep(scopedTo(f.attemptId), T0 + 61_000);
     expect(result.autoSubmitted).toBe(1);
-    // The sweep is scoped, so nothing outside this fixture moved. See the incident note at the top of this file.
-    expect(await countOtherInProgress(f.attemptId)).toBe(others);
+
+    /**
+     * THE SWEEP IS SCOPED, AND THIS IS HOW THAT IS CHECKED WITHOUT A RACE.
+     *
+     * Written as a count, this read "the sweep touched somebody else's rows" whenever another test file created an
+     * attempt mid-window -- which, against one shared database and 33 parallel files, was most runs. See the note on
+     * `otherInProgressIds`.
+     */
+    const othersAfter = await otherInProgressIds(f.attemptId);
+    const closed = [...othersBefore].filter((id) => !othersAfter.has(id));
+    expect(closed, 'the sweep closed attempts that were not its own').toEqual([]);
 
     const attempt = await prisma().examAttempt.findUniqueOrThrow({ where: { id: f.attemptId } });
     expect(attempt.status).toBe('SUBMITTED');

@@ -117,7 +117,7 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ ok: false, reason: 'FORBIDDEN' }, { status: 403, headers: NO_STORE });
   }
 
-  const answerJson = body['answer'] ?? null;
+  const answerJson = body.answer ?? null;
 
   const result = await submitAnswer(
     db,

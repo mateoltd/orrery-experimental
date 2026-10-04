@@ -30,7 +30,7 @@
  * write 409'd).
  */
 
-import { type Clock, type Duration, type Millis } from '@orrery/clock';
+import type { Clock, Duration, Millis } from '@orrery/clock';
 import { expiryVerdict } from '@orrery/contracts/policy/deadline';
 
 import type { PrismaClient } from '../prisma/generated/client/client.js';
@@ -216,7 +216,10 @@ export const decideWrite = (input: WriteDecisionInput): WriteDecision => {
    * cannot be saved anywhere.
    */
   const expiry = expiryVerdict(
-    { perQuestionExpiry: input.perQuestionExpiry, perQuestionTimeLimitSec: input.perQuestionTimeLimitSec },
+    {
+      perQuestionExpiry: input.perQuestionExpiry,
+      perQuestionTimeLimitSec: input.perQuestionTimeLimitSec,
+    },
     {
       questionDeadlineAt: input.questionDeadlineAt,
       deadlineAt: input.deadlineAt,
@@ -228,9 +231,10 @@ export const decideWrite = (input: WriteDecisionInput): WriteDecision => {
   if (!expiry.writable) {
     return {
       ok: false,
-      reason: expiry.refusedBecause === 'ATTEMPT_DEADLINE_PASSED'
-        ? 'ATTEMPT_DEADLINE_PASSED'
-        : 'QUESTION_DEADLINE_PASSED',
+      reason:
+        expiry.refusedBecause === 'ATTEMPT_DEADLINE_PASSED'
+          ? 'ATTEMPT_DEADLINE_PASSED'
+          : 'QUESTION_DEADLINE_PASSED',
       message:
         expiry.refusedBecause === 'ATTEMPT_DEADLINE_PASSED'
           ? 'the time allowed for this attempt has passed, so the last saved answer stands'
@@ -391,7 +395,10 @@ interface AttemptRow {
  */
 const readExpiry = (
   snapshot: unknown,
-): { perQuestionExpiry: 'SOFT' | 'LOCK' | 'AUTO_SUBMIT'; perQuestionTimeLimitSec: number | null } => {
+): {
+  perQuestionExpiry: 'SOFT' | 'LOCK' | 'AUTO_SUBMIT';
+  perQuestionTimeLimitSec: number | null;
+} => {
   const from = (source: unknown): Record<string, unknown> | null =>
     typeof source === 'object' && source !== null && !Array.isArray(source)
       ? (source as Record<string, unknown>)
@@ -400,14 +407,13 @@ const readExpiry = (
   // The snapshot is the frozen POLICY OBJECT. Tolerating a `{ policy: {...} }` wrapper costs three lines and covers
   // the two shapes a hand-written fixture in this repository's own tests has used.
   const raw = from(snapshot);
-  const policy = from(raw?.['policy']) ?? raw;
+  const policy = from(raw?.policy) ?? raw;
 
-  const term = policy?.['perQuestionExpiry'];
-  const limit = policy?.['perQuestionTimeLimitSec'];
+  const term = policy?.perQuestionExpiry;
+  const limit = policy?.perQuestionTimeLimitSec;
 
   return {
-    perQuestionExpiry:
-      term === 'SOFT' || term === 'LOCK' || term === 'AUTO_SUBMIT' ? term : 'LOCK',
+    perQuestionExpiry: term === 'SOFT' || term === 'LOCK' || term === 'AUTO_SUBMIT' ? term : 'LOCK',
     perQuestionTimeLimitSec: typeof limit === 'number' && Number.isFinite(limit) ? limit : null,
   };
 };

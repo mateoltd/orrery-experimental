@@ -116,7 +116,8 @@ model User {
   reviewTasksClaimed    ReviewTask[]            @relation("ReviewClaimer")
   reviewAssignments     ReviewAssignment[]      @relation("ReviewAssignee")
   reviewGrants          ReviewerGrant[]
-  releaseBatches        ReleaseBatch[]
+  releaseBatches        ReleaseBatch[]          @relation("ReleaseReleaser")
+  releaseOverrides      ReleaseBatch[]          @relation("ReleaseOverrider")
   verdicts              IntegrityVerdict[]
   feedback              Feedback[]
   auditEvents           AuditEvent[]
@@ -1207,6 +1208,20 @@ model ExamAttempt {
   extensions       AttemptDeadlineExtension[]
   strikes          AttemptStrikeCounter[]
   seqCounter       AttemptSeq?
+  /**
+   * The batch MEMBERSHIP of this attempt, and the ONLY sound basis for a grade-visibility decision.
+   *
+   * Release is per membership (`plans/01` §10 -- membership is frozen on `RELEASING`, and a batch releases exactly
+   * its own members), so "is this grade visible?" is "is this attempt in a member of a RELEASED batch?". Asking it
+   * about the ASSIGNMENT instead -- "does this assignment own SOME released batch?" -- is a different question, and
+   * it agrees with the right one only when a classroom releases in a single batch, which is exactly when nobody
+   * tests it.
+   *
+   * **AND IT DID: `roster-page.ts` gated a SEALED GRADE on the assignment-scoped version** and read
+   * `finalScore`/`maxScore`/`percentage` for members of a sibling `DRAFT` batch on the same assignment. The relation
+   * was here the whole time; the query did not use it. See that file's note at the released-attempt query, and the
+   * regression test titled "a DRAFT batch on a RELEASED assignment withholds its own members' grades".
+   */
   releaseMembers   ReleaseBatchMember[]
   simStateBlobs    SimStateBlob[]
 
@@ -1509,6 +1524,11 @@ enum ReleaseBatchStatus {
   CANCELED
 }
 
+// P10-T1: the five statuses existed from `0001_init` and NOTHING enforced a path between them -- `RELEASED` could be
+// set back to `DRAFT` (re-sealing grades students had already read), a `CANCELED` batch could be released, and a
+// member could be added to a `RELEASED` batch. The transitions and the membership freeze are now TRIGGERS, written
+// in migration `0014` because Prisma cannot express them here; `release-batch.ts` holds the same table and a test
+// walks all 25 pairs against the database so the two cannot drift.
 model ReleaseBatch {
   id           String   @id @default(uuid(7))
   tenantId     String?
@@ -1521,9 +1541,20 @@ model ReleaseBatch {
   // K-4/RN-03: a minimum pre-release review window. Previously claimed in the research
   // notes and implemented nowhere.
   minHoldUntil DateTime? @db.Timestamptz(3)
+  // P10-T3: an override was a bare `overrideReason`, so it had a WHY and no WHO or WHEN -- an override nobody
+  // could audit -- and any non-null string waived every blocker the batch would EVER have, including ones that
+  // appeared after it was written. The four columns are all-or-nothing (a CHECK, not a convention), and
+  // `overrideWaived` is the exact list of attempts the human was looking at when they decided.
   overrideReason String?
+  overrideById   String?
+  // `Restrict`, like every other "who decided this" in the schema (`OverrideGrantor`, `AccommodationGrantor`): the
+  // author of a waiver is the one fact about it that must not quietly become NULL.
+  overrideBy     User?     @relation("ReleaseOverrider", fields: [overrideById], references: [id], onDelete: Restrict)
+  overrideAt     DateTime? @db.Timestamptz(3)
+  overrideWaived Json?
   releasedById String?
-  releasedBy   User?     @relation(fields: [releasedById], references: [id], onDelete: SetNull)
+  // Named only because there are now TWO relations to `User`; the foreign key itself is unchanged.
+  releasedBy   User?     @relation("ReleaseReleaser", fields: [releasedById], references: [id], onDelete: SetNull)
   releasedAt   DateTime? @db.Timestamptz(3)
   createdAt    DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
@@ -1537,8 +1568,12 @@ model ReleaseBatch {
   @@index([classroomId, status])
   @@index([tenantId, status])
   @@index([status, minHoldUntil])
+  @@index([overrideById])
 }
 
+// FROZEN once the batch is RELEASING, RELEASED or CANCELED: no insert, no delete, no re-pointing (migration `0014`).
+// A member must also be an attempt of the batch's OWN assignment and classroom, because permission to release is
+// decided by the batch's classroom and membership is what it is permission OVER.
 model ReleaseBatchMember {
   batchId   String
   batch     ReleaseBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)

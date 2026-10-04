@@ -147,13 +147,26 @@ export type ReleaseRefusal =
   /** K-4/RN-03: the minimum pre-release review window has not elapsed. */
   | 'HOLD_WINDOW_NOT_ELAPSED'
   /** The batch has already been released. Not an error — release is idempotent. */
-  | 'ALREADY_RELEASED';
+  | 'ALREADY_RELEASED'
+  /**
+   * P10-T1: the batch is not `RELEASING`, so its membership has not been frozen and there is nothing to release yet.
+   *
+   * Before this existed the only status `planRelease` looked at was `RELEASED`, so a `CANCELED` batch was released --
+   * measured, against the database -- and so was a `DRAFT` one that had passed no gate.
+   */
+  | 'BATCH_NOT_RELEASING';
 
 export interface ReleaseCheckInput {
   readonly batchStatus: string;
   readonly holdUntil: Millis | null;
-  /** Whether an override reason is recorded on the batch, which stands in for `GRADED`. */
-  readonly hasOverrideReason: boolean;
+  /**
+   * The attempts a recorded override WAIVES, which stands in for `GRADED` -- for those attempts and no others.
+   *
+   * P10-T3. This was `hasOverrideReason: boolean`, and a boolean is a blank cheque: an override written on Monday for
+   * one absent student then waived every blocker the batch would ever have, including one that appeared on Tuesday
+   * and that nobody had looked at. An override is a decision about what a person could SEE when they made it.
+   */
+  readonly waivedAttemptIds: ReadonlySet<string>;
   readonly attempts: readonly {
     readonly attemptId: string;
     readonly status: string;
@@ -162,7 +175,7 @@ export interface ReleaseCheckInput {
     readonly responses: readonly ScoredResponse[];
   }[];
   readonly latePenaltyPercent: number;
-  readonly clock: Clock;
+  readonly clock: Pick<Clock, 'now'>;
 }
 
 export interface ReleasePlan {
@@ -208,7 +221,9 @@ export const planRelease = (input: ReleaseCheckInput): ReleasePlan => {
   const scores: { attemptId: string; readonly score: ComputedScore }[] = [];
 
   for (const attempt of input.attempts) {
-    if (attempt.status !== 'GRADED' && !input.hasOverrideReason) {
+    const waived = input.waivedAttemptIds.has(attempt.attemptId);
+
+    if (attempt.status !== 'GRADED' && !waived) {
       refusals.push({ attemptId: attempt.attemptId, reason: 'ATTEMPT_NOT_GRADED' });
       // Scored anyway, so the caller can show the teacher what the batch WOULD produce. Cheap, and it turns a bare
       // refusal into something actionable.
@@ -222,7 +237,7 @@ export const planRelease = (input: ReleaseCheckInput): ReleasePlan => {
 
     if (score.finalScore === null) {
       refusals.push({ attemptId: attempt.attemptId, reason: 'SCORE_NOT_COMPUTABLE' });
-    } else if (score.isProvisional && !input.hasOverrideReason) {
+    } else if (score.isProvisional && !waived) {
       refusals.push({ attemptId: attempt.attemptId, reason: 'ATTEMPT_NEEDS_HUMAN' });
     } else {
       scores.push({ attemptId: attempt.attemptId, score });
@@ -232,7 +247,7 @@ export const planRelease = (input: ReleaseCheckInput): ReleasePlan => {
   /**
    * AN OVERRIDE DOES NOT FIX A MISSING SCORE.
    *
-   * `overrideReason` stands in for "this attempt is `GRADED`" — it waives the status check. It cannot manufacture a
+   * A waiver stands in for "this attempt is `GRADED`" — it waives the status check. It cannot manufacture a
    * percentage for an all-excused paper, so `SCORE_NOT_COMPUTABLE` is refused regardless.
    */
   return { releasable: refusals.length === 0, refusals, scores };
@@ -259,20 +274,226 @@ export interface ReleaseDb {
 }
 
 /**
+ * THE OVERRIDE'S WAIVED ATTEMPTS, read out of a JSON column -- and it IS a translation, not a cast.
+ *
+ * `overrideWaived` is `Json?`, so Prisma hands back `unknown`-shaped data and a cast to `{ attemptId: string }[]`
+ * would compile against anything the column happens to hold. Everything that is not an object with a string
+ * `attemptId` is dropped, and dropping is the conservative direction: an entry that cannot be read waives nothing, so
+ * the attempt it was meant to cover is listed as a blocker again rather than released on the strength of a guess.
+ */
+export const waivedAttemptIdsOf = (override: {
+  readonly overrideReason: string | null;
+  readonly overrideById: string | null;
+  readonly overrideAt: Date | null;
+  readonly overrideWaived: unknown;
+}): ReadonlySet<string> => {
+  /**
+   * A REASON WITH NO AUTHOR WAIVES NOTHING.
+   *
+   * Migration `0014` adds the all-four-or-none CHECK as `NOT VALID`, so a row written before it can still hold a bare
+   * `overrideReason`. That is precisely the override nobody can audit, and honouring it here would make the constraint
+   * decorative for the rows it matters most for.
+   */
+  if (
+    override.overrideReason === null ||
+    override.overrideById === null ||
+    override.overrideAt === null
+  ) {
+    return new Set();
+  }
+  if (!Array.isArray(override.overrideWaived)) return new Set();
+
+  const ids = new Set<string>();
+  for (const entry of override.overrideWaived as readonly unknown[]) {
+    if (entry === null || typeof entry !== 'object') continue;
+    const attemptId = (entry as { attemptId?: unknown }).attemptId;
+    if (typeof attemptId === 'string' && attemptId !== '') ids.add(attemptId);
+  }
+  return ids;
+};
+
+/** A batch as stored, with the plan computed from it. What both the pre-release gate and the release read. */
+export interface LoadedReleasePlan {
+  readonly batchId: string;
+  readonly status: string;
+  readonly assignmentId: string;
+  readonly classroomId: string;
+  readonly attemptIds: readonly string[];
+  /** The attempts the recorded override covers. Empty when there is no (complete) override. */
+  readonly waivedAttemptIds: ReadonlySet<string>;
+  /**
+   * The translated input `plan` was computed from, kept so a caller can ask a DIFFERENT question of the same read.
+   * Recording an override needs "what blocks with nothing waived?", and re-reading the rows to ask it would be a
+   * second read that a concurrent grade could land between.
+   */
+  readonly check: ReleaseCheckInput;
+  readonly plan: ReleasePlan;
+}
+
+/**
+ * READ A BATCH AND PLAN ITS RELEASE.  (P10-T3)
+ *
+ * This was the first half of `releaseBatch`, and it is its own function because the pre-release gate needs exactly
+ * the same answer. **A gate that decides "releasable" by a different read from the release is a gate that admits
+ * batches the release then refuses** -- and a batch refused after it has entered `RELEASING` is frozen and stuck. One
+ * read, one `planRelease`, two callers: what the gate admits is by construction what the release accepts.
+ *
+ * It must be called on a TRANSACTION handle. The read and whatever the caller writes next are one decision, and a
+ * concurrent grade landing between them is the window `B16` exists to close.
+ */
+export async function loadReleasePlan(
+  tx: ReleaseDb,
+  input: {
+    readonly batchId: string;
+    readonly latePenaltyPercent: number;
+    readonly clock: Pick<Clock, 'now'>;
+  },
+): Promise<LoadedReleasePlan | null> {
+  const batch = (await tx.releaseBatch.findUnique({
+    where: { id: input.batchId },
+    select: {
+      id: true,
+      status: true,
+      assignmentId: true,
+      classroomId: true,
+      // `minHoldUntil`, NOT `holdUntil`. The column is `minHoldUntil` and the internal input field is `holdUntil`,
+      // and the two were conflated -- so `releaseBatch` threw `Invalid tx.releaseBatch.findUnique() invocation` on
+      // EVERY call, against a real database.
+      //
+      // **The unit tests could not have caught this.** They pass a hand-written mock whose `findUnique` returns
+      // whatever the test says, so a field name that does not exist in the schema is indistinguishable from one
+      // that does. INV-RELEASE-1 was, in other words, completely untested as a transaction: the pure planning was
+      // proven and the part that touches the database had never been executed.
+      minHoldUntil: true,
+      overrideReason: true,
+      overrideById: true,
+      overrideAt: true,
+      overrideWaived: true,
+      members: { select: { attemptId: true } },
+    },
+  })) as {
+    id: string;
+    status: string;
+    assignmentId: string;
+    classroomId: string;
+    minHoldUntil: Date | null;
+    overrideReason: string | null;
+    overrideById: string | null;
+    overrideAt: Date | null;
+    overrideWaived: unknown;
+    members: readonly { attemptId: string }[];
+  } | null;
+
+  if (batch === null) return null;
+
+  // The attempts, with the responses needed to compute each score. Read INSIDE the transaction, for the reason above.
+  const attempts = (await tx.releaseBatchMember.findMany({
+    where: { batchId: input.batchId },
+    select: {
+      attempt: {
+        select: {
+          id: true,
+          status: true,
+          isLate: true,
+          responses: {
+            select: {
+              questionId: true,
+              isExcused: true,
+              needsHuman: true,
+              autoScore: true,
+              manualScore: true,
+              // `points` is NOT on the response: it lives on the QUESTION, and §10.1's `maxTotal` is the sum over
+              // the RESOLVED variant. Selecting it through the relation is what makes `maxTotal` the marks
+              // actually on this student's paper rather than the authored question's marks.
+              question: { select: { points: true } },
+            },
+          },
+        },
+      },
+    },
+  })) as readonly {
+    attempt: {
+      id: string;
+      status: string;
+      isLate: boolean;
+      responses: readonly {
+        questionId: string;
+        isExcused: boolean;
+        needsHuman: boolean;
+        /** A Prisma `Decimal`, NOT a number. `scoreNumber` is what makes it one. */
+        autoScore: unknown;
+        /** A Prisma `Decimal`, NOT a number. */
+        manualScore: unknown;
+        question: { points: unknown };
+      }[];
+    };
+  }[];
+
+  const waivedAttemptIds = waivedAttemptIdsOf(batch);
+
+  const check: ReleaseCheckInput = {
+    batchStatus: batch.status,
+    holdUntil: batch.minHoldUntil === null ? null : batch.minHoldUntil.getTime(),
+    waivedAttemptIds,
+    latePenaltyPercent: input.latePenaltyPercent,
+    clock: input.clock,
+    attempts: attempts.map(({ attempt }) => ({
+      attemptId: attempt.id,
+      status: attempt.status,
+      isLate: attempt.isLate,
+      responses: attempt.responses.map((row) => ({
+        questionId: row.questionId,
+        // A manual mark wins over the auto mark. `finalScore` is the DERIVED value: this is not a stored truth, and
+        // computing it here is what keeps `finalScore`/`autoScore`/`manualScore` from becoming three truths.
+        //
+        // **THROUGH `scoreNumber`, BECAUSE PRISMA RETURNS `Decimal` OBJECTS AND `number + Decimal` IS `NaN`.**
+        //
+        // This is the second defect the integration test found in this function, and the more dangerous one: the
+        // local type said `autoScore: number` and so did the cast, so the compiler agreed with an assumption the
+        // database never made. `computeScore` then summed `0 + Decimal` into `NaN`, `maxTotal > 0` was false,
+        // `percentage` came out `null`, and EVERY batch was refused with `SCORE_NOT_COMPUTABLE`.
+        //
+        // **THE RELEASE TRANSACTION HAS THEREFORE NEVER RELEASED ANYTHING.** The unit tests passed because they
+        // pass plain numbers into `planRelease`, which is the correct input -- the bug lived entirely in the
+        // translation from a Prisma row to that input, and a cast is not a translation.
+        finalScore: scoreNumber(row.manualScore) ?? scoreNumber(row.autoScore),
+        points: scoreNumber(row.question.points) ?? 0,
+        isExcused: row.isExcused,
+        needsHuman: row.needsHuman,
+      })),
+    })),
+  };
+
+  return {
+    batchId: batch.id,
+    status: batch.status,
+    assignmentId: batch.assignmentId,
+    classroomId: batch.classroomId,
+    attemptIds: batch.members.map((member) => member.attemptId),
+    waivedAttemptIds,
+    check,
+    plan: planRelease(check),
+  };
+}
+
+/**
  * RELEASE A WHOLE BATCH, OR NOTHING.
  *
- * INV-RELEASE-1. Every score write, every member row, and the batch's own `RELEASED` status happen inside ONE
- * `prisma.$transaction`. The alternative -- a loop of per-attempt writes with a final status update -- has a failure
- * mode that is invisible until a student complains: the batch is marked released while some attempts were never written,
- * or some attempts are visible while the batch still says `DRAFT`. Neither leaves a partial state to inspect, which is
- * what makes them hard to notice and expensive to unpick.
+ * INV-RELEASE-1. Every score write and the batch's own `RELEASED` status happen inside ONE `prisma.$transaction`. The
+ * alternative -- a loop of per-attempt writes with a final status update -- has a failure mode that is invisible until
+ * a student complains: the batch is marked released while some attempts were never written, or some attempts are
+ * visible while the batch still says `DRAFT`. Neither leaves a partial state to inspect, which is what makes them hard
+ * to notice and expensive to unpick.
  *
  * `planRelease` has already decided releasability, and it is called INSIDE the transaction rather than outside so the
  * decision and the write cannot be separated by a concurrent grade landing in between. Planning outside would leave a
  * window in which the batch was checked, then changed, then written.
  *
- * Every member row is set to `RELEASED` in ONE `updateMany` rather than per row, because student visibility is
- * `EXISTS(... batch status = 'RELEASED')` (B16) and per-row writes are how a batch ends up half-visible.
+ * ## IT RELEASES A `RELEASING` BATCH AND NOTHING ELSE  (P10-T1)
+ *
+ * `RELEASING` is the state in which membership is frozen (`release-batch.ts`, migration `0014`), so it is the only
+ * state in which "every member was verified" is a statement about the members that will actually become visible.
+ * `beginRelease` is how a batch gets there, and it runs the pre-release gate on the way.
  */
 export async function releaseBatch(
   db: ReleaseDb,
@@ -288,32 +509,9 @@ export async function releaseBatch(
   readonly refusals: readonly { attemptId: string | null; reason: ReleaseRefusal }[];
 }> {
   return db.$transaction(async (tx) => {
-    const batch = (await tx.releaseBatch.findUnique({
-      where: { id: input.batchId },
-      select: {
-        id: true,
-        status: true,
-        // `minHoldUntil`, NOT `holdUntil`. The column is `minHoldUntil` and the internal input field is `holdUntil`,
-        // and the two were conflated -- so `releaseBatch` threw `Invalid tx.releaseBatch.findUnique() invocation` on
-        // EVERY call, against a real database.
-        //
-        // **The unit tests could not have caught this.** They pass a hand-written mock whose `findUnique` returns
-        // whatever the test says, so a field name that does not exist in the schema is indistinguishable from one
-        // that does. INV-RELEASE-1 was, in other words, completely untested as a transaction: the pure planning was
-        // proven and the part that touches the database had never been executed.
-        minHoldUntil: true,
-        overrideReason: true,
-        members: { select: { attemptId: true } },
-      },
-    })) as {
-      id: string;
-      status: string;
-      minHoldUntil: Date | null;
-      overrideReason: string | null;
-      members: readonly { attemptId: string }[];
-    } | null;
+    const loaded = await loadReleasePlan(tx, input);
 
-    if (batch === null) {
+    if (loaded === null) {
       return {
         released: false,
         releasedCount: 0,
@@ -321,83 +519,20 @@ export async function releaseBatch(
       };
     }
 
-    const attemptIds = batch.members.map((member) => member.attemptId);
+    const { plan, attemptIds } = loaded;
 
-    // The attempts, with the responses needed to compute each score. Read INSIDE the transaction, for the reason above.
-    const attempts = (await tx.releaseBatchMember.findMany({
-      where: { batchId: input.batchId },
-      select: {
-        attempt: {
-          select: {
-            id: true,
-            status: true,
-            isLate: true,
-            responses: {
-              select: {
-                questionId: true,
-                isExcused: true,
-                needsHuman: true,
-                autoScore: true,
-                manualScore: true,
-                // `points` is NOT on the response: it lives on the QUESTION, and §10.1's `maxTotal` is the sum over
-                // the RESOLVED variant. Selecting it through the relation is what makes `maxTotal` the marks
-                // actually on this student's paper rather than the authored question's marks.
-                question: { select: { points: true } },
-              },
-            },
-          },
-        },
-      },
-    })) as readonly {
-      attempt: {
-        id: string;
-        status: string;
-        isLate: boolean;
-        responses: readonly {
-          questionId: string;
-          isExcused: boolean;
-          needsHuman: boolean;
-          /** A Prisma `Decimal`, NOT a number. `scoreNumber` is what makes it one. */
-          autoScore: unknown;
-          /** A Prisma `Decimal`, NOT a number. */
-          manualScore: unknown;
-          question: { points: unknown };
-        }[];
+    /**
+     * `RELEASED` falls through to `planRelease`'s idempotent `ALREADY_RELEASED`; every other status is refused HERE,
+     * before anything is written, so a `DRAFT` or `CANCELED` batch is a clean refusal rather than a trigger error.
+     * The trigger is still there for the writer that does not call this function.
+     */
+    if (loaded.status !== 'RELEASING' && loaded.status !== 'RELEASED') {
+      return {
+        released: false,
+        releasedCount: 0,
+        refusals: [{ attemptId: null, reason: 'BATCH_NOT_RELEASING' }],
       };
-    }[];
-
-    const plan = planRelease({
-      batchStatus: batch.status,
-      holdUntil: batch.minHoldUntil === null ? null : batch.minHoldUntil.getTime(),
-      hasOverrideReason: batch.overrideReason !== null,
-      latePenaltyPercent: input.latePenaltyPercent,
-      clock: input.clock,
-      attempts: attempts.map(({ attempt }) => ({
-        attemptId: attempt.id,
-        status: attempt.status,
-        isLate: attempt.isLate,
-        responses: attempt.responses.map((row) => ({
-          questionId: row.questionId,
-          // A manual mark wins over the auto mark. `finalScore` is the DERIVED value: this is not a stored truth, and
-          // computing it here is what keeps `finalScore`/`autoScore`/`manualScore` from becoming three truths.
-          //
-          // **THROUGH `scoreNumber`, BECAUSE PRISMA RETURNS `Decimal` OBJECTS AND `number + Decimal` IS `NaN`.**
-          //
-          // This is the second defect the integration test found in this function, and the more dangerous one: the
-          // local type said `autoScore: number` and so did the cast, so the compiler agreed with an assumption the
-          // database never made. `computeScore` then summed `0 + Decimal` into `NaN`, `maxTotal > 0` was false,
-          // `percentage` came out `null`, and EVERY batch was refused with `SCORE_NOT_COMPUTABLE`.
-          //
-          // **THE RELEASE TRANSACTION HAS THEREFORE NEVER RELEASED ANYTHING.** The unit tests passed because they
-          // pass plain numbers into `planRelease`, which is the correct input -- the bug lived entirely in the
-          // translation from a Prisma row to that input, and a cast is not a translation.
-          finalScore: scoreNumber(row.manualScore) ?? scoreNumber(row.autoScore),
-          points: scoreNumber(row.question.points) ?? 0,
-          isExcused: row.isExcused,
-          needsHuman: row.needsHuman,
-        })),
-      })),
-    });
+    }
 
     if (!plan.releasable) {
       // NOTHING is written. Not the scores, not the members, not the batch status.

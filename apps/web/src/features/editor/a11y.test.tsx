@@ -288,7 +288,6 @@ describe('axe on the editor surface', () => {
     // renders nothing — the check is done properly in `contracts/a11y/contrast.ts` against the
     // token values, which is the only place it can be done honestly.
     if (results.violations.length > 0) {
-      // eslint-disable-next-line no-console
       console.log(
         'AXE',
         JSON.stringify(

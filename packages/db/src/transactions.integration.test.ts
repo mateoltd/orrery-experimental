@@ -19,8 +19,8 @@
  *
  *   1. **idempotency is enforced by STATE, not by a check** -- replaying a key adds no second `AnswerRevision`,
  *      which is the only thing that makes a retry safe;
- *   2. **the release is all-or-nothing** -- an exception part way through leaves the batch `DRAFT` and every member
- *      `PENDING`, with no attempt marked released.
+ *   2. **the release is all-or-nothing** -- an exception part way through leaves the batch `RELEASING`, exactly as
+ *      it was, with no attempt marked released.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -29,6 +29,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { submitAnswer } from './answer-write.js';
 import { PrismaClient } from './prisma.js';
 import { releaseBatch } from './release.js';
+import { beginRelease, markBatchReady } from './release-batch.js';
 
 /** The clock. `INV-TIME-1`: no `Date.now()` outside `@orrery/clock`, including here. */
 const clock = { now: () => 1_800_000_000_000 };
@@ -277,6 +278,63 @@ describe.skipIf(!process.env.DATABASE_URL)('the release TRANSACTION, against rea
     return f;
   };
 
+  /**
+   * A SECOND graded attempt ON THE SAME PAPER, by another student.
+   *
+   * The two-member test below used to call `scoredAttempt` twice and put both attempts in one batch -- two different
+   * classrooms and two different assignments in a batch that belongs to one. Nothing objected, which was the defect:
+   * permission to release is decided by the batch's classroom, so a batch that can hold any attempt can release any
+   * attempt. Migration `0014` refuses it, and this is the fixture a real batch has.
+   */
+  const classmate = async (f: Fixture): Promise<string> => {
+    const studentId = randomUUID();
+    await prisma().user.create({
+      data: {
+        id: studentId,
+        email: `${studentId}@s.example`,
+        emailNormalized: `${studentId}@s.example`,
+        name: 'S2',
+      },
+    });
+    const attempt = await prisma().examAttempt.create({
+      data: {
+        id: randomUUID(),
+        assignmentId: f.assignmentId,
+        classroomId: f.classroomId,
+        studentId,
+        attemptNumber: 1,
+        status: 'GRADED' as never,
+      },
+    });
+    await prisma().questionResponse.create({
+      data: {
+        id: randomUUID(),
+        attemptId: attempt.id,
+        questionId: f.questionId,
+        position: 1,
+        answer: { selectedChoiceIndex: 0 },
+        autoScore: 2,
+        needsHuman: false,
+        isExcused: false,
+      },
+    });
+    return attempt.id;
+  };
+
+  /**
+   * `DRAFT -> READY -> RELEASING`, through the gate.  (P10-T1)
+   *
+   * `releaseBatch` releases a `RELEASING` batch and nothing else, so a test that hands it a `DRAFT` one is testing a
+   * path that no longer exists. The walk goes through `release-batch.ts` rather than three bare `UPDATE`s on purpose:
+   * it is the route a real batch takes, and it means the gate has to OPEN for these fixtures before the release runs.
+   */
+  const startReleasing = async (batchId: string): Promise<void> => {
+    for (const step of [markBatchReady, beginRelease]) {
+      const moved = await step(prisma(), { batchId, actorId: null, clock });
+      if (!moved.ok) throw new Error(`fixture: ${step.name} refused: ${JSON.stringify(moved)}`);
+    }
+  };
+
   it('releases a whole batch: members RELEASED, batch RELEASED, attempts stamped', async () => {
     const f = await scoredAttempt('GRADED');
     const batch = await prisma().releaseBatch.create({
@@ -288,6 +346,7 @@ describe.skipIf(!process.env.DATABASE_URL)('the release TRANSACTION, against rea
         members: { create: [{ attemptId: f.attemptId }] },
       },
     });
+    await startReleasing(batch.id);
 
     const result = await releaseBatch(prisma(), {
       batchId: batch.id,
@@ -321,7 +380,7 @@ describe.skipIf(!process.env.DATABASE_URL)('the release TRANSACTION, against rea
      * shape of the real thing: the first write succeeded, the second did not.
      */
     const f = await scoredAttempt('GRADED');
-    const second = await scoredAttempt('GRADED');
+    const second = { attemptId: await classmate(f) };
     const batch = await prisma().releaseBatch.create({
       data: {
         id: randomUUID(),
@@ -331,6 +390,7 @@ describe.skipIf(!process.env.DATABASE_URL)('the release TRANSACTION, against rea
         members: { create: [{ attemptId: f.attemptId }, { attemptId: second.attemptId }] },
       },
     });
+    await startReleasing(batch.id);
 
     const real = prisma();
     let updates = 0;
@@ -381,9 +441,9 @@ describe.skipIf(!process.env.DATABASE_URL)('the release TRANSACTION, against rea
     ).rejects.toThrow(/injected failure/);
 
     const reloaded = await prisma().releaseBatch.findUniqueOrThrow({ where: { id: batch.id } });
-    // The batch must still be DRAFT. A released batch with unwritten members is the exact state INV-RELEASE-1 exists
-    // to make unrepresentable.
-    expect(reloaded.status).toBe('DRAFT');
+    // The batch must still be RELEASING -- where it was before the release was attempted, and NOT `RELEASED`. A
+    // released batch with unwritten members is the exact state INV-RELEASE-1 exists to make unrepresentable.
+    expect(reloaded.status).toBe('RELEASING');
     expect(reloaded.releasedAt).toBeNull();
 
     for (const attemptId of [f.attemptId, second.attemptId]) {

@@ -273,20 +273,128 @@ describe.skipIf(!DATABASE_URL)('P4-T6 roster read model, against real Postgres',
     const after = await listRoster(prisma(), r.owner, { classroomId: r.id });
     expect(byName(after, 'Graded')?.summary.latestReleasedPercentage).toBeNull();
 
-    await prisma().releaseBatch.create({
+    // P10-T1: a batch is BORN `DRAFT` and reaches `RELEASED` only by walking the machine -- migration `0014` refuses
+    // both an insert in any other status and any skipped step. This fixture used to insert the batch as `RELEASED`
+    // outright, which is a release that passed through no gate and never froze its membership.
+    const releasedBatch = await prisma().releaseBatch.create({
       data: {
         classroom: { connect: { id: r.id } },
         assignment: { connect: { id: releasedAssignment.id } },
-        status: 'RELEASED',
-        releasedAt: new Date('2026-09-26T09:00:00Z'),
+        status: 'DRAFT',
         members: { create: [{ attempt: { connect: { id: attempt.id } } }] },
       },
     });
+    for (const data of [
+      { status: 'READY' as const },
+      { status: 'RELEASING' as const },
+      { status: 'RELEASED' as const, releasedAt: new Date('2026-09-26T09:00:00Z') },
+    ]) {
+      await prisma().releaseBatch.update({ where: { id: releasedBatch.id }, data });
+    }
     const released = await listRoster(prisma(), r.owner, { classroomId: r.id });
     const row = byName(released, 'Graded');
     expect(row?.summary.latestReleasedPercentage).toBe(70);
     expect(row?.summary.latestReleasedLabel).toBe('70.0%');
     expect(row?.summary.releasedGrades).toBe(1);
+  });
+
+  /**
+   * THE CASE THAT LEAKED, AND IT NEEDS **TWO BATCHES ON THE SAME ASSIGNMENT**.
+   *
+   * The test above puts the withheld attempt on a DIFFERENT assignment, which is why the broken predicate passed
+   * it: the withheld assignment owned no released batch at all, so `some: { status: 'RELEASED' }` was correctly
+   * false for it. Every assertion in this file had that shape, and that shape is the one case the bug cannot
+   * distinguish from correct behaviour.
+   *
+   * Release is **per batch membership** (`plans/01` §10 -- membership is frozen on `RELEASING`, and a batch releases
+   * exactly its own members). So the revealing setup is: one assignment, two students, two batches. Student S's
+   * batch goes `RELEASED`; student T's stays `DRAFT`. T's attempt belongs to an assignment that now owns a released
+   * batch, so the assignment-scoped predicate read T's `finalScore`, `maxScore` and `percentage` and the roster row
+   * displayed them. `INV-RELEASE-2` says no score is *inferable* before release, and a percentage in a teacher's
+   * roster is about as inferable as it gets.
+   *
+   * It is also why this is not a crash and not a type error: the query is valid Prisma, the columns exist, and the
+   * row is only wrong when a second batch exists -- which is the normal state of any classroom releasing in more
+   * than one go.
+   */
+  it("a DRAFT batch on a RELEASED assignment withholds its own members' grades", async () => {
+    // NOT `const room = await room()`: the local shadows the fixture function for the rest of the block, which is a
+    // temporal-dead-zone error rather than anything informative.
+    const fixture = await room();
+    const releasedStudent = await addStudent(fixture.id, fixture.owner, 'Released');
+    const withheldStudent = await addStudent(fixture.id, fixture.owner, 'Withheld');
+    const shared = await publishedAssignment(fixture.id, fixture.ownerId);
+
+    const releasedAttempt = await prisma().examAttempt.create({
+      data: {
+        classroomId: fixture.id,
+        assignmentId: shared.id,
+        studentId: releasedStudent,
+        attemptNumber: 1,
+        status: 'GRADED',
+        finalScore: 9,
+        maxScore: 10,
+        percentage: 90,
+        submittedAt: new Date('2026-09-20T10:00:00Z'),
+      },
+    });
+    const withheldAttempt = await prisma().examAttempt.create({
+      data: {
+        classroomId: fixture.id,
+        assignmentId: shared.id,
+        studentId: withheldStudent,
+        attemptNumber: 1,
+        status: 'GRADED',
+        finalScore: 3,
+        maxScore: 10,
+        percentage: 30,
+        submittedAt: new Date('2026-09-20T10:00:00Z'),
+      },
+    });
+
+    // ONE assignment, TWO batches. Both are born `DRAFT` (migration `0014` refuses any other birth) and a member
+    // must belong to the batch's own assignment -- which they do, because it is shared. That is precisely what makes
+    // this legal and this leak possible.
+    const releasedBatch = await prisma().releaseBatch.create({
+      data: {
+        classroom: { connect: { id: fixture.id } },
+        assignment: { connect: { id: shared.id } },
+        status: 'DRAFT',
+        members: { create: [{ attempt: { connect: { id: releasedAttempt.id } } }] },
+      },
+    });
+    await prisma().releaseBatch.create({
+      data: {
+        classroom: { connect: { id: fixture.id } },
+        assignment: { connect: { id: shared.id } },
+        status: 'DRAFT',
+        members: { create: [{ attempt: { connect: { id: withheldAttempt.id } } }] },
+      },
+    });
+
+    // Walk only the FIRST batch to `RELEASED`. The second never moves, and its member must stay sealed.
+    for (const data of [
+      { status: 'READY' as const },
+      { status: 'RELEASING' as const },
+      { status: 'RELEASED' as const, releasedAt: new Date('2026-09-26T09:00:00Z') },
+    ]) {
+      await prisma().releaseBatch.update({ where: { id: releasedBatch.id }, data });
+    }
+
+    const page = await listRoster(prisma(), fixture.owner, { classroomId: fixture.id });
+
+    // The released member's grade IS shown.
+    expect(byName(page, 'Released')?.summary.latestReleasedPercentage).toBe(90);
+
+    // ⚠️ THE ASSERTION THAT WOULD HAVE FAILED. Before the fix this read 30, on the strength of the OTHER student's
+    // batch being released -- a fact about the assignment, not about this attempt.
+    const withheldRow = byName(page, 'Withheld');
+    expect(
+      withheldRow?.summary.latestReleasedPercentage,
+      'a DRAFT batch leaked a sealed grade',
+    ).toBeNull();
+    expect(withheldRow?.summary.latestReleasedLabel).toBeNull();
+    expect(withheldRow?.summary.releasedGrades).toBe(0);
   });
 
   it('the display name override is classroom-scoped and shown DISTINCTLY', async () => {

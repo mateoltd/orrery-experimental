@@ -20,8 +20,8 @@
  */
 
 import type { Duration, Millis } from '@orrery/clock';
-import { expiryVerdict } from '@orrery/contracts/policy/deadline';
 import type { ExamPolicy } from '@orrery/contracts/policy';
+import { expiryVerdict } from '@orrery/contracts/policy/deadline';
 
 /** What a question is doing right now. */
 export type QuestionState =
