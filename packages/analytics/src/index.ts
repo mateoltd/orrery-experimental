@@ -40,6 +40,18 @@ export {
   SPEARMAN_BROWN_MIN_K,
   spearmanBrown,
 } from './reliability.js';
+export type { ClusteringInput, SimilarityCluster, SimilarityEntry } from './similarity.js';
+export {
+  clusterByCompleteLinkage,
+  clusterCopy,
+  fingerprint,
+  jaccard,
+  MIN_CLUSTER_SIZE,
+  normalise,
+  SHINGLE_SIZE,
+  SIMILARITY_THRESHOLD,
+  shingle,
+} from './similarity.js';
 export type { Suppressed, SuppressibleStat } from './suppression.js';
 export {
   assertSuppressedByQueryLayer,

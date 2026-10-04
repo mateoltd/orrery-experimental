@@ -43,7 +43,34 @@ export default defineConfig({
         lines: 100,
         // The measured value. It moves when guards are added or removed, which is the point of writing it down: a
         // count that drifts UP means a guard stopped covering something.
-        branches: 94,
+        branches: 90,
+        functions: 100,
+        statements: 100,
+      },
+
+      /*
+       * `similarity.ts` at 100% lines/functions/statements and 75% branches, and all NINE gaps are the same construct:
+       * a `??` fallback on a Map or array access that the surrounding logic has already proven present.
+       *
+       *   225  `union === 0 ? 0 : ...` -- unreachable: the early return above catches both-empty, and union is at
+       *        least `max(a.size, b.size)` otherwise
+       *   279  `left.length === 0 || right.length === 0` -- `weakestAcross` is only called with non-empty clusters
+       *   283  `shingles.get(a) ?? new Set()`   -- every id came out of the same map
+       *   297  `clusters[i] ?? []`   -- i is a valid index in the loop that calls it
+       *   306  `clusters[best.left] ?? []`   -- `best` holds indices that were just read
+       *   312  `a[0] ?? ''`   -- clusters are never empty
+       *   317  `members.length < 2`   -- filtered to `MIN_CLUSTER_SIZE` (3) two lines above
+       *   322  `shingles.get(members[i] ?? '') ?? new Set()`   -- as 283
+       *   343  `prints.get(id) ?? ''`   -- as 283
+       *
+       * A cast would be worse on both counts, and `noNonNullAssertion` is banned by `plans/00` §6.2, so the
+       * fallbacks stay and the ceiling is written down. Reachable branches in this file are covered -- including the
+       * `weakestDistinctPair` bug this file's tests found, where the weakest pair compared every member with ITSELF
+       * and so always reported 1.
+       */
+      'src/similarity.ts': {
+        lines: 100,
+        branches: 75,
         functions: 100,
         statements: 100,
       },
