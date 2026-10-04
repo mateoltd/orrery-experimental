@@ -225,6 +225,12 @@ export function rankBiserial(outcomes: readonly ItemOutcome[]): number {
 /** The fraction of the upper/lower 27% by rest score, as `plans/08` §2.2 specifies. */
 export const UPPER_LOWER_FRACTION = 0.27;
 
+/** `plans/08` §3.2: rest-score `D` needs ">= 8 students in each 27% group", stated separately from the cohort floor. */
+export const DISCRIMINATION_MIN_GROUP = 8;
+
+/** `plans/08` §3.2's cohort floor for rest-score `D`. */
+export const DISCRIMINATION_MIN_N = 100;
+
 export interface DiscriminationResult {
   readonly pUpper: number;
   readonly pLower: number;
@@ -259,8 +265,17 @@ export function correctedD(outcomes: readonly ItemOutcome[]): DiscriminationResu
   const pUpper = rate(scorable.slice(n - groupSize));
   const pLower = rate(scorable.slice(0, groupSize));
 
-  // The minimum N from `plans/08` §3.1's spirit: a 27% split of 20 students is five in each group.
-  const isUnderpowered = n < 30;
+  /**
+   * TWO CONDITIONS, AND THE PLAN STATES BOTH.
+   *
+   * `plans/08` §3.2 gives rest-score `D` a floor of **100** and then, separately, "and >= 8 students in each 27% group".
+   * They are not the same condition: a cohort of 100 with a heavily skewed score distribution can still put fewer than
+   * eight students in the upper group, and then the "upper 27%" is a handful of people whose full-credit rate is being
+   * compared against another handful.
+   *
+   * The first version checked only `n < 30`, which was both the wrong number and the wrong KIND of number.
+   */
+  const isUnderpowered = n < DISCRIMINATION_MIN_N || groupSize < DISCRIMINATION_MIN_GROUP;
 
   if (pUpper + pLower === 0) {
     return {

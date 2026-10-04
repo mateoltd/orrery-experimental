@@ -171,6 +171,16 @@ export function cronbachAlpha(input: AlphaInput): AlphaResult {
 }
 
 /**
+ * THE FLOOR FOR A SPEARMAN–BROWN PREDICTION: `plans/08` §3.2's "Spearman-Brown prediction | 20 items".
+ *
+ * It is a form LENGTH rather than a cohort size, which is why it lives here and not in `SUPPRESSION_FLOORS` beside the
+ * sample-size floors -- and why predicting for a five-item form is refused rather than merely discouraged. A prediction
+ * from a short form is arithmetically fine and practically useless, because the projection assumes the added items
+ * behave like the ones measured.
+ */
+export const SPEARMAN_BROWN_MIN_K = 20;
+
+/**
  * SPEARMAN–BROWN: predicted reliability at a DIFFERENT form length.
  *
  * `SB(k') = (k' · r) / (1 + (k' - 1) · r)`.
@@ -185,6 +195,10 @@ export function spearmanBrown(alpha: number, newLength: number): number | null {
     // number that increases with length -- which is the opposite of what adding items does to a broken form.
     return null;
   }
-  if (!Number.isInteger(newLength) || newLength < 2) return null;
+  if (!Number.isInteger(newLength) || newLength < SPEARMAN_BROWN_MIN_K) {
+    // Refused rather than clamped: clamping to the floor would return the prediction FOR 20 ITEMS while the caller
+    // asked about a form of some other length, which is a number that answers a different question.
+    return null;
+  }
   return (newLength * alpha) / (1 + (newLength - 1) * alpha);
 }

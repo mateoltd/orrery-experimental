@@ -143,11 +143,20 @@ describe('Spearman–Brown, which §4.2 records was absent from the entire plan'
     expect(spearmanBrown(0.7, 40)).toBeGreaterThan(spearmanBrown(0.7, 20) ?? 0);
   });
 
+  it('refuses a form shorter than the plan’s 20 ITEMS rather than clamping to it', () => {
+    // `plans/08` §3.2 gives "Spearman-Brown prediction | 20 items". Clamping would return the prediction FOR 20 ITEMS
+    // while the caller asked about a different length, which is a number answering a different question.
+    for (const k of [2, 5, 19]) expect(spearmanBrown(0.7, k), String(k)).toBeNull();
+    expect(spearmanBrown(0.7, 20)).not.toBeNull();
+  });
+
   it('approaches 1 as the form grows, and never exceeds it', () => {
     fc.assert(
       fc.property(
         fc.double({ min: 0.05, max: 0.95, noNaN: true }),
-        fc.integer({ min: 2, max: 500 }),
+        // Starts at the plan's floor of 20 ITEMS: below it the function REFUSES, which is the behaviour the
+        // previous fixture was accidentally contradicting by generating lengths the function no longer answers for.
+        fc.integer({ min: 20, max: 500 }),
         (alpha, k) => {
           const predicted = spearmanBrown(alpha, k);
           return predicted !== null && predicted > alpha && predicted <= 1;
@@ -163,6 +172,11 @@ describe('Spearman–Brown, which §4.2 records was absent from the entire plan'
     expect(spearmanBrown(0, 20)).toBeNull();
     expect(spearmanBrown(-0.2, 20)).toBeNull();
     expect(spearmanBrown(1, 20)).toBeNull();
+  });
+
+  it('does NOT clamp a short form to the floor', () => {
+    // The property above now starts at 20, and this is why: below it the function refuses.
+    expect(spearmanBrown(0.8, 19)).toBeNull();
   });
 
   it('returns null for a form length that cannot exist', () => {

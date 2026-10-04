@@ -79,12 +79,30 @@ describe('the floors DIFFER, and the difference is reasoned', () => {
     // A proportion is stable early; a standardised moment is not. Using one floor for both means either suppressing too
     // much or publishing a correlation computed from thirty students.
     expect(SUPPRESSION_FLOORS.correlation).toBeGreaterThan(SUPPRESSION_FLOORS.facility);
-    expect(SUPPRESSION_FLOORS.distractor).toBeGreaterThanOrEqual(SUPPRESSION_FLOORS.discrimination);
   });
 
-  it('derives the correlation floor from the plan rather than re-typing 100', () => {
+  it('matches `plans/08` §3.2’s TABLE exactly, because the first version of this file invented its own numbers', () => {
+    /**
+     * Three floors were wrong: `facility` was 20 where the plan says 5, `discrimination` was 30 where the plan says
+     * 100, and `timing` was 5 where the plan says 10. The `discrimination` one is the serious error -- `D` is the index
+     * whose whole purpose is to split a cohort into 27% groups, so a floor of 30 published an index computed from eight
+     * students per group.
+     *
+     * Each wrong number came with a confident comment explaining why it was reasonable, which is what made it look
+     * deliberate. A number reasoned from first principles is not the number the authoritative document specifies.
+     */
+    expect(SUPPRESSION_FLOORS.facility).toBe(5);
     expect(SUPPRESSION_FLOORS.correlation).toBe(100);
+    expect(SUPPRESSION_FLOORS.discrimination).toBe(100);
     expect(SUPPRESSION_FLOORS.distractor).toBe(30);
+    expect(SUPPRESSION_FLOORS.timing).toBe(10);
+    expect(SUPPRESSION_FLOORS.lid).toBe(100);
+  });
+
+  it('does not treat a rank-biserial as needing less than an r_pb', () => {
+    // The plan gives them the SAME floor of 100, "same reasoning". Filing one lower would mean publishing one of a
+    // pair a teacher reads together with a different amount of evidence behind it.
+    expect(SUPPRESSION_FLOORS.correlation).toBe(100);
   });
 });
 

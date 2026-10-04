@@ -34,18 +34,36 @@ import { DISTRACTOR_MIN_N } from './distractors.js';
  * twice the cohort a proportion does. Using one floor for all of them means either suppressing too much or, far worse,
  * publishing a correlation computed from thirty students.
  */
+/**
+ * THE FLOORS ARE `plans/08` §3.2's TABLE, TRANSCRIBED.
+ *
+ * **THE FIRST VERSION OF THIS FILE INVENTED ITS OWN NUMBERS AND THREE OF THEM WERE WRONG.** It used `facility: 20`,
+ * `discrimination: 30` and `timing: 5`, each with a confident comment explaining why that number was reasonable. The
+ * plan's table says **5**, **100** and **10**. So a rest-score `D` computed from 30 students was published where the plan
+ * requires 100 -- and `D` is the index whose whole purpose is to split a cohort into 27% groups, so 30 students means
+ * eight per group, which is the condition the plan calls out separately.
+ *
+ * The lesson is the one PF-1 keeps teaching: a number reasoned from first principles is not the same as the number the
+ * authoritative document specifies, and when the two disagree the document wins. Reasoning in the comment was what made
+ * the wrong number look deliberate.
+ */
 export const SUPPRESSION_FLOORS = Object.freeze({
-  /** A proportion of a cohort. Stable early; 20 is enough to say something true. */
-  facility: 20,
-  /** `plans/08` §2.2: `r_pb` requires N >= 100. */
+  /** `plans/08` §3.2: "a proportion is readable early". */
+  facility: 5,
+  /** `r_pb`: "at N=30 a true r=0.30 has CI [−0.07, +0.60]". Rank-biserial shares the floor. */
   correlation: R_PB_MIN_N,
-  /** The upper/lower 27% split needs both groups populated, so the cohort floor is doubled. */
-  discrimination: 30,
-  /** `plans/08` §2.3: N >= 30 for any distractor flag. The original floor was 5. */
+  /** Rest-score `D`: 100, AND at least 8 students in each 27% group -- see `DISCRIMINATION_MIN_GROUP`. */
+  discrimination: 100,
+  /** `d_j`: "a difference of two proportions". */
   distractor: DISTRACTOR_MIN_N,
-  /** A median is stable early; this exists to exclude single-response items, not to enforce power. */
-  timing: 5,
+  /** "p90 is meaningless below this". */
+  timing: 10,
+  /** LID residual correlation: "at N=30 a 0.3 rule flags a quarter of all pairs by chance". */
+  lid: 100,
 });
+
+/** Re-exported so the split's two conditions can be read together with the floors they modify. */
+export { DISCRIMINATION_MIN_GROUP } from './discrimination.js';
 
 export type SuppressibleStat = keyof typeof SUPPRESSION_FLOORS;
 
