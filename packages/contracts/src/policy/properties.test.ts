@@ -590,12 +590,27 @@ describe('SHUFFLE — a permutation, deterministically, or NOT AT ALL', () => {
 
 describe('SHUFFLE SEEDS — injective, and refusing the ambiguous case', () => {
   it('gives different triples different seeds', () => {
+    /**
+     * **THIS PROPERTY WAS FALSE AS WRITTEN, AND WAS RED ROUGHLY HALF THE TIME.**
+     *
+     * It generated two random strings and asserted that swapping them between `studentId` and `attemptId` changes the
+     * seed. When `a === b` the two calls are the SAME triple, so the seeds are equal and the assertion is false.
+     * `fc.string()` draws from a space small enough -- lengths 1 to 6 -- that collisions were frequent, and the test
+     * passed or failed depending on the run's random seed. It had been intermittently red since P7-T8 and was written
+     * off as flakiness.
+     *
+     * The guard it did have -- skipping NUL -- addressed a real case. It was the missing `a !== b` that made the
+     * property untrue, and a property that is sometimes false is worse than no property: it trains everyone reading it
+     * to re-run a red suite rather than believe it.
+     */
     fc.assert(
       fc.property(
         fc.string({ minLength: 1, maxLength: 6 }),
         fc.string({ minLength: 1, maxLength: 6 }),
         (a, b) => {
           if (a.includes('\\u0000') || b.includes('\\u0000')) return true;
+          // The swap only produces a DIFFERENT triple when the two parts actually differ.
+          if (a === b) return true;
           return (
             shuffleSeedFor({ assignmentId: 'as', studentId: a, attemptId: b }) !==
             shuffleSeedFor({ assignmentId: 'as', studentId: b, attemptId: a })

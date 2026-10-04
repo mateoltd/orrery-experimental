@@ -147,6 +147,10 @@
     "./sim-manifest": {
       "types": "./dist/sim-manifest/index.d.ts",
       "default": "./dist/sim-manifest/index.js"
+    },
+    "./results/student-view": {
+      "types": "./dist/results/student-view.d.ts",
+      "default": "./dist/results/student-view.js"
     }
   },
   "scripts": {
