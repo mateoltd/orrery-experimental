@@ -130,6 +130,15 @@ export function facilityBand(
       };
     }
     if (pFull > 0.7) return { band: 'HEALTHY', reading: 'healthy', action: '' };
+    /**
+     * THE 0.50-0.70 BAND, which the plan's table gives as "healthy" in BOTH columns.
+     *
+     * The formative branch was missing it, so a formative item at `pFull = 0.6` reported "hard" -- telling a teacher
+     * their teaching material was too difficult when the plan says that band is healthy for formative use. The
+     * difference between the two purposes is ONLY the top band; below it they are the same table, and the first
+     * version treated them as different all the way down.
+     */
+    if (pFull > 0.5) return { band: 'HEALTHY', reading: 'healthy', action: '' };
     if (pFull > 0.3) {
       return {
         band: 'HARD',

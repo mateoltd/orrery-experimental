@@ -21,5 +21,12 @@ export type { DistractorAnalysis, DistractorObservation } from './distractors.js
 export { analyseDistractors, DISTRACTOR_MIN_N } from './distractors.js';
 export type { FacilityBand, FacilityResult, ScoredResponse } from './facility.js';
 export { facility, facilityBand } from './facility.js';
+export type { Suppressed, SuppressibleStat } from './suppression.js';
+export {
+  assertSuppressedByQueryLayer,
+  SUPPRESSION_FLOORS,
+  suppress,
+  suppressReport,
+} from './suppression.js';
 export type { TimeInput, TimeOnItem } from './time-on-item.js';
 export { median, timeOnItem } from './time-on-item.js';

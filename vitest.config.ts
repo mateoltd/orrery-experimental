@@ -105,6 +105,40 @@ export default defineConfig({
           statements: 100,
         },
         /**
+         * `@orrery/analytics`, at 100% branch, per `plans/08` §9.
+         *
+         * "A statistics bug produces a wrong number that looks exactly as trustworthy as a right one." That is the
+         * whole argument for this floor: the output of this package is a decimal that a teacher acts on, there is no
+         * crash to notice, and the failure mode is indistinguishable from a real finding at a glance. Every uncovered
+         * branch here is an untested way of being wrong about that decimal.
+         */
+        'packages/analytics/src/**/*.ts': {
+          lines: 100,
+          branches: 100,
+          functions: 100,
+          statements: 100,
+        },
+        /**
+         * `time-on-item.ts` at 100% lines and 91.66% branches, and the three missing branches are all the SAME
+         * construct: `?? null` on an array access that a preceding length check has already proven in range.
+         *
+         * `noUncheckedIndexedAccess` makes `sorted[middle]` a `number | undefined`, so SOMETHING has to handle the
+         * undefined case. The two options are the nullish fallback -- a branch no test can ever reach, because the
+         * guard above it means the undefined side is unreachable -- or an `as number` cast, which is worse: it asserts
+         * a fact to the compiler instead of handling the case, and it is the kind of assertion that becomes a lie the
+         * moment the guard above it is edited.
+         *
+         * So the fallback stays and the threshold records the exact ceiling rather than being gamed with a coverage
+         * ignore, which would suppress real gaps in this file along with the two unreachable ones. Every OTHER branch
+         * in the package is at 100%.
+         */
+        'packages/analytics/src/time-on-item.ts': {
+          lines: 100,
+          branches: 92,
+          functions: 100,
+          statements: 100,
+        },
+        /**
          * The `testGrader` harness, at 100% because it is the one surface an author TRUSTS.
          *
          * `grade` is allowed to be terse about why it refused -- a code and a flag are right for a program. The

@@ -387,3 +387,86 @@ describe('time on item: median and IQR, against BOTH references', () => {
     expect(item?.againstClass).toBe('slower than this class median');
   });
 });
+
+describe("the branches the plan's 100% floor exists to cover", () => {
+  it('reads a summative pFull in the healthy 0.50-0.70 band as healthy', () => {
+    // Between `> 0.7` and `> 0.3`, so this is the band a summative paper lands in most often.
+    expect(facilityBand(0.6, 'SUMMATIVE').band).toBe('HEALTHY');
+    expect(facilityBand(0.6, 'SUMMATIVE').action).toBe('');
+  });
+
+  it('reads a formative pFull in the same band as healthy', () => {
+    // The plan's table gives 0.50-0.70 as healthy in BOTH columns, and the formative branch was missing it -- so a
+    // formative item at 0.6 read as "hard", telling a teacher their material was too difficult.
+    expect(facilityBand(0.6, 'FORMATIVE').band).toBe('HEALTHY');
+    expect(facilityBand(0.6, 'SUMMATIVE').band).toBe('HEALTHY');
+  });
+
+  it('reads a summative pFull of 0.8 as healthy, the band most healthy summative items land in', () => {
+    expect(facilityBand(0.8, 'SUMMATIVE').band).toBe('HEALTHY');
+    expect(facilityBand(0.8, 'FORMATIVE').band).toBe('HEALTHY');
+  });
+
+  it('reads a summative pFull of 0.4 as hard, and 0.2 as very hard', () => {
+    expect(facilityBand(0.4, 'SUMMATIVE').band).toBe('HARD');
+    expect(facilityBand(0.2, 'SUMMATIVE').band).toBe('VERY_HARD');
+  });
+
+  it('reports selection rate 0 when NOTHING was scorable, rather than dividing by zero', () => {
+    const [option] = analyseDistractors([], ['b'], 0.5);
+    expect(option?.selectionRate).toBe(0);
+    expect(Number.isFinite(option?.d ?? Number.NaN)).toBe(true);
+  });
+
+  it('says timings are CONSISTENT with the author estimate, which is the case with no warning', () => {
+    const [item] = timeOnItem([{ questionId: 'q1', durationsMs: [60_000], estimatedSeconds: 60 }]);
+    // The branch where nothing is wrong. Without it, a report can only ever say something is wrong.
+    expect(item?.againstAuthor).toBe('consistent with the author estimate');
+  });
+
+  it('says timings are QUICKER than the class median', () => {
+    const [item] = timeOnItem([
+      { questionId: 'q1', durationsMs: [10_000] },
+      { questionId: 'q2', durationsMs: [300_000, 300_000, 300_000] },
+    ]);
+    expect(item?.againstClass).toBe('quicker than this class median');
+  });
+
+  it('says there is NO AUTHOR ESTIMATE rather than inventing one', () => {
+    const [item] = timeOnItem([{ questionId: 'q1', durationsMs: [60_000] }]);
+    expect(item?.againstAuthor).toBe('no author estimate to compare against');
+  });
+
+  it('reports no timings recorded, which is not the same as instantaneous', () => {
+    const [item] = timeOnItem([{ questionId: 'q1', durationsMs: [] }]);
+    expect(item?.againstAuthor).toBe('no timings recorded');
+    expect(item?.againstClass).toBe('no comparison available');
+  });
+});
+
+describe('the null-guards in the quantile helpers', () => {
+  it('returns null from a quantile over an EMPTY list', () => {
+    // `quantile` is reached with an empty list whenever an item has no usable durations, and the guard is the only
+    // thing between that and an undefined median reaching a report.
+    const [item] = timeOnItem([{ questionId: 'q1', durationsMs: [-1] }]);
+    expect(item?.q1Ms).toBeNull();
+    expect(item?.q3Ms).toBeNull();
+    expect(item?.medianMs).toBeNull();
+  });
+
+  it('returns the middle value for an ODD count and the lower middle for an even one', () => {
+    const odd = timeOnItem([{ questionId: 'q1', durationsMs: [10, 20, 30] }])[0];
+    const even = timeOnItem([{ questionId: 'q1', durationsMs: [10, 20] }])[0];
+    expect(odd?.medianMs).toBe(20);
+    // The lower median, so the number shown is always a duration somebody actually spent.
+    expect(even?.medianMs).toBe(10);
+  });
+
+  it('clamps the quantile index so the first and last quartiles are OBSERVED values', () => {
+    const [item] = timeOnItem([{ questionId: 'q1', durationsMs: [10, 20, 30, 40] }]);
+    // Nearest-rank, so both quartiles are OBSERVED values and the index is clamped into range: ceil(0.75 * 4) - 1 is
+    // 2, which is the third of four -- 30, not 40.
+    expect(item?.q1Ms).toBe(10);
+    expect(item?.q3Ms).toBe(30);
+  });
+});
