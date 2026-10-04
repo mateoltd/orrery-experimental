@@ -165,9 +165,7 @@ export type ClaimRefusal =
   /** Already graded, so there is nothing to claim. */
   | 'ALREADY_DONE'
   /** Soft locks are not transferable by the queue; releasing is a separate, deliberate act. */
-  | 'CLAIM_EXPIRED'
-  /** The attempt itself is finished, so grading it would be meaningless. */
-  | 'ATTEMPT_NOT_GRADABLE';
+  | 'CLAIM_EXPIRED';
 
 export type ClaimOutcome =
   | { readonly ok: true; readonly entry: ReviewQueueEntry }
@@ -222,16 +220,25 @@ export const canClaim = (entry: ReviewQueueEntry, graderId: string): ClaimOutcom
     };
   }
 
-  // A terminated or abandoned attempt can still be awaiting review, and grading it produces a score nobody will read.
-  if (entry.attemptStatus === 'TERMINATED' || entry.attemptStatus === 'ABANDONED') {
-    return {
-      ok: false,
-      reason: 'ATTEMPT_NOT_GRADABLE',
-      message: `this attempt is ${entry.attemptStatus}, so there is nothing to grade`,
-      heldBy: null,
-    };
-  }
-
+  /**
+   * THE DEAD BRANCH THAT WAS HERE, AND WHY IT IS NOT SIMPLY RESTORED SOMEWHERE ELSE.
+   *
+   * This refused `TERMINATED` and `ABANDONED`, on the reasoning that grading them "produces a score nobody will
+   * read". Neither status can occur: `V-12` removed `TERMINATED` from `AttemptStatus` in P8-T11, and `ABANDONED` was
+   * never in the Prisma schema at all -- so the guard was standing in front of nothing, and a frozen attempt was
+   * being waved through it by accident rather than by decision.
+   *
+   * **A FROZEN ATTEMPT MUST BE CLAIMABLE, AND THAT IS THE POINT OF THE CORRECTION.** `V-12` exists because the old
+   * termination discarded unwritten work; the freeze that replaced it submits what was written and sends the attempt
+   * to a teacher precisely so that a human decides. A guard that made frozen attempts unclaimable would reinstate the
+   * original bug with better manners -- the student's written answers would sit in a queue nobody can reach, which is
+   * the same lost grade by a different route.
+   *
+   * So there is deliberately NO branch here. The finding is that the one that existed tested two statuses that
+   * cannot occur, and a `FROZEN` check that returned the same value as falling through would be a comment pretending
+   * to be a constraint. `ATTEMPT_NOT_GRADABLE` is removed from `ClaimRefusal` with it, because an unused refusal
+   * reason in a union is a promise the code no longer keeps.
+   */
   return { ok: true, entry };
 };
 

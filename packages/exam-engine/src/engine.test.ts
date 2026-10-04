@@ -93,7 +93,7 @@ describe('the escalation rung', () => {
   it('does not escalate when nothing is breached', () => {
     const verdict = evaluateEscalation({ counts: {}, thresholds: thresholds(), ladder: LADDER });
     expect(verdict.rung).toBe('NONE');
-    expect(verdict.isTerminal).toBe(false);
+    expect(verdict.freezesAttempt).toBe(false);
   });
 
   it('escalates by the NUMBER OF DISTINCT KINDS, so three behaviours outrank one repeated five times', () => {
@@ -156,12 +156,13 @@ describe('the escalation rung', () => {
       }),
       ladder: LADDER,
     });
-    expect(verdict.rung).toBe('TERMINATE');
-    expect(verdict.isTerminal).toBe(true);
+    expect(verdict.rung).toBe('FREEZE_AND_SUBMIT');
+    expect(verdict.freezesAttempt).toBe(true);
   });
 
-  it('stops at the top of a ladder that does not include `TERMINATE`', () => {
-    // A policy with three rungs must not terminate a student just because it ran out of rungs.
+  it('stops at the top of a ladder that does not include the freeze rung', () => {
+    // A policy with two rungs must not freeze a student just because it ran out of rungs -- and it must never
+    // terminate one at all, because there is no `TERMINATE` to reach.
     const verdict = evaluateEscalation({
       counts: { fullscreenExit: 9, tabHide: 9, focusLoss: 9, pointerLockLoss: 9, copyAttempt: 9 },
       thresholds: thresholds({
@@ -174,7 +175,7 @@ describe('the escalation rung', () => {
       ladder: ['WARN', 'REQUIRE_RELOCK'],
     });
     expect(verdict.rung).toBe('REQUIRE_RELOCK');
-    expect(verdict.isTerminal).toBe(false);
+    expect(verdict.freezesAttempt).toBe(false);
   });
 
   it('names WHICH kinds were responsible', () => {
@@ -188,8 +189,8 @@ describe('the escalation rung', () => {
   });
 
   it('`maxRung` never softens an outcome, so merging evidence cannot lower a sanction', () => {
-    expect(maxRung('WARN', 'TERMINATE')).toBe('TERMINATE');
-    expect(maxRung('TERMINATE', 'WARN')).toBe('TERMINATE');
+    expect(maxRung('WARN', 'FREEZE_AND_SUBMIT')).toBe('FREEZE_AND_SUBMIT');
+    expect(maxRung('FREEZE_AND_SUBMIT', 'WARN')).toBe('FREEZE_AND_SUBMIT');
     expect(maxRung('NONE', 'NONE')).toBe('NONE');
     // `NONE` sits below `WARN`, so a policy cannot escalate to it by accident.
     expect(rungIndex('NONE')).toBeLessThan(rungIndex('WARN'));

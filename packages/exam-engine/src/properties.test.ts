@@ -128,7 +128,7 @@ describe('PROPERTY: the rung is always one the policy actually offers', () => {
   it('never returns a rung absent from the ladder, and reserves `NONE` for no-breach OR an empty ladder', () => {
     /**
      * `ladder[depth - 1]` on an empty or short ladder is the classic source of a sanction nobody configured -- an
-     * `undefined` rung, or a `TERMINATE` a policy deliberately left out. Termination ends an attempt, so a policy
+     * `undefined` rung, or a freeze rung a policy deliberately left out. Termination ends an attempt, so a policy
      * must never reach it by accident.
      */
     fc.assert(
@@ -146,13 +146,13 @@ describe('PROPERTY: the rung is always one the policy actually offers', () => {
     );
   });
 
-  it('terminates ONLY when the ladder includes `TERMINATE`', () => {
+  it('freezes ONLY when the ladder includes `FREEZE_AND_SUBMIT`', () => {
     fc.assert(
       fc.property(escalationInputArb, (input) => {
         const verdict = evaluateEscalation(input);
         return (
-          verdict.isTerminal ===
-          (verdict.rung === 'TERMINATE' && input.ladder.includes('TERMINATE'))
+          verdict.freezesAttempt ===
+          (verdict.rung === 'FREEZE_AND_SUBMIT' && input.ladder.includes('FREEZE_AND_SUBMIT'))
         );
       }),
       { numRuns: 300 },

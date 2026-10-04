@@ -1092,7 +1092,11 @@ enum AttemptStatus {
   FROZEN
   SUBMITTED
   EXPIRED
-  TERMINATED
+  // P8-T11, V-12: TERMINATED is GONE, not deprecated. The V-12/C16 correction added FROZEN and left TERMINATED
+  // beside it, so both were reachable and the irreversible one was still the shorter path for any caller. FROZEN
+  // submits what was WRITTEN and a teacher can reinstate with a recorded reason; TERMINATED submitted "held
+  // answers" and so discarded every unwritten item irreversibly. An attempt status is a REACHABLE FUTURE STATE, so
+  // the unusable one is removed rather than left as a trap.
   PENDING_REVIEW
   GRADED
   RELEASED
@@ -1231,6 +1235,12 @@ enum AttemptEventType {
   GRADED
   RELEASED
   REGRADED
+  // P8-T11, V-12: TERMINATED is kept HERE and removed from `AttemptStatus`, and the difference is deliberate.
+  //
+  // `AttemptStatus` is a set of REACHABLE FUTURE STATES, so an unusable one is a trap and goes. `AttemptEventType` is
+  // the vocabulary of an APPEND-ONLY HISTORY: rows written before the correction still say TERMINATED, and deleting
+  // the member would make that history unreadable -- which is how a correction quietly becomes unreviewable. What the
+  // enum cannot do is cause a termination, because no writer transitions an attempt there any more.
   TERMINATED
   REINSTATED
   FROZEN

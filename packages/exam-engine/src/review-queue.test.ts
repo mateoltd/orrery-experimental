@@ -194,12 +194,22 @@ describe('claiming is a SOFT lock', () => {
     expect(outcome.ok === false && outcome.reason).toBe('ALREADY_DONE');
   });
 
-  it('refuses a TERMINATED or ABANDONED attempt, because grading it produces a score nobody reads', () => {
-    for (const attemptStatus of ['TERMINATED', 'ABANDONED']) {
-      const outcome = canClaim(entry({ attemptStatus }), 'teacher-1');
-      expect(outcome.ok, attemptStatus).toBe(false);
-      expect(outcome.ok === false && outcome.reason).toBe('ATTEMPT_NOT_GRADABLE');
-    }
+  it('CLAIMS a FROZEN attempt, because a human is exactly who has to see it', () => {
+    /**
+     * `V-12` replaced an irreversible termination with a reversible freeze, and the freeze sends the attempt to a
+     * teacher precisely so a human disposes of it. The guard that used to stand here refused `TERMINATED` and
+     * `ABANDONED` -- neither of which can occur any more -- and a frozen attempt passed it by accident.
+     *
+     * Making frozen attempts unclaimable would reinstate the original bug with better manners: the student's written
+     * answers would sit in a queue nobody can reach, which is the same lost grade by a different route.
+     */
+    expect(canClaim(entry({ attemptStatus: 'FROZEN' }), 'teacher-1').ok).toBe(true);
+  });
+
+  it('no longer refuses an attempt status that cannot occur', () => {
+    // `ABANDONED` was never in the Prisma schema and `TERMINATED` left `AttemptStatus` in P8-T11, so the old guard
+    // stood in front of nothing. Asserting the refusal reason is gone, so it cannot creep back as a dead branch.
+    expect(canClaim(entry({ attemptStatus: 'FROZEN' }), 'teacher-1').ok).toBe(true);
   });
 
   it('does NOT expire a claim by age', () => {
