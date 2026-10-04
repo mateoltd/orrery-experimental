@@ -45,13 +45,20 @@ type ThresholdKey =
   | 'pointerLockLosses'
   | 'copyAttempts';
 
-const THRESHOLD_KEY: Readonly<Record<ViolationKind, ThresholdKey>> = Object.freeze({
-  fullscreenExit: 'fullscreenExits',
-  focusLoss: 'focusLosses',
-  tabHide: 'tabHides',
-  pointerLockLoss: 'pointerLockLosses',
-  copyAttempt: 'copyAttempts',
-});
+/**
+ * EXPORTED so a test can assert the map covers the schema rather than re-deriving it.
+ *
+ * A threshold added to `ExamPolicy` and forgotten here is SILENTLY unpoliced -- the lookup yields `undefined`, which
+ * this module reads as "not policed", so the omission raises nothing at all.
+ */
+export const THRESHOLD_KEYS_FOR_KINDS: Readonly<Record<ViolationKind, ThresholdKey>> =
+  Object.freeze({
+    fullscreenExit: 'fullscreenExits',
+    focusLoss: 'focusLosses',
+    tabHide: 'tabHides',
+    pointerLockLoss: 'pointerLockLosses',
+    copyAttempt: 'copyAttempts',
+  });
 
 /** How many of each kind have been observed. Absent means zero; a count is never negative. */
 export type ViolationCounts = Partial<Record<ViolationKind, number>>;
@@ -110,7 +117,7 @@ export const classifyBreaches = (input: EscalationInput): BreachReport => {
   let worstOvershoot = 0;
 
   for (const kind of ALL_KINDS) {
-    const threshold = input.thresholds[THRESHOLD_KEY[kind]];
+    const threshold = input.thresholds[THRESHOLD_KEYS_FOR_KINDS[kind]];
     const count = Math.max(0, input.counts[kind] ?? 0);
 
     if (threshold === null || threshold === undefined) {
