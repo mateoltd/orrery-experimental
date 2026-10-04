@@ -28,3 +28,13 @@ export {
   maxRung,
   rungIndex,
 } from './escalation.js';
+export type {
+  PreflightReport,
+  PreflightVerdict,
+  QuestionDeadlineDto,
+  Relaxation,
+  SessionCheck,
+  SessionFacts,
+  SessionRefusal,
+} from './session.js';
+export { buildSyncPayload, checkSession, evaluatePreflight } from './session.js';

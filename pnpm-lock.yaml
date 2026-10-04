@@ -240,6 +240,9 @@ importers:
         specifier: workspace:*
         version: link:../contracts
     devDependencies:
+      '@orrery/interop':
+        specifier: workspace:*
+        version: link:../interop
       fast-check:
         specifier: 3.23.2
         version: 3.23.2
