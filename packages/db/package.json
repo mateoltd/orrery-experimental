@@ -133,6 +133,10 @@
     "./run-exclusive": {
       "types": "./dist/run-exclusive.d.ts",
       "default": "./dist/run-exclusive.js"
+    },
+    "./receipt-issue": {
+      "types": "./dist/receipt-issue.d.ts",
+      "default": "./dist/receipt-issue.js"
     }
   },
   "scripts": {
