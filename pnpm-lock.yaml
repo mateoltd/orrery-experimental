@@ -153,6 +153,10 @@ importers:
         version: link:../../packages/db
 
   packages/analytics:
+    dependencies:
+      '@orrery/contracts':
+        specifier: workspace:*
+        version: link:../contracts
     devDependencies:
       fast-check:
         specifier: 3.23.2

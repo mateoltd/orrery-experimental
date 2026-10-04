@@ -151,6 +151,10 @@
     "./results/student-view": {
       "types": "./dist/results/student-view.d.ts",
       "default": "./dist/results/student-view.js"
+    },
+    "./policy/shuffle": {
+      "types": "./dist/policy/shuffle.d.ts",
+      "default": "./dist/policy/shuffle.js"
     }
   },
   "scripts": {

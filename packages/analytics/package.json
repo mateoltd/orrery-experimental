@@ -20,5 +20,8 @@
   },
   "devDependencies": {
     "fast-check": "3.23.2"
+  },
+  "dependencies": {
+    "@orrery/contracts": "workspace:*"
   }
 }

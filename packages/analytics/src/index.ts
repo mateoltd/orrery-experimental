@@ -61,3 +61,9 @@ export {
 } from './suppression.js';
 export type { TimeInput, TimeOnItem } from './time-on-item.js';
 export { median, timeOnItem } from './time-on-item.js';
+export type {
+  AuditSummary,
+  VariantAuditFinding,
+  VariantDrawRecord,
+} from './variant-audit.js';
+export { auditVariantCohort, auditVariantDraw } from './variant-audit.js';
