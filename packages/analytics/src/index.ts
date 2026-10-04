@@ -42,6 +42,15 @@ export {
   SPEARMAN_BROWN_MIN_K,
   spearmanBrown,
 } from './reliability.js';
+export type {
+  Freshness,
+  Invalidation,
+  InvalidationReason,
+  Rollup,
+  RollupState,
+  Served,
+} from './rollups.js';
+export { emptyRollup, freshness, invalidate, recompute, serve } from './rollups.js';
 export type { ClusteringInput, SimilarityCluster, SimilarityEntry } from './similarity.js';
 export {
   clusterByCompleteLinkage,
