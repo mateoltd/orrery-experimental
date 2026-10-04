@@ -14,6 +14,7 @@
  *    nothing.
  */
 import { describe, expect, it } from 'vitest';
+import type { ExamPolicy } from './index.js';
 import {
   EXAM_PROFILE_DEFAULTS,
   extraTimePercent,
@@ -274,5 +275,99 @@ describe('exam policy', () => {
     // would be found by a teacher at the worst possible moment.
     expect(validatePolicy(EXAM_PROFILE_DEFAULTS)).toEqual([]);
     expect(validatePolicy(QUIZ_PROFILE_DEFAULTS)).toEqual([]);
+  });
+});
+
+/**
+ * INV-POLICY-1: THE FREEZE MUST BE DEEP, AND THE BUG WAS ALWAYS ABOUT DEPTH.
+ *
+ * The first `freezePolicy` called `Object.freeze` once and a test caught `policy.thresholds` still being writable, so
+ * it was extended to freeze `thresholds` and `escalation` by name. That fixed the reported case and left the identical
+ * bug one level deeper: `availabilityWindow` is a nullable nested object and was never frozen, so
+ * `policy.availabilityWindow.from = <anything>` mutated a snapshot that the plan says cannot change.
+ *
+ * Enumerating fields by hand is what allowed that -- a hand-written freeze covers the fields someone thought of, and a
+ * schema field added later is silently left mutable. These tests assert on the SHAPE rather than on a field list, so a
+ * new nested field is covered without being named.
+ */
+describe('INV-POLICY-1: the snapshot is frozen all the way down', () => {
+  const withWindow = (): ExamPolicy =>
+    freezePolicy({
+      ...resolvePolicy({ mode: 'EXAM' }),
+      availabilityWindow: { from: '2026-01-01T00:00:00.000Z', until: '2026-01-02T00:00:00.000Z' },
+    });
+
+  it('freezes the top level', () => {
+    expect(Object.isFrozen(withWindow())).toBe(true);
+  });
+
+  it('freezes `thresholds`, which the original shallow version missed', () => {
+    expect(Object.isFrozen(withWindow().thresholds)).toBe(true);
+  });
+
+  it('freezes `availabilityWindow`, which the NAMED version missed', () => {
+    // The regression this whole block exists for.
+    expect(Object.isFrozen(withWindow().availabilityWindow)).toBe(true);
+  });
+
+  it('freezes the `escalation` array', () => {
+    expect(Object.isFrozen(withWindow().escalation)).toBe(true);
+  });
+
+  it('REFUSES a write to every nested object, in strict mode', () => {
+    const policy = withWindow();
+    // Each of these would silently succeed against a shallow freeze, and a mutated snapshot is a score nobody can
+    // explain because the audit compares against the very thing that was edited.
+    expect(() => {
+      (policy.thresholds as unknown as Record<string, number>).fullscreenExits = 0;
+    }).toThrow(TypeError);
+    expect(() => {
+      (policy.availabilityWindow as unknown as Record<string, string>).from =
+        '1999-01-01T00:00:00.000Z';
+    }).toThrow(TypeError);
+    expect(() => {
+      (policy as unknown as Record<string, unknown>).totalTimeLimitSec = 999_999;
+    }).toThrow(TypeError);
+    // And nothing actually moved.
+    expect(policy.availabilityWindow?.from).toBe('2026-01-01T00:00:00.000Z');
+  });
+
+  it('handles a NULL `availabilityWindow` without throwing', () => {
+    // The deep walk must not assume the nullable fields are present. A walker that assumed would turn a perfectly
+    // ordinary policy with no window into an exception at the worst possible moment.
+    const noWindow = freezePolicy({ ...resolvePolicy({ mode: 'EXAM' }), availabilityWindow: null });
+    expect(Object.isFrozen(noWindow)).toBe(true);
+    expect(noWindow.availabilityWindow).toBeNull();
+  });
+
+  it('repairs a policy that is ALREADY frozen at the top but not inside', () => {
+    /**
+     * `resolvePolicy` returns a top-level-frozen policy whose `escalation` is not itself frozen, so a freeze that
+     * trusts `Object.isFrozen` as its "already handled" signal returns on the first line and never repairs the
+     * interior. "Already frozen" and "already visited" are different facts, and only the second one means stop.
+     */
+    const shallow = Object.freeze({
+      ...resolvePolicy({ mode: 'EXAM' }),
+      thresholds: { ...resolvePolicy({ mode: 'EXAM' }).thresholds },
+    });
+    expect(Object.isFrozen(shallow)).toBe(true);
+    expect(Object.isFrozen(shallow.thresholds)).toBe(false);
+    const repaired = freezePolicy(shallow);
+    expect(Object.isFrozen(repaired.thresholds)).toBe(true);
+  });
+
+  it('freezes what `readPolicySnapshot` returns too, not just what `freezePolicy` is handed', () => {
+    // A snapshot read back from storage is the one that is actually trusted at grading time, so this is the one that
+    // matters most. It was already routed through `freezePolicy`; this pins that it stays that way.
+    const stored = JSON.parse(
+      JSON.stringify({
+        ...resolvePolicy({ mode: 'EXAM' }),
+        availabilityWindow: { from: 'a', until: 'b' },
+      }),
+    ) as unknown;
+    const read = readPolicySnapshot(stored);
+    expect(read).not.toBeNull();
+    expect(Object.isFrozen(read)).toBe(true);
+    expect(Object.isFrozen(read?.availabilityWindow)).toBe(true);
   });
 });

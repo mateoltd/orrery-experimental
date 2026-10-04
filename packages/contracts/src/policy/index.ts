@@ -463,17 +463,51 @@ export function isPublishable(problems: readonly PolicyProblem[]): boolean {
 }
 
 /**
+ * RECURSIVE FREEZE, because the shallow version was wrong in a way that only showed up on audit.
+ *
+ * `Object.freeze` is shallow. This function applied it to the policy, to `thresholds` and to `escalation`, and the
+ * `thresholds` half came from a test that caught `policy.thresholds.fullscreenExits = 0` still going through. The
+ * same bug was then left sitting one level deeper: `availabilityWindow` is a nullable nested object, it was never
+ * frozen at all, and `policy.availabilityWindow.from = <anything>` mutated a snapshot that INV-POLICY-1 says cannot
+ * change. A frozen shell with a mutable interior is not a snapshot.
+ *
+ * Hand-written freezing is how that happened -- it enumerates the fields that were thought of, and a schema field
+ * added later is silently left mutable. So this walks the value instead. The cost is that it also freezes anything
+ * reachable from the policy, which for `ExamPolicy` is exactly the intent: nothing reachable from a snapshot should
+ * be writable.
+ */
+function deepFreeze<T>(value: T, seen: Set<object> = new Set()): T {
+  if (value === null || typeof value !== 'object') return value;
+
+  // `seen` is the cycle guard, and it is NOT `Object.isFrozen`.
+  //
+  // The first version of this function used `Object.isFrozen(value)` as its "already handled" check, which is wrong:
+  // `resolvePolicy` returns an ALREADY-FROZEN policy whose `escalation` array is not itself frozen, so the walk
+  // returned on the first line, never reached `escalation`, and left it mutable. The pre-existing test
+  // `a FROZEN policy is frozen all the way down` caught it -- which is the argument for keeping that test.
+  //
+  // "Already frozen" and "already visited" are different facts. Only the second one means stop.
+  const node = value as unknown as object;
+  if (seen.has(node)) return value;
+  seen.add(node);
+
+  // Children are walked whether or not the parent is frozen, so a frozen shell with a mutable interior is repaired
+  // rather than trusted.
+  for (const child of Object.values(value as Record<string, unknown>)) {
+    deepFreeze(child, seen);
+  }
+  return Object.freeze(value);
+}
+
+/**
  * Freeze for storage, and normalise the thresholds.
  *
- * `Object.freeze` is shallow, so it is applied twice: a frozen policy with a mutable
- * `thresholds` object is a frozen shell, and INV-POLICY-1 is about a snapshot that cannot
- * change. The first version froze once and a test caught that `policy.thresholds.fullscreenExits
- * = 0` still went through.
+ * INV-POLICY-1: once an attempt exists, its `policySnapshot` never changes. Mid-exam changes go through audited
+ * `DEADLINE_EXTENDED` / `POLICY_OVERRIDDEN` events, never a silent rewrite -- and a rewrite here would be invisible
+ * in the audit trail, because the snapshot is what the audit compares against.
  */
 export function freezePolicy(policy: ExamPolicy): ExamPolicy {
-  Object.freeze(policy.thresholds);
-  Object.freeze(policy.escalation);
-  return Object.freeze(policy);
+  return deepFreeze(policy);
 }
 
 /** Parse a stored snapshot, denying rather than throwing: a corrupt snapshot is not a page. */
