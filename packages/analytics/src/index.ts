@@ -5,6 +5,8 @@
  * that was wrong in a way that would have produced a confident, misleading number.
  */
 
+export type { AppliedItem, Caveat, CaveatId, LabelledItem, ReportFacts } from './caveats.js';
+export { applicableCaveats, apply, CAVEATS, FLAG_COPY, indexLabel } from './caveats.js';
 export type { CorrelationWithCi, DiscriminationResult, ItemOutcome } from './discrimination.js';
 export {
   ACCEPTANCE_FLOOR,
