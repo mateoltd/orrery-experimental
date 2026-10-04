@@ -1,0 +1,4 @@
+{
+  "$comment": "The authority for P10-T8's generated audit. Every student-facing route must appear here with an explicit scoreFree decision and a reason. scripts/audit-routes.mjs fails on anything unlisted, and on anything listed that no longer exists. There are currently no student-facing routes: P10-T8 could not be written until the API surface existed, and that is recorded on the tracker row rather than glossed.",
+  "routes": []
+}
