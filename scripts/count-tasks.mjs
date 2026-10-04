@@ -35,11 +35,22 @@ const SOURCES = [
 ];
 
 /** A row is a task if it starts with a task id in the first cell. Struck-through = deferred. */
+/**
+ * A task id may carry a LETTER SUFFIX, and the original pattern did not allow one.
+ *
+ * `P(\d+)-T(\d+)` followed by `\s*~*\s*\|` matches `P8-T9` and silently skips `P8-T9b`, because the `|` never
+ * arrives after the digits. So every letter-suffixed task was invisible to this gate: not counted in the total, not
+ * checked for continuity, and -- the part that actually cost something -- **not required to appear in the tracker.**
+ *
+ * There are three: `P2-T1b`, `P2-T12b` and `P8-T9b`. Two of them have no tracker row at all, which is how the tracker
+ * came to report P2 as COMPLETE while `P2-T12b` had never been started. A gate that cannot see a task cannot insist it
+ * is tracked, and a count that silently omits work is worse than no count.
+ */
 function readTasks(file, phases) {
   const active = new Set();
   const deferred = new Set();
   for (const line of readFileSync(file, 'utf8').split('\n')) {
-    const m = line.match(/^\|\s*~*\s*(P(\d+)-T(\d+))\s*~*\s*\|/);
+    const m = line.match(/^\|\s*~*\s*(P(\d+)-T(\d+)[a-z]*)\s*~*\s*\|/);
     if (!m) continue;
     const phase = Number(m[2]);
     if (phases !== 'all' && !phases.includes(phase)) continue;
@@ -73,8 +84,11 @@ for (const { doc, phases } of SOURCES) {
 // reused. Treating a deferral as a hole would be the gate being wrong, not the plan.
 const perPhase = new Map();
 for (const id of [...allActive, ...allDeferred]) {
-  const [, p, t] = id.match(/^P(\d+)-T(\d+)$/);
+  const [, p, t] = id.match(/^P(\d+)-T(\d+)[a-z]*$/);
   if (!perPhase.has(Number(p))) perPhase.set(Number(p), new Set());
+  // **A LETTER SUFFIX DOES NOT TAKE A NEW SLOT.** `P2-T1b` is a second task at slot 1, not a task at slot 1b, so
+  // continuity is checked against the digits alone. Otherwise `T9b` would read as slot 9 and the two tasks that share
+  // slot 9 would look like one, which is the same invisibility in the opposite direction.
   perPhase.get(Number(p)).add(Number(t));
 }
 const holes = [];
