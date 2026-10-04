@@ -3059,22 +3059,42 @@ it cannot be property-tested and a countdown cannot be replayed.
 and its own test, so correcting a P0 primitive cost nothing and risked nothing. Worth thirty seconds to know before
 editing shared code — which is PF-1's grep-first habit paying off in a third, unrelated place.
 
-### PF-4 · Three committed files acquired a raw NUL byte, and a fourth and fifth already had one
+### PF-4 · Five committed files carried a raw NUL byte — CLOSED IN FULL in `5258f8a`
 
-**A RAW NUL BYTE IN SOURCE MAKES A FILE BINARY TO `grep`, TO `diff` AND TO REVIEW.** Three files this phase acquired
-one — `policy/shuffle.ts`, `grading/receipt.ts`, `policy/properties.test.ts` — every time from writing a separator
-as a literal byte rather than an escape. In two of those cases a test then disagreed with the implementation for a
-reason no diff could show, because the disagreement was in a character that made the file unreadable.
+**A RAW NUL BYTE IN SOURCE MAKES A FILE BINARY TO `grep`, TO `diff` AND TO REVIEW.** Five files carried one across
+this phase, and every occurrence came from writing a separator or a sentinel as a literal byte instead of an escape.
 
-The rule this establishes: **a separator is written as an escape, and a file that `grep` calls binary is a bug
-before anyone reads it.** The third occurrence was found only because a property of mine turned out to be flaky and
-the chase led to the byte.
+| File | Bytes | Origin |
+|---|---|---|
+| `policy/shuffle.ts` | 1 | this phase — `shuffleSeedFor`'s separator |
+| `grading/receipt.ts` | 1 | this phase — the `‖` fold separator |
+| `policy/properties.test.ts` | 1 | this phase — a NUL filter in a generated test |
+| `packages/db/src/invitations.ts` | 2 | **pre-existing** — the invite join code |
+| `scripts/subject-tree-gate.mjs` | 1 | **pre-existing** — the tree-root sentinel |
 
-**Two more already exist, committed, in files this phase never touched:** `packages/db/src/invitations.ts` (two
-bytes) and `scripts/subject-tree-gate.mjs` (one). Both were found by the same scan. **Neither is fixed here.** The
-replacement — ` ` — is the same character in source, so it is semantically a no-op, but an unverified change to
-code this phase does not own is worse than a known defect written down. Finding them is the result; fixing them
-belongs to whoever owns those modules.
+**THE BYTE IS CORRECT IN EVERY CASE; ONLY ITS WRITING IS WRONG.** An invite join code is
+`orrery.joincode.v1\0{classroomId}\0{counter}` and NUL cannot appear in an id, so the parts are unambiguous — the
+same reasoning as `shuffleSeedFor`'s separator. `\u0000` and a raw NUL are the same character in a string literal.
+
+**IN TWO CASES A TEST DISAGREED WITH THE IMPLEMENTATION FOR A REASON NO DIFF COULD SHOW**, because the disagreement
+was in the one character that made the file unreadable. `shuffle.ts` used a NUL where the test had retyped a space;
+`receipt.ts` did the same. Both were invisible until the byte was found.
+
+**THE TWO PRE-EXISTING ONES WERE LEFT ALONE AT FIRST, DELIBERATELY**, on the grounds that an unverified change to
+code this phase does not own is worse than a known defect written down. That was the right call, and `5258f8a` is
+the verification that was missing: the join code was computed **before and after** across four cases including the
+adversarial ones — a `classroomId` that itself contains a NUL, and an empty `classroomId` — and the two byte sequences
+are **identical** (`cmp` clean). `typecheck` 0, `@orrery/db` builds, **all 54 db unit tests pass**, the
+subject-tree gate exits 0, and both files are now `Unicode text, UTF-8` rather than binary.
+
+**THE DB INTEGRATION FAILURES SEEN IN AN EARLIER ATTEMPT WERE NOT RELATED AND ARE NOT PRESENT.** They are
+`taxonomy.integration.test.ts`, which needs a Postgres container this environment does not have. Recorded rather
+than glossed, because "the tests pass" means something different in a workspace with Testcontainers in it.
+
+**THE RULE, ESTABLISHED BY FIVE OCCURRENCES: a separator is written as an escape, and a file that `grep` calls
+binary is a bug before anyone reads it.** The third occurrence was found only because a property of mine turned out
+to be flaky and the chase led to the byte — which is the argument for reading a surprising failure rather than
+re-running until it goes away.
 
 ### PF-5 · An absent answer is a BLANK and an unreadable one is a FAULT — CLOSED in `0dbebe5`
 
