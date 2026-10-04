@@ -60,6 +60,10 @@
       "types": "./dist/a11y/contrast.d.ts",
       "default": "./dist/a11y/contrast.js"
     },
+    "./a11y/questionInteraction": {
+      "types": "./dist/a11y/questionInteraction.d.ts",
+      "default": "./dist/a11y/questionInteraction.js"
+    },
     "./a11y/keymap": {
       "types": "./dist/a11y/keymap.d.ts",
       "default": "./dist/a11y/keymap.js"
