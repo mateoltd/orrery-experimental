@@ -102,6 +102,9 @@ importers:
       '@orrery/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@orrery/exam-engine':
+        specifier: workspace:*
+        version: link:../../packages/exam-engine
       '@orrery/interop':
         specifier: workspace:*
         version: link:../../packages/interop

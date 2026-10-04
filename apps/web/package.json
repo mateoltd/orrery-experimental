@@ -16,6 +16,7 @@
     "@orrery/config": "workspace:*",
     "@orrery/contracts": "workspace:*",
     "@orrery/db": "workspace:*",
+    "@orrery/exam-engine": "workspace:*",
     "@orrery/interop": "workspace:*",
     "@orrery/sim-registry": "workspace:*",
     "@orrery/sim-sdk": "workspace:*",
