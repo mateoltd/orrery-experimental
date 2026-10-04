@@ -121,6 +121,10 @@
     "./builder": {
       "types": "./dist/builder.d.ts",
       "default": "./dist/builder.js"
+    },
+    "./answer-write": {
+      "types": "./dist/answer-write.d.ts",
+      "default": "./dist/answer-write.js"
     }
   },
   "scripts": {

@@ -151,3 +151,35 @@ export function isSameActor(
   if (ownerId === null || ownerId === undefined) return false;
   return actorId === ownerId;
 }
+
+/**
+ * IS THERE AN ACTOR AT ALL?
+ *
+ * ## WHY THIS IS A FUNCTION AND NOT A `userId === null` IN THE ROUTE
+ *
+ * Because the `authz-ownership` gate flagged `if (userId === null)` in `apps/web/src/app/api/exam/answers/route.ts` as
+ * an ownership comparison, and **on this occasion the flag was a false positive** -- it is a presence check on a session
+ * id, not a comparison of two owners.
+ *
+ * The gate is textual by design and says so: its patterns are broad, a lint rule would miss the real cases, and it
+ * "fails loudly rather than trying to be clever". So the tempting response is to widen the pattern list. **The gate
+ * answers that itself: there is no escape hatch, and the fix for a legitimate case is to move the comparison into
+ * `packages/auth` and call `can()` -- not to widen the list.**
+ *
+ * The check is worth having here anyway, because "is anybody signed in" is a question every route asks and it should
+ * have exactly one answer. A route that writes its own version is how `""`, `null` and `undefined` start meaning
+ * different things across an app.
+ */
+export type ActorPresence =
+  | { readonly ok: true; readonly actorId: string }
+  | { readonly ok: false; readonly reason: 'UNAUTHENTICATED' };
+
+export function actorPresence(actorId: string | null | undefined): ActorPresence {
+  // Blank is NOT anonymous. A cookie that decodes to `""` is a malformed credential, and treating it as "nobody" would
+  // make it look like a clean unauthenticated request rather than a broken one -- which is the harder thing to notice
+  // in a log and the easier thing to ship.
+  if (typeof actorId !== 'string' || actorId.trim().length === 0) {
+    return { ok: false, reason: 'UNAUTHENTICATED' };
+  }
+  return { ok: true, actorId };
+}

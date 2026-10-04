@@ -1,4 +1,10 @@
 {
-  "$comment": "The authority for P10-T8's generated audit. Every student-facing route must appear here with an explicit scoreFree decision and a reason. scripts/audit-routes.mjs fails on anything unlisted, and on anything listed that no longer exists. There are currently no student-facing routes: P10-T8 could not be written until the API surface existed, and that is recorded on the tracker row rather than glossed.",
-  "routes": []
+  "$comment": "The authority for P10-T8's generated audit. Every student-facing route must appear here with an explicit scoreFree decision and a reason. scripts/audit-routes.mjs fails on anything unlisted, and on anything listed that no longer exists.",
+  "routes": [
+    {
+      "path": "/api/exam/answers",
+      "scoreFree": true,
+      "reason": "Accepts one answer and returns { attemptId, questionId, revision, isLate }. The revision number is the client's own optimistic-concurrency token and carries no grade information; the response contains no score, no correct/incorrect flag and no model answer, so INV-RELEASE-2 does not apply. The `isLate` flag is timing, not marks, and a student already knows they submitted late. Grade data reaches students only through the release path, which stays gated."
+    }
+  ]
 }

@@ -32,6 +32,8 @@
 
 import { type Clock, type Duration, isPastDeadline, type Millis } from '@orrery/clock';
 
+import type { PrismaClient } from '../prisma/generated/client/client.js';
+
 /** The attempt states a write can be evaluated against. Mirrors `ExamAttemptStatus`, narrowed to what matters here. */
 export type AttemptStatus =
   | 'IN_PROGRESS'
@@ -285,24 +287,26 @@ export interface SubmitInput {
 }
 
 /** The minimum this module needs from a database. Narrow on purpose, so the pure decision can be tested alone. */
-export interface SubmitDb {
-  /** Used only for the fallback paper, when an attempt has no resolved `variantMap`. */
-  assessmentSlot: {
-    findMany(input: Record<string, unknown>): Promise<readonly unknown[]>;
-  };
-  examAttempt: {
-    findUnique(input: { where: { id: string }; select: Record<string, unknown> }): Promise<unknown>;
-  };
-  questionResponse: {
-    findUnique(input: Record<string, unknown>): Promise<unknown>;
-    upsert(input: Record<string, unknown>): Promise<unknown>;
-  };
-  answerRevision: {
-    findFirst(input: Record<string, unknown>): Promise<unknown>;
-    create(input: Record<string, unknown>): Promise<unknown>;
-  };
-  attemptEventRecord: { create(input: Record<string, unknown>): Promise<unknown> };
-}
+/**
+ * THE DATABASE THIS MODULE NEEDS, AND IT IS NOW THE REAL ONE.
+ *
+ * This used to be a hand-written interface whose methods took `Record<string, unknown>`. **A real `PrismaClient` is
+ * not assignable to it** -- Prisma's methods are generic over their argument types, and the compiler rejected the index
+ * signature outright. That is a good outcome, not an inconvenience: the structural version was asserting that *any*
+ * object with those method names would do, which is exactly the assumption that hid `minHoldUntil`, the `Decimal`
+ * arithmetic, and the `status` column in `release.ts`.
+ *
+ * So the capability is now `Pick<PrismaClient, ...>`, which is both narrower than the client and true about it.
+ *
+ * **THE PURE HALF IS STILL TESTABLE WITHOUT A DATABASE**, which is what the split was for: `decideWrite` takes a
+ * `WriteDecisionInput` of plain values and has no database in its signature at all, so its 21 unit tests run with no
+ * connection. What is NOT true any more is that `submitAnswer` can be driven by a hand-rolled mock -- and given what
+ * the mock-based version concealed, that is an improvement.
+ */
+export type SubmitDb = Pick<
+  PrismaClient,
+  'assessmentSlot' | 'examAttempt' | 'questionResponse' | 'answerRevision' | 'attemptEventRecord'
+>;
 
 /** The attempt columns this module reads. Declared here so the query and its consumer cannot drift. */
 const ATTEMPT_SELECT = {
@@ -436,8 +440,21 @@ export async function submitAnswer(
 
   const stored = (await db.questionResponse.findUnique({
     where: { attemptId_questionId: { attemptId: input.attemptId, questionId: input.questionId } },
-    select: { revision: true, answer: true, questionId: true },
-  })) as { revision: number; answer: unknown; questionId: string } | null;
+    select: {
+      revision: true,
+      answer: true,
+      questionId: true,
+      questionDeadlineAt: true,
+      questionClosedReason: true,
+    },
+  })) as {
+    revision: number;
+    answer: unknown;
+    questionId: string;
+    /** `null` means no per-question window, and that is a legitimate state rather than an error. */
+    questionDeadlineAt: Date | null;
+    questionClosedReason: string | null;
+  } | null;
 
   // 2. IS THIS QUESTION IN THE ATTEMPT'S PAPER?  (P8-T11 integration)
   //
@@ -458,7 +475,13 @@ export async function submitAnswer(
   // 3. DECIDE.
   const decision = decideWrite({
     attemptStatus: attempt.status as AttemptStatus,
-    questionDeadlineAt: null,
+    // P8-T11 integration: the PER-QUESTION window, read from the response row.
+    //
+    // **IT WAS A HARDCODED `null`, SO `INV-LATE-1` WAS NOT ENFORCED PER QUESTION AT ALL** -- every question inherited
+    // only the attempt-wide deadline. `ExamAttempt` carries `pausedAccumSec` and `QuestionResponse` carries
+    // `questionDeadlineAt`/`questionClosedReason` precisely because `plans/09` gives each question its own window, and
+    // a hardcoded null silently disabled the stricter of the two deadlines.
+    questionDeadlineAt: stored?.questionDeadlineAt?.getTime() ?? null,
     deadlineAt: effectiveDeadline(attempt),
     expectedRevision: input.expectedRevision,
     storedRevision: stored?.revision ?? -1,
