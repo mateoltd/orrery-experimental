@@ -162,7 +162,9 @@ export function assertSuppressedByQueryLayer(
  * that one of the two numbers is not comparable to the other. One floor for the panel, stated in words.
  */
 export function suppressReport(
-  values: T,
+  // Was `values: T`, and `T` was never in scope -- so this function had no typecheckable signature at all, and the
+  // typecheck that would have said so was reporting zero. The return type already said what it takes.
+  values: Record<string, number | null>,
   /**
    * THE COHORT SIZE, and it has to be supplied.
    *

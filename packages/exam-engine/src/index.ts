@@ -14,20 +14,28 @@ export type {
 } from './deadlines.js';
 export { evaluateAttempt } from './deadlines.js';
 export type {
+  AttemptTransition,
   BreachReport,
   EscalationInput,
   EscalationVerdict,
   Rung,
+  RungEffect,
+  TeacherDecision,
   ViolationCounts,
   ViolationKind,
 } from './escalation.js';
 export {
+  applyRung,
   classifyBreaches,
+  countStrike,
   evaluateEscalation,
   LADDER,
   maxRung,
+  reinstate,
   rungIndex,
+  survivesShedding,
 } from './escalation.js';
+
 export type {
   BatcherOptions,
   BatcherStats,

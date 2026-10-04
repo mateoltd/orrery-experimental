@@ -477,7 +477,11 @@ describe('properties over the reducer', () => {
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
     expect(Object.getPrototypeOf(state.answers)).toBe(Object.prototype);
     expect(Object.hasOwn(state.answers, '__proto__')).toBe(true);
-    expect(state.revisions.__proto__).toBe(1);
+    // `state.revisions.__proto__` reads as "the revision count for `__proto__`" but is actually reading
+    // `Object.prototype`, which is `1` -- so the assertion passed for the wrong reason and would have passed even if
+    // the `__proto__` revision had been dropped entirely. The own-property form is what the store is claiming.
+    expect(Object.hasOwn(state.revisions, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(state.revisions)).toBe(Object.prototype);
   });
 
   it('holds the cursor inside the paper for every sequence of navigation', () => {

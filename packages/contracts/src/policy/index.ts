@@ -86,7 +86,21 @@ export const examPolicySchema = z.object({
   blockPrintSave: z.boolean(),
 
   thresholds: thresholds,
-  escalation: z.array(z.enum(['WARN', 'BLOCK_UNTIL_RELOCK', 'REQUIRE_RELOCK', 'TERMINATE'])),
+  /**
+   * `FREEZE_AND_SUBMIT`, not `TERMINATE`.  (P8-T11, `V-12`)
+   *
+   * The enum used to admit `TERMINATE`, and the EXAM profile's comment two dozen lines below already claimed that
+   * "`escalation` never contains `TERMINATE`" -- so the schema permitted exactly what its own documentation denied,
+   * and nothing stopped an author writing it. A comment is not a constraint; this is.
+   *
+   * `TERMINATE` is not merely deprecated, it is REMOVED. `V-12` records what it did: it set the attempt to
+   * `TERMINATED`, submitted "held answers", and so **irreversibly discarded every unwritten item**, reducing the
+   * grade. There is no reading of that behaviour under which a schema should still offer it, and a deprecated
+   * spelling would keep it reachable in exactly the one place that matters -- the policy an exam is run with.
+   */
+  escalation: z.array(
+    z.enum(['WARN', 'BLOCK_UNTIL_RELOCK', 'REQUIRE_RELOCK', 'FREEZE_AND_SUBMIT']),
+  ),
 
   maxAttempts: z.number().int().positive(),
   allowPracticeAttempt: z.boolean(),
@@ -111,8 +125,9 @@ export type PolicyOverride = z.infer<typeof policyOverrideSchema>;
  *
  * Two decisions in here are documented in the plan and would otherwise look like typos:
  * `pointerLockLosses` is `null` ("never") because Escape releases pointer lock and browsers
- * deliberately prevent interception; and `escalation` never contains `TERMINATE`, because
- * V-12 says a student's session is never ended automatically.
+ * deliberately prevent interception; and `escalation` ends at `FREEZE_AND_SUBMIT` rather than
+ * `TERMINATE`, because `V-12` says a student's session is never ended automatically -- a freeze
+ * submits what was WRITTEN and stays reversible by a teacher with a recorded reason.
  */
 export const EXAM_PROFILE_DEFAULTS: ExamPolicy = Object.freeze({
   version: 1,

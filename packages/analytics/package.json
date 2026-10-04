@@ -22,6 +22,7 @@
     "fast-check": "3.23.2"
   },
   "dependencies": {
+    "@orrery/clock": "workspace:*",
     "@orrery/contracts": "workspace:*"
   }
 }

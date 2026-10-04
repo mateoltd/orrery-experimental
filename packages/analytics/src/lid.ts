@@ -70,33 +70,84 @@ export const LID_ALPHA = 0.05;
  * lower-tail denominator factored into a helper that took no arguments it used -- which is the shape of code that is
  * wrong and looks right.
  */
+/**
+ * THE QUANTILE MUST STAY PINNED TO KNOWN VALUES, BECAUSE A DROPPED TERM DOES NOT LOOK BROKEN.
+ *
+ * `normalQuantile(0.95)` is `1.6448536269514722`; the missing-constant-term version gave `0.0034`. Exported so
+ * `lid.test.ts` asserts these against the implementation rather than against a comment.
+ */
+export const QUANTILE_REGRESSION_POINTS: readonly { readonly p: number; readonly z: number }[] =
+  Object.freeze([
+    { p: 0.95, z: 1.6448536269514722 },
+    { p: 0.05, z: -1.6448536269514722 },
+    { p: 0.975, z: 1.959963984540054 },
+    { p: 0.0001, z: -3.71901648545568 },
+  ]);
+
+/**
+ * Acklam's coefficients, named by the ROLE they play rather than by letter.
+ *
+ * `A`/`B`/`C`/`D` were accurate and completely opaque: nothing at the point of use said which was a numerator, and
+ * `C`/`D` are the *tail* pair while `A`/`B` are the *central* pair, so the letters actively invited the wrong edit.
+ */
+const CENTRAL_NUMERATOR: readonly number[] = [
+  -3.969683028665376e1, 2.209460984245205e2, -2.759285104469687e2, 1.38357751867269e2,
+  -3.066479806614716e1, 2.506628277459239,
+];
+/**
+ * **THE TRAILING `1` IS A COEFFICIENT, NOT A CONSTANT TO ADD LATER.**
+ *
+ * Both denominators end `... * r + 1`. When the nested-parenthesis form was rewritten as a loop, the `1` was left
+ * behind -- which changed `normalQuantile(0.95)` from `1.6449` to `0.0034`.
+ *
+ * **THAT IS THE MOST DANGEROUS KIND OF WRONG ANSWER HERE.** A missing polynomial term does not produce `NaN` and does
+ * not throw: it produces a small number that looks like a plausible z-score, and this function's entire job is to
+ * threshold a flag decision about an author's items. `-0.0034` reads as "no dependency" on every pair in the paper,
+ * and nothing downstream would complain. The coefficients are now complete arrays including the constant term, so
+ * there is no separate `+ 1` left to drop.
+ */
+const CENTRAL_DENOMINATOR: readonly number[] = [
+  -5.447609879822406e1, 1.615858368580409e2, -1.556989798598866e2, 6.680131188771972e1,
+  -1.328068155288572e1, 1,
+];
+const LOW_TAIL_NUMERATOR: readonly number[] = [
+  -7.784894002430293e-3, -3.223964580411365e-1, -2.400758277161838, -2.549732539343734,
+  4.374664141464968, 2.938163982698783,
+];
+const LOW_TAIL_DENOMINATOR: readonly number[] = [
+  7.784695709041462e-3, 3.224671290700398e-1, 2.445134137142996, 3.754408661907416, 1,
+];
+
+/** Below this the tail expansion is used; above `1 - P_LOW` the symmetry reflection handles the other side. */
+const P_LOW = 0.02425;
+
 export const normalQuantile = (p: number): number => {
   if (!(p > 0) || !(p < 1)) {
     throw new Error(`a probability must be strictly between 0 and 1, got ${String(p)}`);
   }
 
-  const A = [
-    -3.969683028665376e1, 2.209460984245205e2, -2.759285104469687e2, 1.38357751867269e2,
-    -3.066479806614716e1, 2.506628277459239,
-  ];
-  const B = [
-    -5.447609879822406e1, 1.615858368580409e2, -1.556989798598866e2, 6.680131188771972e1,
-    -1.328068155288572e1,
-  ];
-  const C = [
-    -7.784894002430293e-3, -3.223964580411365e-1, -2.400758277161838, -2.549732539343734,
-    4.374664141464968, 2.938163982698783,
-  ];
-  const D = [7.784695709041462e-3, 3.224671290700398e-1, 2.445134137142996, 3.754408661907416];
-
-  const P_LOW = 0.02425;
+  /**
+   * HORNER'S METHOD, ITERATING RATHER THAN INDEXING.
+   *
+   * Written as `((((((A[0] * q + A[1]) * q + A[2]) ...` it was seven levels of parentheses with a coefficient count
+   * that has to be counted by eye to confirm nothing is missing -- the shape this file's own header calls "wrong and
+   * looks right". A loop makes the order explicit and removes the count entirely.
+   *
+   * It also removes a real defect: the indexed form read `number | undefined` under `noUncheckedIndexedAccess`, so
+   * **23 type errors were sitting in this committed file while the typecheck gate reported zero** -- the verifier
+   * matched the literal text `error TS`, which never appears because turbo colours its output. A missing type error and
+   * a broken checker look identical from the exit code, which is why the code is fixed *and* the verifier is changed
+   * rather than one of the two.
+   */
+  const horner = (coefficients: readonly number[], x: number): number => {
+    let total = 0;
+    for (const coefficient of coefficients) total = total * x + coefficient;
+    return total;
+  };
 
   if (p < P_LOW) {
     const q = Math.sqrt(-2 * Math.log(p));
-    return (
-      (((((C[0] * q + C[1]) * q + C[2]) * q + C[3]) * q + C[4]) * q + C[5]) /
-      ((((D[0] * q + D[1]) * q + D[2]) * q + D[3]) * q + 1)
-    );
+    return horner(LOW_TAIL_NUMERATOR, q) / horner(LOW_TAIL_DENOMINATOR, q);
   }
 
   if (p > 1 - P_LOW) {
@@ -107,10 +158,7 @@ export const normalQuantile = (p: number): number => {
 
   const q = p - 0.5;
   const r = q * q;
-  return (
-    ((((((A[0] * r + A[1]) * r + A[2]) * r + A[3]) * r + A[4]) * r + A[5]) * q) /
-    (((((B[0] * r + B[1]) * r + B[2]) * r + B[3]) * r + B[4]) * r + 1)
-  );
+  return (horner(CENTRAL_NUMERATOR, r) * q) / horner(CENTRAL_DENOMINATOR, r);
 };
 
 /**

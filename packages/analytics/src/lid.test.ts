@@ -18,6 +18,7 @@ import {
   LID_THRESHOLD_FLOOR,
   lidThreshold,
   normalQuantile,
+  QUANTILE_REGRESSION_POINTS,
 } from './lid.js';
 
 describe('the normal quantile, because the threshold is a tangent of it', () => {
@@ -217,5 +218,38 @@ describe('THE INVERSION: a declared cluster is never flagged', () => {
     const finding = classifyLidPair(pair(), 30, 200);
     if (finding.verdict !== 'TOO_FEW_RESPONSES')
       expect(finding.threshold).toBe(lidThreshold(30, 200));
+  });
+});
+
+/**
+ * Pinned to known quantiles, because the failure mode of a dropped polynomial term is a SMALL PLAUSIBLE NUMBER rather
+ * than an exception.  (P8-T11, found while fixing `noUncheckedIndexedAccess` errors in this file)
+ */
+describe('normalQuantile stays pinned to KNOWN VALUES', () => {
+  for (const { p, z } of QUANTILE_REGRESSION_POINTS) {
+    it(`gives ${String(z)} at p=${String(p)}`, () => {
+      expect(normalQuantile(p)).toBeCloseTo(z, 6);
+    });
+  }
+
+  it('REJECTS the near-plausible wrong answer the missing constant term produced', () => {
+    // 0.0034 rather than 1.6449. This number would have been read as "no dependency" on every pair in a paper, and
+    // nothing in the pipeline would have complained.
+    expect(Math.abs(normalQuantile(0.95))).toBeGreaterThan(1);
+  });
+
+  it('is symmetric about 0.5, because the upper tail is a reflection of the lower', () => {
+    for (const p of [0.025, 0.1, 0.3, 0.5, 0.7, 0.9]) {
+      expect(normalQuantile(p)).toBeCloseTo(-normalQuantile(1 - p), 12);
+    }
+  });
+
+  it('is monotonically increasing, which a dropped term would not preserve', () => {
+    let previous = Number.NEGATIVE_INFINITY;
+    for (let i = 1; i < 100; i++) {
+      const z = normalQuantile(i / 100);
+      expect(z, `p=${String(i / 100)}`).toBeGreaterThan(previous);
+      previous = z;
+    }
   });
 });
