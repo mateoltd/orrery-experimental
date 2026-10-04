@@ -42,8 +42,14 @@ export interface Evidence {
   readonly kind: EvidenceKind;
   /** From the INJECTED clock. Never `Date.now()` -- INV-TIME-1, and it is what makes grace testable. */
   readonly at: number;
-  /** Free-form context. Never a score, never an answer: this is written to a log a teacher reads. */
-  readonly detail?: Readonly<Record<string, string | number | boolean>>;
+  /**
+   * Free-form context. Never a score, never an answer: this is written to a log a teacher reads.
+   *
+   * `null` is permitted as a VALUE because "not known" has to be expressible. The pointer-lock guard records whether
+   * `Escape` was involved as `null` precisely because the browser will not say, and the alternative -- omitting the
+   * field, or storing `false` -- both put a fabricated fact in a teacher's timeline.
+   */
+  readonly detail?: Readonly<Record<string, string | number | boolean | null>>;
 }
 
 /**
