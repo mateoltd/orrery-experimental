@@ -23,6 +23,15 @@ export type { DistractorAnalysis, DistractorObservation } from './distractors.js
 export { analyseDistractors, DISTRACTOR_MIN_N } from './distractors.js';
 export type { FacilityBand, FacilityResult, ScoredResponse } from './facility.js';
 export { facility, facilityBand } from './facility.js';
+export type { LidFinding, LidPairInput } from './lid.js';
+export {
+  classifyLidPair,
+  LID_ALPHA,
+  LID_MIN_N,
+  LID_THRESHOLD_FLOOR,
+  lidThreshold,
+  normalQuantile,
+} from './lid.js';
 export type { AlphaInput, AlphaResult, FormResponse } from './reliability.js';
 export {
   ALPHA_MIN_K,
