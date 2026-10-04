@@ -24,6 +24,16 @@ const T0 = Date.parse('2026-03-01T10:00:00.000Z');
 const clockAt = (iso: string): FrozenClock => new FrozenClock(Date.parse(iso));
 const at = (iso: string): number => Date.parse(iso);
 
+/**
+ * `perQuestionExpiry: 'LOCK'` is the fixture default, and the reason is worth one line.
+ *
+ * These tests predate the term reaching the write path at all, and every case in them was written against
+ * `plans/01` §9.1's formula -- which omits `perQuestionExpiry` and therefore treats every term identically. `LOCK`
+ * is the term that reproduces that reading exactly, so it is the one that keeps these assertions meaning what they
+ * meant; switching them to `SOFT` would quietly change what each case is testing. The `SOFT` behaviour is asserted
+ * on its own in `describe('perQuestionExpiry', ...)` below and across the whole matrix in
+ * `apps/web/src/features/exam/expiryAgreement.test.ts`.
+ */
 const base = (over: Partial<WriteDecisionInput> = {}): WriteDecisionInput => ({
   attemptStatus: 'IN_PROGRESS',
   questionDeadlineAt: null,
@@ -32,6 +42,8 @@ const base = (over: Partial<WriteDecisionInput> = {}): WriteDecisionInput => ({
   storedRevision: -1,
   isDuplicate: false,
   questionInAttempt: true,
+  perQuestionExpiry: 'LOCK',
+  perQuestionTimeLimitSec: null,
   graceMs: 0,
   clock: new FrozenClock(T0),
   ...over,
@@ -248,5 +260,86 @@ describe('grace', () => {
       }),
     );
     expect(decision.ok).toBe(true);
+  });
+});
+
+/**
+ * `perQuestionExpiry` REACHES THE WRITE PATH NOW, AND DID NOT.
+ *
+ * `expiryInstruction` -- the function carrying `plans/01` §9.4's vocabulary -- had no production caller in this
+ * repository, and `ATTEMPT_SELECT` did not read `policySnapshot` at all, so the term a teacher chose could not reach
+ * a write decision. `SOFT` therefore behaved as `LOCK`: a question froze `grace` seconds after its own timer ended,
+ * with nothing saying so. These are the server-side halves; `apps/web/src/features/exam/expiryAgreement.test.ts`
+ * walks the same cells through all three implementations.
+ */
+describe('perQuestionExpiry', () => {
+  const QUESTION_DEADLINE = T0 + 60_000;
+  const ATTEMPT_DEADLINE = T0 + 3_600_000;
+  const GRACE_MS = 60_000;
+  /** Past the question's own window plus grace, while the paper is still open. */
+  const PAST_THE_QUESTION = QUESTION_DEADLINE + GRACE_MS + 1;
+
+  const timed = (term: 'SOFT' | 'LOCK' | 'AUTO_SUBMIT') => ({
+    perQuestionExpiry: term,
+    perQuestionTimeLimitSec: 60,
+    graceMs: GRACE_MS,
+    questionDeadlineAt: QUESTION_DEADLINE,
+    deadlineAt: ATTEMPT_DEADLINE,
+  });
+
+  it('SOFT accepts the write and RECORDS IT AS LATE, because editable is not on time', () => {
+    const decision = decideWrite(base({ ...timed('SOFT'), clock: clockAt('2026-03-01T10:02:00.001Z') }));
+    expect(decision.ok).toBe(true);
+    // The `isLate` flag is what `plans/09` §7 means by "log only": the answer stands AND the lateness is kept.
+    if (decision.ok === true) expect(decision.isLate).toBe(true);
+  });
+
+  it('LOCK refuses it, naming the QUESTION', () => {
+    const decision = decideWrite(base({ ...timed('LOCK'), clock: clockAt('2026-03-01T10:02:00.001Z') }));
+    expect(decision.ok).toBe(false);
+    if (decision.ok === false) expect(decision.reason).toBe('QUESTION_DEADLINE_PASSED');
+  });
+
+  it('AUTO_SUBMIT refuses it as well -- so SOFT is the ONLY term that changes here', () => {
+    const decision = decideWrite(base({ ...timed('AUTO_SUBMIT'), clock: clockAt('2026-03-01T10:02:00.001Z') }));
+    expect(decision.ok).toBe(false);
+  });
+
+  it('and the three terms are distinguishable, which is the only proof the term survived', () => {
+    const outcomes = (['SOFT', 'LOCK', 'AUTO_SUBMIT'] as const).map(
+      (term) => decideWrite(base({ ...timed(term), clock: clockAt('2026-03-01T10:02:00.001Z') })).ok,
+    );
+    // If this ever reads `[false, false, false]` the term has stopped carrying information and every agreement
+    // test elsewhere would still be green, because they only compare modules against each other.
+    expect(outcomes).toEqual([true, false, false]);
+  });
+
+  it('SOFT does NOT outlive the paper: INV-LATE-1 still refuses, naming the ATTEMPT', () => {
+    const decision = decideWrite(
+      base({ ...timed('SOFT'), clock: clockAt('2026-03-01T11:01:00.001Z') }),
+    );
+    expect(decision.ok).toBe(false);
+    if (decision.ok === false) expect(decision.reason).toBe('ATTEMPT_DEADLINE_PASSED');
+  });
+
+  it('NO per-question limit means the term cannot bite, whatever it says', () => {
+    for (const term of ['SOFT', 'LOCK', 'AUTO_SUBMIT'] as const) {
+      const decision = decideWrite(
+        base({
+          perQuestionExpiry: term,
+          perQuestionTimeLimitSec: null,
+          deadlineAt: ATTEMPT_DEADLINE,
+          clock: clockAt('2026-03-01T10:30:00.000Z'),
+        }),
+      );
+      expect(decision.ok).toBe(true);
+    }
+  });
+
+  it('the boundary is the QUESTION window on its own terms, not the attempt deadline', () => {
+    // Sanity on the fixture itself: `PAST_THE_QUESTION` really is past the question window and really is inside
+    // the paper's, so the SOFT/LOCK difference above is caused by the term and by nothing else.
+    expect(PAST_THE_QUESTION).toBeGreaterThan(QUESTION_DEADLINE + GRACE_MS);
+    expect(PAST_THE_QUESTION).toBeLessThan(ATTEMPT_DEADLINE + GRACE_MS);
   });
 });

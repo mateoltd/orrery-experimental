@@ -17,6 +17,10 @@
     "./accommodations": {
       "types": "./dist/accommodations.d.ts",
       "default": "./dist/accommodations.js"
+    },
+    "./deadlines": {
+      "types": "./dist/deadlines.d.ts",
+      "default": "./dist/deadlines.js"
     }
   },
   "scripts": {

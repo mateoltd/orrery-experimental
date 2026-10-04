@@ -136,12 +136,30 @@ describe('lock-after-answer, enforced by the store rather than by the renderer',
 });
 
 describe('the client is never STRICTER than the server', () => {
+  /**
+   * ⚠️ **THE TEST THAT WAS NAMED FOR THIS PROPERTY ASSERTED THE OPPOSITE, AND THAT IS THE WHOLE STORY.**
+   *
+   * This block is headed "the client is never STRICTER than the server" and its first case configured
+   * `perQuestionExpiry: 'SOFT'` -- `plans/01` §9.4's "log only, editable until the overall deadline" -- and then
+   * asserted that a write just past the question's deadline plus grace was **refused**. So the test documented the
+   * client being stricter than the plan, under a heading that promised the opposite, and it passed on every run.
+   *
+   * The comment above it is the honest part and it was right: "a client that stopped at the bare deadline would
+   * lose an answer the server would have taken, and the student would see it vanish." The test then did the
+   * vanishing, one grace period later than the comment described.
+   *
+   * `SOFT` now genuinely stays writable, and the boundary that remains is the grace period -- which is what the
+   * case below checks, under `LOCK`, where refusing past `deadline + grace` is correct.
+   */
   it('accepts a write inside the grace period, even after the deadline has passed', () => {
     // `plans/01` §9.1 puts the grace in the SERVER's acceptance predicate. A client that stopped at the bare
     // deadline would lose an answer the server would have taken, and the student would see it vanish.
+    //
+    // `LOCK`, not `SOFT`: this case is about the GRACE boundary, and `SOFT` would pass it for the wrong reason --
+    // `SOFT` is admissible for as long as the PAPER is open, so it would not be testing the grace at all.
     const state = initialAttemptState({
       attemptId: 'at1',
-      policy: policy({ perQuestionExpiry: 'SOFT' }),
+      policy: policy({ perQuestionExpiry: 'LOCK' }),
       deadlineAt: AT + 3_600_000,
       slots: [{ questionId: 'q1', questionDeadlineAt: AT + 1_000 }],
     });
@@ -150,6 +168,23 @@ describe('the client is never STRICTER than the server', () => {
     const outside = reduceAttempt(state, answer('q1', 'x', AT + 1_000 + 61_000));
     expect(outside.answers.q1).toBeUndefined();
     expect(canAnswer(outside, 'q1', AT + 1_000 + 61_000).why).toBe('QUESTION_DEADLINE_PASSED');
+  });
+
+  it('and SOFT is not stricter either: it stays writable past the question window while the paper is open', () => {
+    // The same state, the same instant, `SOFT` -- and the answer LANDS. One configuration difference, the opposite
+    // outcome, which is the only evidence that the term a teacher picks is doing anything at all.
+    const state = initialAttemptState({
+      attemptId: 'at1',
+      policy: policy({ perQuestionExpiry: 'SOFT' }),
+      deadlineAt: AT + 3_600_000,
+      slots: [{ questionId: 'q1', questionDeadlineAt: AT + 1_000 }],
+    });
+    const late = reduceAttempt(state, answer('q1', 'x', AT + 1_000 + 61_000));
+    expect(late.answers.q1).toBe('x');
+    // ...and it is QUEUED, because the old silent drop was half the harm.
+    expect(late.queued).toHaveLength(1);
+    // ...but not past the paper's own window, which is what "until the OVERALL deadline" means.
+    expect(canAnswer(state, 'q1', AT + 3_600_000 + 61_000).allowed).toBe(false);
   });
 
   it('refuses everything after SUBMIT, whatever the deadlines say', () => {

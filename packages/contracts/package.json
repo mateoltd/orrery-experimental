@@ -155,6 +155,10 @@
     "./policy/shuffle": {
       "types": "./dist/policy/shuffle.d.ts",
       "default": "./dist/policy/shuffle.js"
+    },
+    "./policy/deadline": {
+      "types": "./dist/policy/deadline.d.ts",
+      "default": "./dist/policy/deadline.js"
     }
   },
   "scripts": {

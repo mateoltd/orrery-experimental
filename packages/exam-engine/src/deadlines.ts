@@ -20,6 +20,7 @@
  */
 
 import type { Duration, Millis } from '@orrery/clock';
+import { expiryVerdict } from '@orrery/contracts/policy/deadline';
 import type { ExamPolicy } from '@orrery/contracts/policy';
 
 /** What a question is doing right now. */
@@ -59,6 +60,14 @@ export interface QuestionVerdict {
   readonly remainingMs: Duration;
   /** True when a write now would be recorded late. Distinct from "closed": `SOFT_EXPIRED` is still writable. */
   readonly isLate: boolean;
+  /**
+   * MAY A WRITE TO THIS QUESTION LAND RIGHT NOW? The same question `packages/db`'s `decideWrite` and `apps/web`'s
+   * `canAnswer` ask, answered here by `expiryVerdict` so the three cannot drift.
+   *
+   * It exists as a field because deriving it from `state` is what hid the original defect: `SOFT_EXPIRED` reads as
+   * expired, so nobody checked that the write path disagreed with it.
+   */
+  readonly writable: boolean;
   readonly isAnswered: boolean;
   readonly isExcused: boolean;
 }
@@ -142,17 +151,37 @@ export function evaluateAttempt(
     }
 
     /**
-     * `SOFT` is the only expiry that stays writable, and it is the reason `isLate` exists separately from the state.
-     * A soft-expired question accepts writes and marks them late; conflating the two produces either a question that
-     * silently stops accepting answers or a late flag on a question that is still open.
+     * WRITABILITY AND `isLate` COME FROM `expiryVerdict`, NOT FROM A THIRD LOCAL RULE.
+     *
+     * They used to be derived here from `expiredState(...)` and an inline comparison, which made this module the
+     * one implementation that honoured `SOFT` while `packages/db`'s `decideWrite` and `apps/web`'s `canAnswer`
+     * refused it -- so the engine reported a question as `SOFT_EXPIRED` and writable while the write path rejected
+     * every save to it. The three now ask one function.
+     *
+     * `expiredState` is still what maps the policy's term to this module's richer vocabulary, and the verdict is
+     * what decides whether a write can land: the two answers are different questions, and the engine needs both.
+     * `attemptPastDeadline` is excluded from the verdict's inputs because `attemptClosed`/`attemptPastDeadline` have
+     * already produced `ATTEMPT_CLOSED` above and folding it in again would report the same fact twice.
      */
-    const isLate =
-      state === 'SOFT_EXPIRED' ||
-      (attempt.deadlineAt !== null && now > attempt.deadlineAt && !attemptPastDeadline);
+    const verdict = expiryVerdict(policy, {
+      questionDeadlineAt: question.deadlineAt,
+      deadlineAt: attemptPastDeadline ? null : attempt.deadlineAt,
+      now,
+      graceMs,
+    });
+    const isLate = state === 'SOFT_EXPIRED' ? true : verdict.isLate;
 
     return {
       questionId: question.questionId,
       state,
+      /**
+       * EXPLICIT, so agreement with the write path is ASSERTABLE rather than inferred from the state name.
+       *
+       * A consumer asking "may I save to this?" previously had to reconstruct it from `state`, which is how the
+       * disagreement stayed invisible: `SOFT_EXPIRED` reads as expired, so nobody checked whether it was still
+       * writable. It is the field the cross-module matrix test walks.
+       */
+      writable: verdict.writable && !attemptClosed && !isExcused,
       remainingMs: state === 'OPEN' ? left : 0,
       isLate,
       isAnswered,

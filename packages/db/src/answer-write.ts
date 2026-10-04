@@ -30,7 +30,8 @@
  * write 409'd).
  */
 
-import { type Clock, type Duration, isPastDeadline, type Millis } from '@orrery/clock';
+import { type Clock, type Duration, type Millis } from '@orrery/clock';
+import { expiryVerdict } from '@orrery/contracts/policy/deadline';
 
 import type { PrismaClient } from '../prisma/generated/client/client.js';
 
@@ -108,6 +109,19 @@ export interface WriteDecisionInput {
   readonly storedResponseStatus?: number;
   /** Whether this question is assigned to this attempt at all. */
   readonly questionInAttempt: boolean;
+  /**
+   * THE PER-QUESTION EXPIRY TERM, FROM THE ATTEMPT'S FROZEN SNAPSHOT.
+   *
+   * INV-POLICY-1 makes `policySnapshot` the authority for everything about how this attempt is run, so the term is
+   * read there and not from the resource's current policy -- a teacher editing the paper mid-exam must not change
+   * what is admissible on an attempt already in progress.
+   *
+   * `SOFT` is not a synonym for `LOCK`, and treating it as one is the defect this input exists to close: see the
+   * note at the deadline clause and at `expiryVerdict`.
+   */
+  readonly perQuestionExpiry: 'SOFT' | 'LOCK' | 'AUTO_SUBMIT';
+  /** `null` means the paper sets no per-question limit, and `expiryInstruction` then reads `NONE`. */
+  readonly perQuestionTimeLimitSec: number | null;
   /** How far past a deadline a write may still be accepted. Zero is a hard deadline. */
   readonly graceMs: Duration;
   readonly clock: Clock;
@@ -181,32 +195,46 @@ export const decideWrite = (input: WriteDecisionInput): WriteDecision => {
   }
 
   /**
-   * 4. THE DEADLINES. Both are checked, and the QUESTION window is checked first because it is the tighter one and
-   *    its message is the more useful: "time is up for this question" beats "time is up for the exam" when both are
-   *    true.
+   * 4. THE DEADLINES. One verdict, from the policy module, rather than two comparisons written out here.
    *
    * INV-LATE-1: past the window plus grace, the write is REJECTED and the last accepted value stands. It is not
    * silently accepted, and it is not silently zeroed. A rejection is not a zero — the distinction is the difference
    * between "the student was too slow" and "the student got it wrong", and collapsing them depresses facility and
    * drives r_pb toward correlation with speed.
+   *
+   * **THE PER-QUESTION TERM IS CONSULTED HERE NOW, AND IT WAS NOT.** This used to refuse any write past
+   * `questionDeadlineAt + graceMs` unconditionally, which is `plans/01` §9.1's formula, and §9.1 is the section
+   * that omits `perQuestionExpiry` -- while §9.4, three paragraphs later, defines `SOFT` as "log only, editable
+   * until the overall deadline". So a teacher who selected `SOFT` got `LOCK`: the answer froze `grace` seconds
+   * after the question's own timer ended, silently, and `expiryInstruction` -- the function that carries §9.4's
+   * vocabulary -- had no production caller in the repository. It is `expiryVerdict` now, and `apps/web`'s
+   * `canAnswer` and `@orrery/exam-engine`'s `evaluateAttempt` ask the same one, because three copies of this
+   * predicate is how it came to disagree with itself.
+   *
+   * The paper is still checked first, and the reason is the message: when both have passed, "time is up for this
+   * attempt" is the fact the student can act on, and "time is up for this question" sends them to a question that
+   * cannot be saved anywhere.
    */
-  if (
-    input.questionDeadlineAt !== null &&
-    isPastDeadline(input.questionDeadlineAt, now, input.graceMs)
-  ) {
-    return {
-      ok: false,
-      reason: 'QUESTION_DEADLINE_PASSED',
-      message: 'the time allowed for this question has passed, so the last saved answer stands',
-      isConflict: false,
-    };
-  }
+  const expiry = expiryVerdict(
+    { perQuestionExpiry: input.perQuestionExpiry, perQuestionTimeLimitSec: input.perQuestionTimeLimitSec },
+    {
+      questionDeadlineAt: input.questionDeadlineAt,
+      deadlineAt: input.deadlineAt,
+      now,
+      graceMs: input.graceMs,
+    },
+  );
 
-  if (input.deadlineAt !== null && isPastDeadline(input.deadlineAt, now, input.graceMs)) {
+  if (!expiry.writable) {
     return {
       ok: false,
-      reason: 'ATTEMPT_DEADLINE_PASSED',
-      message: 'the time allowed for this attempt has passed, so the last saved answer stands',
+      reason: expiry.refusedBecause === 'ATTEMPT_DEADLINE_PASSED'
+        ? 'ATTEMPT_DEADLINE_PASSED'
+        : 'QUESTION_DEADLINE_PASSED',
+      message:
+        expiry.refusedBecause === 'ATTEMPT_DEADLINE_PASSED'
+          ? 'the time allowed for this attempt has passed, so the last saved answer stands'
+          : 'the time allowed for this question has passed, so the last saved answer stands',
       isConflict: false,
     };
   }
@@ -232,14 +260,12 @@ export const decideWrite = (input: WriteDecisionInput): WriteDecision => {
   }
 
   /**
-   * ACCEPTED. `isLate` records that this landed inside the grace window, which is a fact worth keeping for the
-   * receipt and for the late-save audit even though the write proceeds normally.
+   * ACCEPTED. `isLate` is the verdict's own, not a re-derivation: recomputing "did this land outside a window"
+   * here is the fourth copy of that predicate, and it is the copy that already disagreed with the other three.
+   * A `SOFT`-expiry answer written inside the attempt's grace window arrives here with `isLate: true` and is
+   * STORED, which is what §9.4 means by "log only".
    */
-  const pastAWindow =
-    (input.questionDeadlineAt !== null && isPastDeadline(input.questionDeadlineAt, now, 0)) ||
-    (input.deadlineAt !== null && isPastDeadline(input.deadlineAt, now, 0));
-
-  return { ok: true, nextRevision: currentRevision + 1, isLate: pastAWindow };
+  return { ok: true, nextRevision: currentRevision + 1, isLate: expiry.isLate };
 };
 /* ───────────────────────────────────────────────────── the write path ── */
 
@@ -323,6 +349,15 @@ const ATTEMPT_SELECT = {
   // whose paper was never resolved.
   variantMap: true,
   assignment: { select: { resourceVersionId: true } },
+  /**
+   * INV-POLICY-1: the frozen snapshot is where `perQuestionExpiry` comes from, and it was NOT being read here.
+   *
+   * That omission is why the term had no effect on writes at all -- not because anyone decided `SOFT` should behave
+   * like `LOCK`, but because the column holding the decision was never in the SELECT. The same shape as P8-T10's
+   * `submissionReceipt` and P8-T9's hardcoded `questionDeadlineAt: null`: a field that exists, is populated, and
+   * has no reader.
+   */
+  policySnapshot: true,
 } as const;
 
 /** Narrow an unknown row to the attempt shape, so the decision reads a typed value rather than `any`. */
@@ -334,9 +369,48 @@ interface AttemptRow {
   /** `Record<slotId, readonly questionId[]>`. `null` when the paper was never resolved. */
   readonly variantMap: Record<string, readonly string[]> | null;
   readonly assignment: { readonly resourceVersionId: string } | null;
+  /** `null` for an attempt that has not started. See the read note at `ATTEMPT_SELECT`. */
+  readonly policySnapshot: unknown;
   readonly extensions: readonly { readonly addedSec: number }[];
   readonly pausedAccumSec: number | null;
 }
+
+/**
+ * THE EXPIRY TERM, READ DEFENSIVELY OUT OF A JSON COLUMN.
+ *
+ * `policySnapshot` is `Json?`, so it arrives as `unknown` and three things can be true of it: absent (an attempt
+ * that has not started, or a row written before the column existed), an object, or an object from a *different*
+ * policy version. Any of those must yield a safe value rather than a throw -- an answer write is the one request
+ * that must never 500 because of a policy read.
+ *
+ * **AND THE FALLBACK IS `LOCK`, NOT `SOFT`, because it is the refusal that keeps `INV-LATE-1` true.** Choosing
+ * `SOFT` here would mean that any row whose snapshot cannot be read becomes writable past its question window --
+ * the exact widening the whole change exists to bound, arrived at through an error path nobody would look for.
+ * `EXAM_PROFILE_DEFAULTS.perQuestionExpiry` is `'SOFT'`, and using it would be defensible too; what is not defensible
+ * is a fallback whose direction nobody chose deliberately.
+ */
+const readExpiry = (
+  snapshot: unknown,
+): { perQuestionExpiry: 'SOFT' | 'LOCK' | 'AUTO_SUBMIT'; perQuestionTimeLimitSec: number | null } => {
+  const from = (source: unknown): Record<string, unknown> | null =>
+    typeof source === 'object' && source !== null && !Array.isArray(source)
+      ? (source as Record<string, unknown>)
+      : null;
+
+  // The snapshot is the frozen POLICY OBJECT. Tolerating a `{ policy: {...} }` wrapper costs three lines and covers
+  // the two shapes a hand-written fixture in this repository's own tests has used.
+  const raw = from(snapshot);
+  const policy = from(raw?.['policy']) ?? raw;
+
+  const term = policy?.['perQuestionExpiry'];
+  const limit = policy?.['perQuestionTimeLimitSec'];
+
+  return {
+    perQuestionExpiry:
+      term === 'SOFT' || term === 'LOCK' || term === 'AUTO_SUBMIT' ? term : 'LOCK',
+    perQuestionTimeLimitSec: typeof limit === 'number' && Number.isFinite(limit) ? limit : null,
+  };
+};
 
 /**
  * THE EFFECTIVE DEADLINE, extensions and pause included.
@@ -472,6 +546,8 @@ export async function submitAnswer(
   const assignedQuestionIds = await assignedPaper(db, attempt);
   const questionInAttempt = assignedQuestionIds.has(input.questionId);
 
+  const expiryPolicy = readExpiry(attempt.policySnapshot);
+
   // 3. DECIDE.
   const decision = decideWrite({
     attemptStatus: attempt.status as AttemptStatus,
@@ -488,6 +564,8 @@ export async function submitAnswer(
     isDuplicate: false,
     storedResponseBody: stored?.answer,
     questionInAttempt,
+    perQuestionExpiry: expiryPolicy.perQuestionExpiry,
+    perQuestionTimeLimitSec: expiryPolicy.perQuestionTimeLimitSec,
     graceMs,
     clock,
   });

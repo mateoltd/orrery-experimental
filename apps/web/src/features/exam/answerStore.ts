@@ -32,6 +32,7 @@
  * server decides what counts. A client that decided for itself would be a client that can lose a mark.
  */
 
+import { expiryVerdict } from '@orrery/contracts/policy/deadline';
 import type { ExamPolicy } from '@orrery/contracts/policy';
 
 /** One question's slot in the paper. The question's SPEC is not here -- it may be shuffled, and the spec is not trusted. */
@@ -162,15 +163,28 @@ const indexOf = (state: AttemptState, questionId: string): number =>
 /**
  * CAN THIS QUESTION BE ANSWERED RIGHT NOW?
  *
- * Three refusals, and each one is a policy consequence rather than a UI rule:
+ * Four refusals, and each one is a policy consequence rather than a UI rule:
  *
  * - **Already locked.** `lockQuestionAfterAnswer` means the student may not return to an answered question.
  *   Enforced here rather than in the renderer because a renderer can be bypassed by a keyboard shortcut, and a
  *   locked question that a stray event can rewrite is not locked.
- * - **Past its own deadline.** The per-question clock is `questionDeadlineAt` INCLUDING the grace period, which
- *   is `plans/01` §9.1's rule and not this file's: the client must not be stricter than the server, or a student
- *   loses an answer the server would have taken.
+ * - **Past its own deadline, and the expiry term froze it.** See the note below -- this used to refuse every term
+ *   including `SOFT`.
+ * - **Past the attempt's.** `INV-LATE-1`, and the same `expiryVerdict` answers it.
  * - **The attempt is over.** A submitted attempt accepts nothing.
+ *
+ * ## THIS IS NOT A SECOND ANSWER TO "MAY I WRITE?", IT IS THE SAME ONE
+ *
+ * The clause below used to compare `questionDeadlineAt + grace` directly, and it is what made the client
+ * **silently** drop a `SOFT`-expiry answer past the question's window: `reduceAttempt`'s `ANSWER` case returns the
+ * state unchanged on a refusal, so there was no queued write, no revision bump, and nothing on screen. A student
+ * typing into an expired question watched it go nowhere.
+ *
+ * The comment this function used to carry claimed the opposite requirement -- "the client must not be stricter
+ * than the server, or a student loses an answer the server would have taken" -- and the code did precisely that.
+ * So the boundary is now asked of `expiryVerdict`, the same function `packages/db`'s `decideWrite` and
+ * `@orrery/exam-engine`'s `evaluateAttempt` ask, and the agreement test over the whole
+ * `expiry x instant` matrix lives beside them. One question, one answer, three callers.
  */
 export const canAnswer = (
   state: AttemptState,
@@ -178,7 +192,7 @@ export const canAnswer = (
   now: number,
 ): {
   readonly allowed: boolean;
-  readonly why?: 'LOCKED' | 'QUESTION_DEADLINE_PASSED' | 'ATTEMPT_OVER' | 'UNKNOWN_QUESTION';
+  readonly why?: 'LOCKED' | 'QUESTION_DEADLINE_PASSED' | 'ATTEMPT_DEADLINE_PASSED' | 'ATTEMPT_OVER' | 'UNKNOWN_QUESTION';
 } => {
   if (indexOf(state, questionId) === -1) return { allowed: false, why: 'UNKNOWN_QUESTION' };
   if (state.status === 'SUBMITTED') return { allowed: false, why: 'ATTEMPT_OVER' };
@@ -190,12 +204,19 @@ export const canAnswer = (
     return { allowed: false, why: 'LOCKED' };
   }
 
-  const graceMs = state.policy.gracePeriodSec * 1000;
-  if (slot.questionDeadlineAt !== null && now > slot.questionDeadlineAt + graceMs) {
-    return { allowed: false, why: 'QUESTION_DEADLINE_PASSED' };
-  }
-  if (state.deadlineAt !== null && now > state.deadlineAt + graceMs) {
-    return { allowed: false, why: 'ATTEMPT_OVER' };
+  const verdict = expiryVerdict(state.policy, {
+    questionDeadlineAt: slot.questionDeadlineAt,
+    deadlineAt: state.deadlineAt,
+    now,
+    graceMs: state.policy.gracePeriodSec * 1000,
+  });
+  if (!verdict.writable) {
+    return {
+      allowed: false,
+      why: verdict.refusedBecause === 'ATTEMPT_DEADLINE_PASSED'
+        ? 'ATTEMPT_DEADLINE_PASSED'
+        : 'QUESTION_DEADLINE_PASSED',
+    };
   }
   return { allowed: true };
 };

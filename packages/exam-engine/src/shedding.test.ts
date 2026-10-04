@@ -118,10 +118,21 @@ describe('the two queues in the codebase, checked against the policy', () => {
     const write = read('packages/db/src/answer-write.ts');
     expect(write).toMatch(/reason: 'ATTEMPT_NOT_IN_PROGRESS'/);
     expect(write).toMatch(/reason: 'QUESTION_NOT_IN_ATTEMPT'/);
-    // Both deadlines have their OWN refusal reason, which is what makes the sweep/write agreement checkable: the
-    // attempt window and the per-question window are separate verdicts a client can be told apart.
-    expect(write).toMatch(/reason: 'ATTEMPT_DEADLINE_PASSED'/);
-    expect(write).toMatch(/reason: 'QUESTION_DEADLINE_PASSED'/);
+    /**
+     * Both deadlines have their OWN refusal reason, which is what makes the sweep/write agreement checkable: the
+     * attempt window and the per-question window are separate verdicts a client can be told apart.
+     *
+     * **THE ASSERTION MATCHED `reason: '<LITERAL>'` AND STOPPED MATCHING WHEN THE CHOICE BECAME A TERNARY.** The
+     * reason pair is now selected from `expiryVerdict`'s `refusedBecause` rather than written as two separate early
+     * returns, so the guarantee -- which is that the two reasons are DISTINGUISHABLE, not that they sit behind a
+     * particular keyword -- is checked as presence of both literals.
+     *
+     * The behavioural half is asserted for real in `apps/web/src/features/exam/expiryAgreement.test.ts` ("a refusal
+     * names the PAPER when both windows have passed, not the question"), which is the stronger check: it drives
+     * `decideWrite` and reads the reason off the decision. A source scan can only ever confirm the words are there.
+     */
+    expect(write).toContain('ATTEMPT_DEADLINE_PASSED');
+    expect(write).toContain('QUESTION_DEADLINE_PASSED');
     // And the rejection is recorded as an EVENT rather than dropped, per B8.
     expect(write).toContain('LATE_SAVE_REJECTED');
   });
