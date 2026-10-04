@@ -7,7 +7,6 @@
  */
 
 import { describe, expect, it } from 'vitest';
-
 import {
   ACCEPTANCE_FLOOR,
   analyseDistractors,
@@ -24,6 +23,7 @@ import {
   rankBiserial,
   timeOnItem,
 } from './index.js';
+import { cronbachAlpha } from './reliability.js';
 
 describe('P-8: TWO facility numbers, neither called facility alone', () => {
   const full = (n: number) =>
@@ -468,5 +468,48 @@ describe('the null-guards in the quantile helpers', () => {
     // 2, which is the third of four -- 30, not 40.
     expect(item?.q1Ms).toBe(10);
     expect(item?.q3Ms).toBe(30);
+  });
+});
+
+describe('the reachable defensive branches', () => {
+  it('returns 0 for a correlation with fewer than three points, rather than dividing by a near-zero variance', () => {
+    const ci = correlationWithCi([1], [2], 1);
+    // Two points correlate perfectly, which is meaningless, and `n - 3` in the standard error is negative below three.
+    expect(ci.r).toBe(0);
+    expect(Number.isFinite(ci.r)).toBe(true);
+  });
+
+  it('returns 0 rank-biserial from a single scorable response', () => {
+    const single = [{ awarded: 2, maxPoints: 2, restScore: 5, scorable: true }];
+    expect(rankBiserial(single)).toBe(0);
+  });
+
+  it('handles a correction split where one group is EMPTY', () => {
+    // One student, so the lower 27% slice is that student and the upper slice is the same person -- the groups must
+    // still produce a finite D rather than NaN.
+    const tiny = [{ awarded: 0, maxPoints: 2, restScore: 0, scorable: true }];
+    const result = correctedD(tiny);
+    expect(Number.isFinite(result.d)).toBe(true);
+    expect(result.isUnderpowered).toBe(true);
+  });
+
+  it('handles NO scorable outcomes at all, where both split groups are empty', () => {
+    // With no responses the lower and upper slices are both empty, which is the only way `rows.length === 0` is
+    // reachable -- the group size is floored at 1, so any non-empty cohort fills both slices.
+    const result = correctedD([{ awarded: 0, maxPoints: 2, restScore: 0, scorable: false }]);
+    expect(Number.isFinite(result.d)).toBe(true);
+    expect(result.pUpper).toBe(0);
+    expect(result.pLower).toBe(0);
+  });
+
+  it('returns a zero variance for a single score rather than dividing by zero', () => {
+    // `sampleVariance` is called with a single value on the way to α for a k=1 form, which is refused later -- so the
+    // guard here is what stops a NaN appearing before the refusal does.
+    const viaAlpha = cronbachAlpha({
+      responses: [{ scores: [3] }],
+      isFixedForm: true,
+      itemCount: 12,
+    });
+    expect(viaAlpha.ok).toBe(false);
   });
 });

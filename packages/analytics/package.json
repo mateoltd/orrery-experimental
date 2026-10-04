@@ -15,7 +15,8 @@
     "build": "tsc -b",
     "typecheck": "tsc -b --noEmit false --emitDeclarationOnly false --pretty",
     "test": "vitest run",
-    "clean": "rm -rf dist *.tsbuildinfo"
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
     "fast-check": "3.23.2"
