@@ -28,7 +28,12 @@
  * sweep executes per tick, and the others return immediately.
  */
 
+import { systemClock } from '@orrery/clock';
 import { createLogger } from '@orrery/config/logging';
+import { getPrisma } from '@orrery/db';
+import { runDeadlineSweep } from '@orrery/db/sweep';
+
+const db = getPrisma();
 
 const log = createLogger('job', { service: 'worker' });
 
@@ -37,18 +42,8 @@ const log = createLogger('job', { service: 'worker' });
  * rather than a Redis lock: the lock and the data it protects are in the same database, so
  * they cannot disagree.
  */
-export async function runExclusive<T>(key: string, fn: () => Promise<T>): Promise<T | null> {
-  // The real implementation issues, on one connection:
-  //   SELECT pg_try_advisory_lock(hashtext($1))        -- returns false if held
-  //   … fn() …
-  //   SELECT pg_advisory_unlock(hashtext($1))
-  // Held in a transaction when the job writes, released in a finally. If `fn` throws, the
-  // transaction rolls back and the connection close releases the lock — so a crashed job
-  // cannot wedge the sweep shut.
-  void key;
-  void fn;
-  return null;
-}
+/** Re-exported so `apps/worker` and the tests exercise the SAME lock, not two implementations of it. */
+export { runExclusive } from '@orrery/db/run-exclusive';
 
 export interface Job {
   name: string;
@@ -71,13 +66,23 @@ export const JOBS: Job[] = [
       'writes inside the final seconds. Runs on pg_cron behind an advisory lock, NOT on the ' +
       'general queue, because an unsubmitted attempt is a student waiting for a grade.',
     run: async () => {
-      // P8-T9. Three steps, per 03 §3.4:
+      // P8-T9. Three steps, per 03 §3.4, in `packages/db/src/sweep.ts`:
       //   1. IN_PROGRESS with deadlineAt + grace < now  -> auto-submit from SERVER state
       //   2. per-question windows past deadline          -> close per policy
-      //   3. inside the final 10 s of a cohort deadline  -> answer writes get 429 + Retry-After
-      // Step 3 is a 429 on TELEMETRY ONLY. The answer path never sheds (B10): a rejected
-      // answer save inside the grace window is a grading injustice.
-      throw new Error('not implemented — P8-T9');
+      //
+      // Step 3 of §3.4 ("answer writes get 409 WINDOW_CLOSING inside the final 10 s") is the PRE-B10 text and is NOT
+      // implemented here, deliberately: `B10` records that shedding answer writes inside the grace window DISCARDED
+      // answers the plan had promised to keep. Only telemetry sheds (`P8-T9b`). §3.4 needs amending, and until it does
+      // this comment is the correction.
+      //
+      // **THE TRANSACTION LIVES IN `packages/db`, NOT HERE.** `plans/03` §5: only `packages/db` imports Prisma, and
+      // multi-table writes go through a service function that owns the transaction and the audit events. A cron that
+      // opened its own transaction here would be the second writer of the same rows and would not be covered by the
+      // tests that now exist for the sweep.
+      const result = await runDeadlineSweep(db, systemClock.now());
+      if (result.autoSubmitted > 0 || result.windowsClosed > 0) {
+        log.info('swept', result);
+      }
     },
   },
   {

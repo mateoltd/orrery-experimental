@@ -125,6 +125,14 @@
     "./answer-write": {
       "types": "./dist/answer-write.d.ts",
       "default": "./dist/answer-write.js"
+    },
+    "./sweep": {
+      "types": "./dist/sweep.d.ts",
+      "default": "./dist/sweep.js"
+    },
+    "./run-exclusive": {
+      "types": "./dist/run-exclusive.d.ts",
+      "default": "./dist/run-exclusive.js"
     }
   },
   "scripts": {
