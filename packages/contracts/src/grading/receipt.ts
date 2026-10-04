@@ -77,7 +77,34 @@ export interface ReceiptSeed {
   readonly assignmentId: string;
   /** The FROZEN policy snapshot. `INV-POLICY-1`: stored once at first start, never re-read from the assignment. */
   readonly policySnapshot: unknown;
+  /**
+   * A digest of the ANSWER KEY SET the marks were produced with.  (P8-T10)
+   *
+   * **IT WAS MISSING, AND WITHOUT IT THE RECEIPT DOES NOT BIND TO THE KEYS.** `plans/02` §2 stores a `keysHash`
+   * column and the schema's own comment says "keysHash is folded into H0" -- but the seed had three fields and not this
+   * one. So a receipt reproduced perfectly after the answer key was changed, and `verify-receipt` reported no
+   * divergence.
+   *
+   * That is the exact failure the receipt exists to catch. A student who says "my mark changed because the key changed"
+   * is not being paranoid -- key edits are ordinary maintenance -- and with no `keysHash` in `H₀` there was no way to
+   * show that the marks came from a different key set than the paper now carries.
+   *
+   * Required, not optional. Adding it changes every receipt computed before this commit, which is CORRECT: an older
+   * receipt must FAIL verification rather than quietly pass against a chain it no longer describes.
+   */
+  readonly keysHash: string;
 }
+
+/**
+ * A KEYED MAC over a hash. Asymmetric to `Digest` on purpose: a digest proves two strings are EQUAL, and a MAC proves
+ * the holder of a SECRET produced it.
+ *
+ * Without the secret, anyone can construct a chain that folds to whatever receipt they like -- so an unsigned receipt
+ * proves internal consistency and nothing more. That is a real difference rather than a hardening adjective:
+ * "the receipt reproduces" and "the platform issued this receipt" are different claims, and a teacher checking a disputed
+ * mark needs the second one.
+ */
+export type Mac = (message: string) => string;
 
 /**
  * `‖` MEANS CONCATENATION OF THE HASH **STRINGS**, with a separator.
@@ -113,7 +140,16 @@ export const foldBytes = (...parts: readonly string[]): string => parts.join(SEP
  * Without the snapshot in `H₀`, a teacher who extended a deadline would break the receipt on every attempt.
  */
 export const seedHash = (seed: ReceiptSeed, digest: Digest): string =>
-  digest(foldBytes(seed.attemptId, seed.assignmentId, digest(canonicalJson(seed.policySnapshot))));
+  digest(
+    foldBytes(
+      seed.attemptId,
+      seed.assignmentId,
+      digest(canonicalJson(seed.policySnapshot)),
+      // Last, deliberately: adding a component to `H₀` must not change where the existing three sit, so a divergence
+      // report can still say WHICH seed field moved.
+      seed.keysHash,
+    ),
+  );
 
 /** `Hᵢ` -- one question folded onto the chain. */
 export const foldRevision = (previous: string, revision: Revision, digest: Digest): string =>
@@ -193,7 +229,21 @@ export const verifyReceipt = (
   questionOrder: readonly string[],
   storedReceipt: string,
   digest: Digest,
+  /**
+   * FINALISE THE FOLD BEFORE COMPARING.  (P8-T10)
+   *
+   * The stored receipt is `mac(Hₙ)`, so comparing a recomputed fold against it directly can NEVER match -- every signed
+   * receipt reports a divergence at the anchor, which is both wrong and maximally confusing to whoever is trying to use
+   * the tool. Passing the MAC here puts the finalisation in the one place the comparison happens.
+   *
+   * Optional, and omitted means the stored value is the bare fold, so a pre-P8-T10 receipt still verifies as before. That
+   * is deliberate: `verify-receipt` reports an unsigned receipt as a distinct, named outcome rather than as a divergence,
+   * because "this chain is consistent but nobody signed it" and "this chain does not match" need different responses.
+   */
+  mac?: Mac,
 ): Divergence | null => {
+  const finalise = (folded: string): string =>
+    mac === undefined ? folded : signReceipt(folded, mac);
   const ordered = finalRevisionsInQuestionOrder(revisions, questionOrder);
   let computed = seedHash(seed, digest);
   const first = ordered[0];
@@ -207,7 +257,7 @@ export const verifyReceipt = (
    * export from a support ticket.
    */
   if (first === undefined) {
-    return computed === storedReceipt
+    return finalise(computed) === storedReceipt
       ? null
       : {
           questionId: null,
@@ -282,3 +332,88 @@ export const verifyReceipt = (
       'every stored link agrees, so the difference is in the final fold rather than in any answer',
   };
 };
+
+/**
+ * SIGN A FOLDED RECEIPT.  (P8-T10)
+ *
+ * The stored `submissionReceipt` is `mac(Hₙ)`, not `Hₙ`. The fold is public and reproducible by anyone holding the
+ * chain -- which is exactly what lets a teacher recompute it -- so what is stored is the part that proves the platform
+ * issued it. Both halves are needed and they answer different questions:
+ *
+ *   · `receiptHash` answers "is this chain internally consistent?"   -- reproducible with no secret.
+ *   · `signReceipt`  answers "did the platform issue this receipt?"  -- needs the KMS-held key.
+ *
+ * The MAC covers the hex hash STRING rather than the bytes it was computed from. Both are unambiguous here because a
+ * hex digest is fixed-length ASCII, and stating it means an implementation cannot half-apply the rule.
+ */
+export const signReceipt = (folded: string, mac: Mac): string => mac(folded);
+
+/** Why a stored receipt is not acceptable. Named, because "does not match" is the answer that sends a teacher through
+ * the whole paper -- the same objection `Divergence` exists to answer. */
+export type SignatureVerdict =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: 'NO_KEY' | 'NOT_SIGNED' | 'SIGNATURE_MISMATCH' };
+
+/**
+ * IS THE STORED RECEIPT SIGNED BY THE HELD KEY?
+ *
+ * **COMPARISON IS CONSTANT-TIME, and that is the entire reason this is a function rather than `stored === recomputed`.**
+ * A byte-by-byte `===` on a MAC returns at the first difference, so an attacker learns the length of the matching
+ * prefix and improves a forgery one byte at a time. The threat against a long-lived exam receipt is narrow, but the
+ * fix is a handful of lines and the alternative is writing the vulnerable form on purpose.
+ */
+export const verifyReceiptSignature = (
+  storedReceipt: string,
+  recomputedFold: string,
+  mac: Mac | null,
+): SignatureVerdict => {
+  // NO KEY IS ITS OWN ANSWER, and it is a refusal rather than a pass. A verifier that cannot check the signature has
+  // not verified the receipt; reporting "fine, no problems" here is how a deployment ends up believing in an
+  // authenticity check it never performed.
+  if (mac === null) return { ok: false, reason: 'NO_KEY' };
+  if (storedReceipt.length === 0) return { ok: false, reason: 'NOT_SIGNED' };
+
+  const expected = signReceipt(recomputedFold, mac);
+  // A length mismatch is not secret -- a receipt's length is not a secret -- so it is an ordinary mismatch.
+  if (storedReceipt.length !== expected.length) return { ok: false, reason: 'SIGNATURE_MISMATCH' };
+
+  let difference = 0;
+  for (let index = 0; index < expected.length; index += 1) {
+    difference |= storedReceipt.charCodeAt(index) ^ expected.charCodeAt(index);
+  }
+  return difference === 0 ? { ok: true } : { ok: false, reason: 'SIGNATURE_MISMATCH' };
+};
+
+/**
+ * THE RECEIPT A KEY SET PRODUCES, as a digest over its identity rather than its contents.
+ *
+ * ## WHY A HASH OF THE KEYS AND NOT THE KEYS
+ *
+ * Because the answer key is the most sensitive thing in this system, and a receipt is handed to a student. Folding the
+ * key material into `H₀` directly would mean the receipt either leaks the key or leaks a hash an attacker grinds
+ * offline -- and the keys are short enough (a handful of choice indices per question) that a plain digest is
+ * enumerable. **Hashing the keys again, salted by the grader version, does not fix that either**; what fixes it is that
+ * this digest is computed and stored SERVER-SIDE and never leaves the platform, while the receipt carries only the
+ * digest's own hash as one more component of `H₀`.
+ *
+ * The components are canonically ordered, because `keysHash` for the same key set must be identical on two different
+ * application servers or every receipt becomes unreproducible.
+ */
+export interface AnswerKeyDescriptor {
+  readonly questionId: string;
+  /** The correct answer, or its hash where the key must not be held in plaintext in memory. */
+  readonly correct: unknown;
+  readonly points: number;
+}
+
+export const keysHash = (keys: readonly AnswerKeyDescriptor[], digest: Digest): string =>
+  digest(
+    foldBytes(
+      ...[...keys]
+        // Sorted by question id, so two servers computing this for the same set agree.
+        .sort((a, b) => (a.questionId < b.questionId ? -1 : a.questionId > b.questionId ? 1 : 0))
+        .map((key) =>
+          foldBytes(key.questionId, digest(canonicalJson(key.correct)), String(key.points)),
+        ),
+    ),
+  );

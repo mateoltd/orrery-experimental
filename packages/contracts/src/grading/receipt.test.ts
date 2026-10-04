@@ -1,3 +1,8 @@
+import { createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 /**
  * Tests for the receipt chain.  (P7-T9)
  *
@@ -17,19 +22,33 @@ import {
   finalRevisionsInQuestionOrder,
   foldBytes,
   foldRevision,
+  keysHash,
+  type Mac,
   type Revision,
   receiptHash,
   SEPARATOR,
   seedHash,
+  signReceipt,
   verifyReceipt,
+  verifyReceiptSignature,
 } from './receipt.js';
 
 const sha256 = (bytes: string): string => createHash('sha256').update(bytes, 'utf8').digest('hex');
 
+/**
+ * `keysHash` IS PART OF THE SEED.  (P8-T10)
+ *
+ * It was absent while `plans/02` §2 and the schema both described it, and adding it CHANGED `H₀` -- so this file's
+ * hand-computed reference digest moved, and it is worth being explicit that the move is the point rather than a
+ * regression: a receipt computed before this commit no longer reproduces against a chain it does not describe, which is
+ * the behaviour you want. A receipt that kept verifying after the key set stopped being part of it was verifying
+ * something weaker than it claimed to.
+ */
 const SEED = {
   attemptId: '0195f2c0-0000-7000-8000-000000000001',
   assignmentId: 'as-1',
   policySnapshot: { version: 1, maxAttempts: 1, gracePeriodSec: 60 },
+  keysHash: 'keys-1',
 };
 
 const ORDER = ['q1', 'q2', 'q3'];
@@ -79,6 +98,8 @@ describe('H0 binds the attempt, the assignment AND the policy snapshot', () => {
           SEED.attemptId,
           SEED.assignmentId,
           createHash('sha256').update(canonicalJson(SEED.policySnapshot), 'utf8').digest('hex'),
+          // The fourth component, and the reason this digest moved in P8-T10.
+          SEED.keysHash,
         ),
         'utf8',
       )
@@ -381,5 +402,120 @@ describe('the cases a support ticket actually arrives with', () => {
     );
     expect(divergence?.questionId).toBeNull();
     expect(divergence?.because).toContain('H0');
+  });
+});
+
+/**
+ * `keysHash` in the seed, and the keyed MAC on the stored receipt.  (P8-T10)
+ *
+ * Both were missing while `plans/02` §2 and the schema both described them, so the tests are as much about the gap as
+ * about the behaviour.
+ */
+describe('the receipt BINDS TO THE KEYS, which it did not until P8-T10', () => {
+  const seed = (keysHashValue: string): ReceiptSeed => ({
+    attemptId: 'a1',
+    assignmentId: 'as1',
+    policySnapshot: { totalTimeLimitSec: null },
+    keysHash: keysHashValue,
+  });
+  const revisions: Revision[] = [
+    {
+      questionId: 'q1',
+      revision: 1,
+      answer: { selectedChoiceIndex: 0 },
+      serverTs: 'T0',
+      source: 'CLIENT',
+    },
+  ];
+
+  it('produces a DIFFERENT receipt for the same chain under a different key set', () => {
+    /**
+     * The whole point. Before `keysHash` entered `H₀`, changing the answer key left every receipt reproducible and
+     * `verify-receipt` reported no divergence -- so a student whose mark moved because a key was edited had no way to
+     * show it, which is the situation the receipt exists for.
+     */
+    const before = receiptHash(seed('keys-A'), revisions, ['q1'], sha256);
+    const after = receiptHash(seed('keys-B'), revisions, ['q1'], sha256);
+    expect(before).not.toBe(after);
+  });
+
+  it('verifies cleanly when the key set is UNCHANGED', () => {
+    const stored = receiptHash(seed('keys-A'), revisions, ['q1'], sha256);
+    expect(verifyReceipt(seed('keys-A'), revisions, ['q1'], stored, sha256)).toBeNull();
+    // ...and reports a divergence once the keys move, which `verify-receipt` will then name as the SEED.
+    expect(verifyReceipt(seed('keys-B'), revisions, ['q1'], stored, sha256)?.questionId).toBeNull();
+  });
+
+  it('orders the key set, so two servers computing keysHash AGREE', () => {
+    // Two application servers grading the same cohort must produce byte-identical digests, or every receipt becomes
+    // unreproducible and `verify-receipt` becomes useless.
+    const a = [
+      { questionId: 'q2', correct: 'x', points: 2 },
+      { questionId: 'q1', correct: 'y', points: 1 },
+    ];
+    const b = [...a].reverse();
+    expect(keysHash(a, sha256)).toBe(keysHash(b, sha256));
+  });
+
+  it('changes keysHash when a single POINT VALUE moves', () => {
+    // Written as two literals rather than a spread with a non-null assertion: the assertion was noise for an element
+    // that is provably present, and it is the kind of token that teaches a reader to add `!` where it is not needed.
+    const onePoint = [{ questionId: 'q1', correct: 'y', points: 1 }];
+    const twoPoints = [{ questionId: 'q1', correct: 'y', points: 2 }];
+    expect(keysHash(onePoint, sha256)).not.toBe(keysHash(twoPoints, sha256));
+  });
+});
+
+describe('a receipt is only as trustworthy as its SIGNATURE', () => {
+  const folded = 'a'.repeat(64);
+  const key = 'k'.repeat(32);
+  const hmac: Mac = (message) => createHmac('sha256', key).update(message, 'utf8').digest('hex');
+  const otherHmac: Mac = (message) =>
+    createHmac('sha256', 'z'.repeat(32)).update(message, 'utf8').digest('hex');
+  const signed = signReceipt(folded, hmac);
+
+  it('signs, and a verifier with the same key accepts', () => {
+    expect(signed).not.toBe(folded);
+    expect(verifyReceiptSignature(signed, folded, hmac)).toEqual({ ok: true });
+  });
+
+  it('REFUSES UNDER A DIFFERENT KEY, which is the property a bare hash fold cannot have', () => {
+    /**
+     * Anyone can construct a chain that folds to whatever they like, because the fold is public and needs no secret. So
+     * an UNSIGNED receipt proves internal consistency and nothing more -- "it reproduces" is not "we issued it".
+     */
+    expect(verifyReceiptSignature(signed, folded, otherHmac)).toEqual({
+      ok: false,
+      reason: 'SIGNATURE_MISMATCH',
+    });
+  });
+
+  it('REFUSES WHEN THE FOLDER MOVED, so a consistent chain over different answers still fails', () => {
+    expect(verifyReceiptSignature(signed, 'b'.repeat(64), hmac).ok).toBe(false);
+  });
+
+  it('reports NO_KEY as a REFUSAL rather than a pass', () => {
+    /**
+     * A verifier that cannot check the signature has not verified the receipt. Returning "fine" here is how a deployment
+     * comes to believe in an authenticity check it never performed -- and it would do so silently, in production,
+     * because nothing threw.
+     */
+    expect(verifyReceiptSignature(signed, folded, null)).toEqual({ ok: false, reason: 'NO_KEY' });
+  });
+
+  it('reports an absent receipt as NOT_SIGNED, distinct from a wrong one', () => {
+    expect(verifyReceiptSignature('', folded, hmac)).toEqual({ ok: false, reason: 'NOT_SIGNED' });
+  });
+
+  it('does NOT use `===` on the signature', () => {
+    // A short-circuit comparison leaks the matching prefix length and improves a forgery a byte at a time. Asserted
+    // against the source because the property is about the code that ships, not about the current behaviour.
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'receipt.ts'),
+      'utf8',
+    );
+    const body = source.slice(source.indexOf('export const verifyReceiptSignature'));
+    expect(body).toContain('charCodeAt');
+    expect(body).not.toMatch(/storedReceipt === expected|expected === storedReceipt/);
   });
 });
