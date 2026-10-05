@@ -209,9 +209,26 @@ export const ANSWER_FIXTURES: readonly AnswerFixture[] = [
       rawPoints: 0,
       maxPoints: 4,
       correct: false,
-      rationaleCode: 'UNPARSEABLE',
+      // BLANK, AND IT WAS `UNPARSEABLE` IN THIS FIXTURE TOO.
+      rationaleCode: 'BLANK',
     },
-    why: 'No option was chosen. Reported UNPARSEABLE rather than INCORRECT, because a blank and a wrong answer are different events.',
+    /**
+     * The reasoning that made this fixture `UNPARSEABLE` was half right, and the half that was wrong is the half that
+     * reached a teacher.
+     *
+     * "A blank and a wrong answer are different events" is exactly `plans/07`'s position, and it is preserved: this is
+     * not `INCORRECT`, and `INCORRECT` would have been the real error. But **`UNPARSEABLE` is not merely
+     * "not INCORRECT"** -- it is *our* fault. It raises `MALFORMED_RESPONSE`, so an untouched paper listed every
+     * single-choice and true/false question to a marker as something that had gone wrong on the platform, with a
+     * message that read `'No option was chosen.'` and so blamed the student for choosing nothing.
+     *
+     * `PF-5` established that a missing or `null` field is a `BLANK` and only a PRESENT-AND-UNREADABLE one is a fault.
+     * It fixed `numeric` and `short_text`; these two types were missed, and `multi_select` one fixture along already
+     * said `BLANK` for the identical absence. So the fixture table recorded both answers to one question, and
+     * `fixtures.test.ts` caught the disagreement the moment the graders were made consistent -- which is the argument
+     * for hand-computed fixtures over snapshots: it says `UNPARSEABLE` and disagrees in a sentence a human reads.
+     */
+    why: 'No option was chosen. Reported BLANK rather than INCORRECT, because a blank and a wrong answer are different events -- and rather than UNPARSEABLE, because UNPARSEABLE is a PLATFORM fault and would put an untouched question in front of a marker as our error.',
     review: NOT_REVIEWED,
   },
 

@@ -250,13 +250,35 @@ const asStrictStringArray = (value: unknown): readonly string[] | null => {
 };
 
 /** AN ARRAY OF STRINGS, or nothing. Elements that are not strings are dropped rather than stringified. */
-const asStringArray = (value: unknown): string[] | null => {
+/**
+ * A LIST OF STRINGS, AND THE THIRD ANSWER IS NOW DISTINGUISHED.  (`ADV-S2`, one level down)
+ *
+ * It used to return `[]` for a list whose entries were ALL unreadable, and `[]` is a perfectly good answer -- it is
+ * what "the student selected nothing" looks like. So the two collapsed: a client that sent option ids as NUMBERS,
+ * `{ choiceIds: [1, 3] }`, had every entry dropped, the list came back empty, and the response was reported `BLANK`
+ * with no flag. **The student selected two options and the record said they selected nothing.**
+ *
+ * That is `ADV-S2` again one level down, and the reason it survived is worth keeping: `asStringArray` was doing the
+ * sensible thing locally. Dropping the bad entries is right when SOME survive -- half a list beats none, and a
+ * marker can still see the half that arrived. The bug is only visible at the moment the count reaches zero, which is
+ * a condition the function had no way to express.
+ *
+ * So it returns a three-way answer and the callers decide, which is the only place the distinction can be made:
+ * `null` -- not a list at all; `[]` -- a list, and it is empty; `UNREADABLE` -- a list with entries and not one of
+ * them a string.
+ */
+const UNREADABLE_LIST = Symbol('unreadable-list');
+
+type StringList = string[] | typeof UNREADABLE_LIST | null;
+
+const asStringArray = (value: unknown): StringList => {
   if (!Array.isArray(value)) return null;
   const out: string[] = [];
   for (const entry of value) {
     if (typeof entry === 'string') out.push(entry);
   }
-  return out;
+  // The whole point: a NON-EMPTY input that produced NO strings is not an empty answer.
+  return out.length === 0 && value.length > 0 ? UNREADABLE_LIST : out;
 };
 
 /**
@@ -416,7 +438,25 @@ const gradeSingleChoice = (
   if (!('key' in read)) return read;
   const given = asString(response.choiceId);
   if (given === null) {
-    return malformed(spec.points, why('UNPARSEABLE', 'No option was chosen.'));
+    /**
+     * "NO OPTION WAS CHOSEN" WAS REPORTED AS A PLATFORM FAULT.  (`PF-5`, extended to the two commonest types)
+     *
+     * `PF-5` gave `numeric` and `short_text` the `leftEmpty` split -- absent-or-null is a `BLANK`, present-and-
+     * unreadable is a `MALFORMED_RESPONSE` -- and this grader kept the older, conflated form, so it reported
+     * `UNPARSEABLE` for a question nobody touched.
+     *
+     * **The message was the tell and nobody read it.** `'No option was chosen.'` describes a student, and it was being
+     * attached to a *platform* fault flag: a marker looking at an untouched paper saw a list of things that had gone
+     * wrong on our side, each blaming the student for choosing nothing. `plans/07`'s `BLANK` code exists for exactly
+     * this case, and `gradeNumeric` has carried the correct wording for two phases.
+     *
+     * A `choiceId` that is PRESENT and not a string is still a fault, and still malformed -- a client that sent an
+     * object where an option id belongs is our bug to report, not the student's answer.
+     */
+    if (leftEmpty(response, 'choiceId')) {
+      return emit(0, spec.points, why('BLANK', 'No option was chosen.'));
+    }
+    return malformed(spec.points, why('UNPARSEABLE', 'The option chosen could not be read.'));
   }
   const correct = given === read.value;
   return emit(
@@ -455,6 +495,33 @@ const gradeMultiSelect = (
   if (!('key' in read)) return read;
   const keyIds = read.value;
   const chosen = asStringArray(response.choiceIds);
+  if (chosen === UNREADABLE_LIST) {
+    /**
+     * THE STUDENT SELECTED TWO OPTIONS AND THE RECORD SAID THEY SELECTED NONE.
+     *
+     * `{ choiceIds: [1, 3] }` -- option ids as numbers -- had every entry dropped by `asStringArray` and arrived here
+     * as an empty list, which is the same value an untouched question produces. So it was graded as a `BLANK` and
+     * `MALFORMED_RESPONSE` was never raised: **a malformed answer scored as a blank, silently.**
+     *
+     * Dropping the entries is still right when SOME survive, which is why this branch exists rather than a stricter
+     * reader; the distinction only matters at zero.
+     */
+    return malformed(spec.points, why('UNPARSEABLE', 'The options selected could not be read.'));
+  }
+  /**
+   * `null` -- THE FIELD IS NOT A LIST -- IS LEFT AS `UNPARSEABLE`, AND THAT IS DELIBERATE.
+   *
+   * I briefly routed this through `leftEmpty` as well, to match `single_choice`, and it broke two tests that pin
+   * decisions I had not read: "reports an ordering response with no itemIds as MALFORMED", and `ADV-S1`'s "calls
+   * ANOTHER type's empty answer in the slot unreadable, not blank". Both are right for a LIST type and I was
+   * over-reaching.
+   *
+   * **The asymmetry is real and worth stating rather than smoothing.** For a SCALAR field, `null` is what a browser
+   * sends for a cleared input, so it is indistinguishable from never-filled and `BLANK` is the only honest reading
+   * (`PF-5`). For a LIST field, `null` is not something a student can produce -- a checkbox list is `[]` -- so a null
+   * there means a client sent the wrong shape, which is our bug to report. Treating them alike would have been tidier
+   * and wrong.
+   */
   if (chosen === null) {
     return malformed(spec.points, why('UNPARSEABLE', 'No set of options was returned.'));
   }
@@ -580,7 +647,18 @@ const gradeTrueFalse = (
   );
   if (!('key' in read)) return read;
   if (typeof response.value !== 'boolean') {
-    return malformed(spec.points, why('UNPARSEABLE', 'No true/false answer was returned.'));
+    /**
+     * SAME SPLIT AS `single_choice` AND `gradeNumeric`, AND THE SAME REASONING: the message used to describe the
+     * STUDENT ("No true/false answer was returned") while raising a PLATFORM fault. A marker reading an untouched
+     * paper was shown a list of our failures, each of which said the student had not answered.
+     *
+     * Absent or `null` is a blank. Present and not a boolean is a fault -- including the awkward `value: 'true'`, which
+     * a client sending a string where a boolean belongs has done wrong and should be reported.
+     */
+    if (leftEmpty(response, 'value')) {
+      return emit(0, spec.points, why('BLANK', 'No true/false answer was returned.'));
+    }
+    return malformed(spec.points, why('UNPARSEABLE', 'The true/false answer could not be read.'));
   }
   const correct = response.value === read.value;
   return emit(
@@ -873,6 +951,14 @@ const gradeOrdering = (
   if (!('key' in read)) return read;
   const keyIds = read.value;
   const given = asStringArray(response.itemIds);
+  if (given === UNREADABLE_LIST) {
+    // As with `choiceIds`: a list of unreadable entries is a FAULT, and `orderingCredit` scores an empty list zero --
+    // so without this the student would be marked wrong rather than the platform reported, and the answer recorded is
+    // not the one they gave.
+    return malformed(spec.points, why('UNPARSEABLE', 'The ordering could not be read.'));
+  }
+  // As with `choiceIds`: only the `UNREADABLE_LIST` arm above is new. A `null` ordering stays a fault -- see the note
+  // on the `multi_select` reader for why a LIST field's `null` is not a blank.
   if (given === null) {
     return malformed(spec.points, why('UNPARSEABLE', 'No ordering was returned.'));
   }

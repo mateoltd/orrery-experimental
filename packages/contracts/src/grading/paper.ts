@@ -93,17 +93,42 @@ export interface PaperResult {
  * So a slot with NOTHING in it is translated into the type's own empty shape, and the grader's `BLANK` path -- which
  * already exists for the types that have one -- does the rest. This is the only substitution `gradePaper` makes.
  */
+/**
+ * THE EMPTY SHAPE FOR A TYPE, **DERIVED FROM `ANSWER_FIELD`** RATHER THAN HAND-WRITTEN.
+ *
+ * It was a switch listing `multi_select`, `ordering` and `single_choice`, and it was wrong in a way only a test could
+ * have found. `ANSWER_FIELD` -- thirty lines below -- already says `single_choice`'s field is **`choiceId`**, singular,
+ * and `true_false`'s is **`value`**; the switch answered `{ choiceIds: [] }` for both, which is not either type's shape.
+ *
+ * So an untouched `single_choice` was substituted with an object whose only key was one that grader does not read,
+ * `readTypedKey` found nothing, and `isTheAnswerUnreadable` (the `ADV-S2` fix) correctly concluded *"there is an
+ * answer here and I cannot see it"* -- `UNPARSEABLE`, `MALFORMED_RESPONSE`. **Every untouched paper would have put
+ * half its questions in front of a teacher as platform faults**, on the two commonest types, and `blank` was `true` on
+ * the very same entry.
+ *
+ * ## WHY NOBODY WROTE THE CASE: THE QUESTION ASKS WHAT A WRONG ANSWER LOOKS LIKE
+ *
+ * `PF-5` gave `numeric` and `short_text` a `BLANK` path and these two were missed. Every existing fixture supplies a
+ * WRONG answer -- a wrong option id, a wrong number -- because that is what a grader test is for. "Single choice,
+ * untouched" is not a grading question, it is a fixture question, and it was never written.
+ *
+ * ## AND A SECOND COPY OF A TABLE IS A SECOND THING TO FORGET
+ *
+ * This is the same defect as the `HANDLED.includes(...)` guard in `index.ts` that this file already documents: a guard
+ * that duplicates what it guards is a second thing to forget, and this was the copy that would have been missed,
+ * because the table it duplicated is thirty lines below in the same file. Deriving it means **a type added to
+ * `ANSWER_FIELD` gets the right empty shape for free**, and a type with no field (`simulation`) still gets `{}`,
+ * which is correct -- there is nothing a student empties.
+ *
+ * `SCALAR` becomes `null` because `PF-5` established a missing **or null** field as a `BLANK`, and `LIST` becomes `[]`
+ * because an empty list is an answer that is empty rather than an answer nobody can see. Those are different facts
+ * and `emptied` is exactly the record of which is which.
+ */
 const emptyResponseFor = (spec: QuestionSpec): unknown => {
-  switch (spec.type) {
-    case 'multi_select':
-      return { choiceIds: [] };
-    case 'ordering':
-      return { itemIds: [] };
-    case 'single_choice':
-      return {};
-    default:
-      return {};
-  }
+  const declared = ANSWER_FIELD[spec.type];
+  if (declared === null) return {};
+  const { field, emptied } = declared;
+  return emptied === 'LIST' ? { [field]: [] } : { [field]: null };
 };
 
 /**

@@ -479,7 +479,7 @@ describe('KNOWN, NOT FIXED: two more places unanswered and unreadable are confus
    *
    * The fix is in `grading/index.ts` and it inverts `index.test.ts`'s "marks a blank as UNPARSEABLE".
    */
-  it.fails('an UNANSWERED single_choice or true_false is a blank, not a malformed response', () => {
+  it('an UNANSWERED single_choice or true_false is a blank, not a malformed response', () => {
     for (const spec of [singleChoice(), trueFalse()]) {
       const result = gradePaper(paper([spec]), {});
       expect(result.grades[0]?.blank).toBe(true);
@@ -494,7 +494,7 @@ describe('KNOWN, NOT FIXED: two more places unanswered and unreadable are confus
    * empty, and the handler reports `BLANK` with no flag. The student selected two options and the record says
    * they selected nothing. That is `ADV-S2` again, one level down.
    */
-  it.fails('a selection whose every entry is unreadable is a fault, not a blank', () => {
+  it('a selection whose every entry is unreadable is a fault, not a blank', () => {
     const cases: ReadonlyArray<readonly [QuestionSpec, unknown]> = [
       [multi(), { choiceIds: [1, 3] }],
       [ordering(), { itemIds: [1, 2] }],

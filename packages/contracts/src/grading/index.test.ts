@@ -263,11 +263,34 @@ describe('single_choice', () => {
     expect(result.rationale.detail.chosen).toBe('b');
   });
 
-  it('marks a blank as UNPARSEABLE rather than INCORRECT', () => {
-    // A blank and a wrong answer are different events, and averaging them together is how a paper-swap
-    // disappears into a mean.
-    expect(g(singleChoice, {}).rationale.code).toBe('UNPARSEABLE');
-    expect(g(singleChoice, {}).flags).toContain('MALFORMED_RESPONSE');
+  it('marks a blank as BLANK, and no longer raises a PLATFORM fault for an untouched question', () => {
+    /**
+     * THIS ASSERTION WAS `UNPARSEABLE` AND IT PINNED THE DEFECT.  (`PF-5`, extended here)
+     *
+     * The comment that used to sit above it is right and was kept: a blank and a wrong answer are different events,
+     * and averaging them together is how a paper-swap disappears into a mean. **But it compared a blank against the
+     * wrong alternative.** `UNPARSEABLE` is not "not incorrect" -- it is *our* fault, it raises `MALFORMED_RESPONSE`,
+     * and it puts the question in front of a marker as something that went wrong on the platform.
+     *
+     * So an untouched `single_choice` was a platform fault, while `multi_select` one line below has always been
+     * `BLANK` for the same absence. `numeric` and `short_text` were corrected by `PF-5`; these two were missed,
+     * which is why the symptom sat on the commonest types.
+     *
+     * The paper-level test that pinned this is `paper.test.ts`'s "an UNANSWERED single_choice or true_false is a
+     * blank, not a malformed response", which carried this as an `it.fails` and is now a plain `it`.
+     */
+    const result = g(singleChoice, {});
+    expect(result.rationale.code).toBe('BLANK');
+    expect(result.flags).not.toContain('MALFORMED_RESPONSE');
+    expect(result.points).toBe(0);
+  });
+
+  it('STILL calls a choiceId it cannot READ a fault, because that one is ours', () => {
+    // The split that makes the case above safe: absent is a blank, present-and-unreadable is a fault. Without the
+    // second half, "be lenient about blanks" would also be "be lenient about a client sending an object".
+    const result = g(singleChoice, { choiceId: { option: 'a' } });
+    expect(result.rationale.code).toBe('UNPARSEABLE');
+    expect(result.flags).toContain('MALFORMED_RESPONSE');
   });
 });
 
