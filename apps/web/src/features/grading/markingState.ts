@@ -63,6 +63,8 @@ export interface ResponseFacts {
   /** `V-4`: blank because the clock ran out, which is a different fact from blank by choice. */
   readonly notReached: boolean;
   readonly isExcused: boolean;
+  /** Why it was excused, when it was. Shown back so that changing an excused response does not ask for it again. */
+  readonly excuseReason?: string;
   readonly flagged: boolean;
   readonly needsHuman: boolean;
   readonly auto: AutoMark | null;

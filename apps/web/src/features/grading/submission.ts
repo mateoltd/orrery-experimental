@@ -69,6 +69,7 @@ export const initialDraftFor = (facts: ResponseFacts): MarkDraft => ({
   bandId: facts.manual?.bandId ?? null,
   feedback: facts.manual?.feedback ?? '',
   excused: facts.isExcused,
+  excuseReason: facts.excuseReason ?? '',
   flagged: facts.flagged,
 });
 
@@ -160,7 +161,7 @@ export const applyAcknowledged = (
         },
       };
     case 'EXCUSE':
-      return { ...base, isExcused: true };
+      return { ...base, isExcused: true, excuseReason: submission.reason };
     case 'ACCEPT_AUTO_MARK':
       return {
         ...base,

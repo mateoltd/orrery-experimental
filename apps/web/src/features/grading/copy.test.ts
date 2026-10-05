@@ -117,6 +117,7 @@ describe('"saved" is reserved for an acknowledged mark', () => {
     copy.draftRestored('yesterday at 14:32', false),
     copy.draftRestored('yesterday at 14:32', true),
     copy.DRAFT_UNREADABLE,
+    copy.DRAFT_RESTORED_SHORT,
   ];
 
   it('never says a draft on this device is saved', () => {

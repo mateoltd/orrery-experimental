@@ -245,6 +245,43 @@ export const SIM_TRACE_EMPTY = 'No interaction trace is stored.';
 export const SIM_REPLAY_NOTE =
   'This shows what is stored. It does not re-run the grader, and it does not change the mark.';
 
+/* ───────────────────────────────────────────────────────── the screen ── */
+
+export const workspaceTitle = (candidateLabel: string): string => `Marking: ${candidateLabel}`;
+export const NO_RESPONSES = 'This attempt has no responses to mark.';
+export const RESPONSES_NAV_LABEL = 'Responses in this attempt';
+export const questionHeading = (position: number): string => `Question ${String(position)}`;
+export const ANSWER_HEADING = 'Student\u2019s answer';
+export const REPLAY_HEADING = 'Simulation replay';
+export const MARK_HEADING = 'Mark';
+export const GUIDANCE_HEADING = 'Marking guidance';
+export const worth = (points: number): string => `Worth ${String(points)}.`;
+export const MODEL_ANSWER_LABEL = 'Model answer';
+export const CONCEPT_HINTS_LABEL = 'Concept hints';
+export const TRACE_HEADING = 'Interaction trace';
+export const automaticReport = (explanation: string): string =>
+  `The automatic marker reported: ${explanation}`;
+/**
+ * A band in the list. "Worth N", NOT "N of M": that phrasing is reserved for a mark that has been GIVEN, and a
+ * zero-mark band listed beside an unmarked essay would otherwise put "0 of 5" on a screen whose whole job is not to
+ * say that.
+ */
+export const bandOption = (position: number, points: number, descriptor: string): string =>
+  `${String(position)}. Worth ${String(points)}: ${descriptor}`;
+export const MARK_SAVED_SHORT = 'Mark saved.';
+export const DRAFT_RESTORED_SHORT = 'A draft kept on this device was restored.';
+
+export const SHORTCUTS_CAPTION = 'What each key does on this screen';
+export const SHORTCUTS_NOTE =
+  'Every shortcut has a control on this screen that does the same thing. A key that is not listed here is left ' +
+  'to the field it is typed in, or to the browser.';
+export const SHORTCUT_COLUMNS = ['Key', 'What it does', 'Where it works'] as const;
+export const SHORTCUT_SCOPE = {
+  ANYWHERE: 'Anywhere, including inside a field',
+  OUTSIDE_TEXT_ENTRY: 'When not typing in a field',
+  OUTSIDE_CONTROLS: 'When focus is not on a field, a button or a checkbox',
+} as const;
+
 /* ─────────────────────────────────────────────────────────── the layout ── */
 
 export const STACKED_NOTE =
@@ -375,6 +412,26 @@ export const allCopy = (): readonly string[] => {
     simGradedLine(2, 3, 'PARTIAL'),
     SIM_TRACE_EMPTY,
     SIM_REPLAY_NOTE,
+    workspaceTitle('Candidate 14'),
+    NO_RESPONSES,
+    RESPONSES_NAV_LABEL,
+    questionHeading(3),
+    ANSWER_HEADING,
+    REPLAY_HEADING,
+    MARK_HEADING,
+    GUIDANCE_HEADING,
+    worth(5),
+    MODEL_ANSWER_LABEL,
+    CONCEPT_HINTS_LABEL,
+    TRACE_HEADING,
+    automaticReport('A different option was chosen.'),
+    bandOption(2, 2, 'names one force'),
+    MARK_SAVED_SHORT,
+    DRAFT_RESTORED_SHORT,
+    SHORTCUTS_CAPTION,
+    SHORTCUTS_NOTE,
+    ...SHORTCUT_COLUMNS,
+    ...Object.values(SHORTCUT_SCOPE),
     STACKED_NOTE,
     RUBRIC_EDIT_SUMMARY,
     rubricBound(5),
