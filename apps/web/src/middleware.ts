@@ -1,5 +1,6 @@
 import { guardRequest, type ImpersonationState } from '@orrery/auth/impersonation';
 import { type NextRequest, NextResponse } from 'next/server';
+import { resolveCspSimOrigin, type SimOriginEnv } from './server/csp-sim-origin';
 
 /**
  * Per-request CSP nonce.
@@ -90,8 +91,24 @@ export function middleware(req: NextRequest) {
   // below — comfortably more than a CSP nonce needs.
   const nonce = btoa(crypto.randomUUID());
 
-  const simsOrigin = process.env.SIMS_ORIGIN ?? 'http://localhost:4400';
+  /**
+   * THE VALIDATED VARIABLE, AND IT IS `SIM_ORIGIN`.  (`P14-T13`)
+   *
+   * This read `SIMS_ORIGIN` — one letter different from the name `packages/config` validates — so the CSP has been
+   * allowing a hardcoded `localhost:4400` in production and never the reviewed origin. See `server/csp-sim-origin.ts`.
+   */
   const isDev = process.env.NODE_ENV !== 'production';
+  const simOrigin = resolveCspSimOrigin(process.env as SimOriginEnv);
+  /**
+   * OMITTED, NOT DEFAULTED, WHEN IT CANNOT BE TRUSTED. A missing configuration must cost a feature rather than a
+   * boundary, so an untrusted origin leaves `frame-src`/`connect-src` with `'self'` alone and the sandbox simply
+   * does not load.
+   */
+  const simsOrigin = simOrigin.origin === null ? '' : ` ${simOrigin.origin}`;
+  if (simOrigin.refusal !== null && process.env.NODE_ENV === 'production') {
+    // Loud in production, silent in development, and it never reveals the value.
+    console.warn(`[csp] SIM_ORIGIN refused (${simOrigin.refusal}); simulation frames are blocked`);
+  }
 
   const csp = [
     "default-src 'self'",
@@ -104,8 +121,8 @@ export function middleware(req: NextRequest) {
     "font-src 'self' data:",
     // The sim origin, and ONLY the sim origin. This is what stops a sandboxed sim frame —
     // or an injected script — from calling our API with a student's cookies.
-    `frame-src 'self' ${simsOrigin}`,
-    `connect-src 'self' ${simsOrigin}`,
+    `frame-src 'self'${simsOrigin}`,
+    `connect-src 'self'${simsOrigin}`,
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'self'",
