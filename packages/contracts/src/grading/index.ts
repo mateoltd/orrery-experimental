@@ -259,6 +259,35 @@ const asStringArray = (value: unknown): string[] | null => {
   return out;
 };
 
+/**
+ * IS THE ONE FIELD THIS TYPE READS EMPTY -- OR IS THE ANSWER SOMEWHERE THIS GRADER CANNOT SEE?  (`ADV-S2`)
+ *
+ * Asked only once a handler has FAILED to read `field`, and it decides between the two zeros that must never be
+ * confused: `BLANK`, which stands, and `MALFORMED_RESPONSE`, which goes to a human.
+ *
+ * ## "THE FIELD IS MISSING" WAS READ AS "NOTHING WAS ANSWERED", AND THOSE ARE NOT THE SAME
+ *
+ * `PF-5` made a missing or `null` field a `BLANK`, and tested it with `{}`. But `{ state, answer: 5 }` is also an
+ * object with no `value` -- a simulation's answer saved against a numeric question, or a client that renamed a
+ * field -- and it took the same branch: `BLANK`, zero marks, no flag. The paper meanwhile counted it as ANSWERED,
+ * so the two layers disagreed and neither raised anything. That is the silent zero for a pipeline fault that
+ * `MALFORMED_RESPONSE` exists to prevent.
+ *
+ * So a blank is the type's own shape with nothing in it, and there are exactly two ways to write that:
+ *
+ * - the field is THERE and holds `null` or `undefined` -- a browser sends `null` for a cleared input;
+ * - the object is EMPTY -- the shape before anything was put in it.
+ *
+ * An object that carries something, none of it under the name this type reads, is not empty. Whatever the student
+ * answered is in there and cannot be read, which is a fault -- and erring this way costs a marker one look, where
+ * erring the other way costs a student a mark nobody will ever look at.
+ */
+const leftEmpty = (response: Record<string, unknown>, field: string): boolean => {
+  const held = response[field];
+  if (held !== undefined && held !== null) return false;
+  return Object.hasOwn(response, field) || Object.keys(response).length === 0;
+};
+
 // ───────────────────────────────────────────────────────────── the exit
 
 /**
@@ -592,15 +621,15 @@ const gradeNumeric = (
     /**
      * ABSENT IS A BLANK AND UNREADABLE IS A FAULT, AND THE TWO WERE CONFLATED HERE.
      *
-     * A numeric field the student never filled in arrives as `{value: null}` or with no `value` at all -- a browser
-     * sends `null` for a cleared input. That is an UNANSWERED question, and `plans/07`'s `BLANK` code exists for
-     * exactly it. Reporting `UNPARSEABLE` instead raised a `MALFORMED_RESPONSE` flag on every unanswered numeric
-     * question, so a marker saw a list of platform faults on a paper where nothing had gone wrong.
+     * A numeric field the student never filled in arrives as `{value: null}` or as `{}` -- a browser sends `null`
+     * for a cleared input. That is an UNANSWERED question, and `plans/07`'s `BLANK` code exists for exactly it.
+     * Reporting `UNPARSEABLE` instead raised a `MALFORMED_RESPONSE` flag on every unanswered numeric question, so
+     * a marker saw a list of platform faults on a paper where nothing had gone wrong.
      *
      * A value that is PRESENT and unreadable -- a string, an object, `NaN` -- is still a fault, and still malformed.
-     * The distinction is presence, not readability.
+     * So is an object with no `value` that is carrying something ELSE: see `leftEmpty`.
      */
-    if (!('value' in response) || response.value === null) {
+    if (leftEmpty(response, 'value')) {
       return emit(0, spec.points, why('BLANK', 'No number was returned.'));
     }
     return malformed(spec.points, why('UNPARSEABLE', 'The number returned could not be read.'));
@@ -779,8 +808,8 @@ const gradeShortText = (
   if (!('key' in read)) return read;
   const text = asString(response.text);
   if (text === null) {
-    // As for `numeric`: absent is a blank, present-and-unreadable is a fault.
-    if (!('text' in response) || response.text === null) {
+    // As for `numeric`: absent is a blank, present-and-unreadable is a fault, and `leftEmpty` says which.
+    if (leftEmpty(response, 'text')) {
       return emit(0, spec.points, why('BLANK', 'No text was returned.'));
     }
     return malformed(spec.points, why('UNPARSEABLE', 'The text returned could not be read.'));
@@ -790,7 +819,7 @@ const gradeShortText = (
    *
    * `EXACT` would score `'   '` against a key of `'photosynthesis'` as simply wrong, so the mark is zero either
    * way -- but the RATIONALE differs, and `BLANK` is what tells a marker the difference between a question left
-   * empty and one the student tried and got wrong. `gradePaper`'s `isAbsent` already trims for the same reason, so
+   * empty and one the student tried and got wrong. `gradePaper`'s `clearedOwnField` trims for the same reason, so
    * without this the two layers disagreed about the same response.
    */
   if (text.trim() === '') {

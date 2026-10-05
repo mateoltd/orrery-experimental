@@ -841,7 +841,7 @@ describe('short_text and ordering through `grade`, which P7-T5 had to wire up', 
     expect(absent.flags).not.toContain('MALFORMED_RESPONSE');
     expect(absent.points).toBe(0);
 
-    // WHITESPACE is a blank too: `gradePaper`'s `isAbsent` already trims, and without this the two layers
+    // WHITESPACE is a blank too: `gradePaper`'s `clearedOwnField` already trims, and without this the two layers
     // disagreed about the same response.
     expect(g(shortText, { text: '   ' }).rationale.code).toBe('BLANK');
 
@@ -858,6 +858,53 @@ describe('short_text and ordering through `grade`, which P7-T5 had to wire up', 
     expect(g(numeric, { value: null }).rationale.code).toBe('BLANK');
     expect(g(numeric, { value: 'abc' }).rationale.code).toBe('UNPARSEABLE');
     expect(g(numeric, { value: Number.NaN }).flags).toContain('MALFORMED_RESPONSE');
+  });
+
+  it('ADV-S2: does NOT call an object blank when it is carrying something this type cannot read', () => {
+    /**
+     * `PF-5` made a MISSING field a blank and tested it with `{}`. An object with no `value` that is NOT empty took
+     * the same branch: a simulation's `{ state, answer }` saved against a numeric question, or a client that
+     * renamed `value`, scored `BLANK` -- zero marks and no flag -- while `gradePaper` counted it as answered.
+     *
+     * What breaks without it: the student's answer is in the response, the grader cannot see it, and the record says
+     * they left the question out. Nothing is raised, so nobody looks.
+     */
+    const cases: ReadonlyArray<readonly [QuestionSpec, unknown, string]> = [
+      [numeric, { state: { angle: 12 }, answer: 5 }, 'The number returned could not be read.'],
+      [numeric, { number: 9.81 }, 'The number returned could not be read.'],
+      [numeric, { raw: '9.81' }, 'The number returned could not be read.'],
+      [numeric, { text: '' }, 'The number returned could not be read.'],
+      [shortText, { state: { angle: 12 }, answer: 5 }, 'The text returned could not be read.'],
+      [shortText, { value: 'photosynthesis' }, 'The text returned could not be read.'],
+      [shortText, { choiceIds: [] }, 'The text returned could not be read.'],
+    ];
+    for (const [spec, response, explanation] of cases) {
+      const result = g(spec, response);
+      expect(result.rationale).toEqual({ code: 'UNPARSEABLE', explanation, detail: {} });
+      expect(result.flags).toEqual(['MALFORMED_RESPONSE']);
+      expect(result.points).toBe(0);
+    }
+  });
+
+  it('ADV-S2: still calls the two real shapes of an emptied field blank, with no flag', () => {
+    // The fix must not reopen `PF-5`: an untouched paper is not a list of platform faults. Blank is the EMPTY
+    // object, or the field itself present and holding nothing -- whatever else is beside it.
+    const cases: ReadonlyArray<readonly [QuestionSpec, unknown]> = [
+      [numeric, {}],
+      [numeric, { value: null }],
+      [numeric, { value: undefined }],
+      [numeric, { value: null, raw: '' }],
+      [shortText, {}],
+      [shortText, { text: null }],
+      [shortText, { text: undefined }],
+      [shortText, { text: null, savedAt: 1 }],
+    ];
+    for (const [spec, response] of cases) {
+      const result = g(spec, response);
+      expect(result.rationale.code).toBe('BLANK');
+      expect(result.flags).toEqual([]);
+      expect(result.points).toBe(0);
+    }
   });
 
   it('names a bad REGEX pattern as NEEDS_HUMAN rather than marking the student wrong', () => {

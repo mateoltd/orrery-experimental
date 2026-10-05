@@ -18,6 +18,13 @@
  * length. `grade()` already reports an absent response as `BLANK` with `points: 0`, which is the correct answer, so
  * this function simply does not skip.
  *
+ * ## AND "NO RESPONSE" MEANS NOTHING IN THE SLOT -- NOT "SOMETHING EMPTY-LOOKING IN THE SLOT"
+ *
+ * An unanswered question and an unreadable one both score zero, and the consequence is opposite: a blank stands,
+ * and a fault goes to a human. So which values count as "no response" is the decision that settles whether a
+ * student is recorded as having left a question out when the platform in fact lost their answer. It is stated
+ * once, on `readSlot`, and it is deliberately narrow.
+ *
  * ## AND IT DOES NOT SUM, BECAUSE `plans/07` §3.2 SAYS THE FLOOR BELONGS IN THE ATTEMPT TOTAL
  *
  * There is deliberately no `total` and no `percentage` here. `NG` and `PM` produce negative `rawPoints` per
@@ -27,7 +34,7 @@
  * surface. So the caller receives per-question grades and does the arithmetic, once, in one place.
  */
 
-import type { QuestionSpec } from '../question/index.js';
+import type { QuestionSpec, QuestionType } from '../question/index.js';
 import type { GradeFlag, GradeOutput } from './index.js';
 import { grade } from './index.js';
 
@@ -40,7 +47,11 @@ export interface PaperQuestion {
 export interface PaperGrade {
   readonly questionId: string;
   readonly outcome: GradeOutput;
-  /** True when the response was absent or empty, as opposed to present and wrong. */
+  /**
+   * True when the question was NOT ANSWERED: nothing in the slot, or this type's own answer shape with nothing in
+   * it. Never true for a value that is merely empty-looking and the wrong shape -- that is a fault, and it is in
+   * `flags`. See `readSlot`.
+   */
   readonly blank: boolean;
   /** True when the grader could not produce a mark it can justify. A blank is NOT one of these. */
   readonly needsHuman: boolean;
@@ -79,8 +90,8 @@ export interface PaperResult {
  * question nobody answered; a PRESENT key holding rubbish is a malformed response. Passing `undefined` for the
  * first case threw that knowledge away and reported every unanswered question as `UNPARSEABLE`.
  *
- * So an absent key is translated into the type's own empty shape, and the grader's `BLANK` path -- which already
- * exists for the types that have one -- does the rest.
+ * So a slot with NOTHING in it is translated into the type's own empty shape, and the grader's `BLANK` path -- which
+ * already exists for the types that have one -- does the rest. This is the only substitution `gradePaper` makes.
  */
 const emptyResponseFor = (spec: QuestionSpec): unknown => {
   switch (spec.type) {
@@ -95,36 +106,103 @@ const emptyResponseFor = (spec: QuestionSpec): unknown => {
   }
 };
 
-/** A response that is absent, empty, or an empty selection -- the three shapes of "not answered". */
-const isAbsent = (response: unknown): boolean => {
-  if (response === undefined || response === null) return true;
-  if (typeof response === 'string') return response.trim() === '';
-  if (Array.isArray(response)) return response.length === 0;
-  if (typeof response === 'object') {
-    const record = response as Record<string, unknown>;
-    // The three keyed response shapes the question types use. An object with none of them is not "absent" -- it is
-    // a response this version does not understand, and grading it is better than skipping it.
-    for (const field of ['choiceIds', 'itemIds', 'text', 'value', 'choiceId']) {
-      const held = record[field];
-      /**
-       * WHITESPACE COUNTS AS ABSENT, and the reason is that the top-level string case already trims.
-       *
-       * `{text: '   '}` is a student who focused the box and typed nothing. Treating it as an answer sends a
-       * whitespace string to the matcher, which scores it wrong -- so the mark is zero either way, but the
-       * `blank` flag differs, and the flag is what tells a marker the difference between "left empty" and "tried
-       * and got it wrong".
-       *
-       * `null` counts too: a browser sends `null` for a cleared numeric field, and a student who cleared it did
-       * not answer.
-       */
-      if (held !== undefined) {
-        if (Array.isArray(held)) return held.length === 0;
-        if (typeof held === 'string') return held.trim() === '';
-        return held === null;
-      }
-    }
+/**
+ * THE ONE FIELD EACH TYPE'S ANSWER LIVES IN, and what an EMPTIED one looks like -- or `null` where there is no
+ * such thing. From `plans/07` section 2's table.
+ *
+ * Keyed by `QuestionType` so that adding a type is a compile error here rather than a type whose cleared answers
+ * are quietly never recognised: the list this replaces named five fields for ten types, and `assetIds` and `steps`
+ * were not among them.
+ *
+ * `simulation` is `null` ON PURPOSE. Its response is `{ simState, answer }`, written by a third-party bundle and
+ * round-tripped through `postMessage`, an outbox and a `jsonb` column. There is no input a student empties, so
+ * nothing found in that slot is "cleared" -- it is either a state or the remains of one.
+ */
+type Emptied = 'LIST' | 'TEXT' | 'SCALAR';
+const ANSWER_FIELD: {
+  readonly [T in QuestionType]: { readonly field: string; readonly emptied: Emptied } | null;
+} = {
+  single_choice: { field: 'choiceId', emptied: 'SCALAR' },
+  multi_select: { field: 'choiceIds', emptied: 'LIST' },
+  true_false: { field: 'value', emptied: 'SCALAR' },
+  numeric: { field: 'value', emptied: 'SCALAR' },
+  short_text: { field: 'text', emptied: 'TEXT' },
+  ordering: { field: 'itemIds', emptied: 'LIST' },
+  free_response: { field: 'text', emptied: 'TEXT' },
+  file_submission: { field: 'assetIds', emptied: 'LIST' },
+  worked_solution: { field: 'steps', emptied: 'LIST' },
+  simulation: null,
+};
+
+/**
+ * DID THE STUDENT CLEAR THIS TYPE'S OWN ANSWER FIELD?
+ *
+ * True only for the question's OWN field, held as an own key, holding what THAT KIND of input produces when it is
+ * emptied: `[]` for a list, `null` or whitespace for text, `null` for a number, an option or a boolean.
+ *
+ * ## WHITESPACE COUNTS, AND `null` COUNTS
+ *
+ * `{text: '   '}` is a student who focused the box and typed nothing. Treating it as an answer sends a whitespace
+ * string to the matcher, which scores it wrong -- so the mark is zero either way, but the `blank` flag differs, and
+ * the flag is what tells a marker the difference between "left empty" and "tried and got it wrong". A browser sends
+ * `null` for a cleared numeric field, and a student who cleared it did not answer.
+ *
+ * ## ANOTHER TYPE'S FIELD DOES NOT COUNT, NOR ANOTHER KIND OF EMPTY, AND BOTH USED TO
+ *
+ * The first version looked for ANY of five field names on ANY question and accepted ANY of the three empties in
+ * each, so `{choiceIds: []}` in a numeric slot was a blank, and so was `{value: []}`. Neither is the numeric
+ * question's empty answer. One is a multi-select's answer in the wrong slot and the other is a list where a number
+ * goes; `grade()` calls both unreadable, and a paper that calls them blank is hiding what the grader flagged.
+ */
+const clearedOwnField = (spec: QuestionSpec, response: unknown): boolean => {
+  if (typeof response !== 'object' || response === null || Array.isArray(response)) return false;
+  // `Object.hasOwn` on the table as well as on the response: a spec read out of a JSON column can name a type
+  // this build has never heard of, or `constructor`.
+  const own = Object.hasOwn(ANSWER_FIELD, spec.type) ? ANSWER_FIELD[spec.type] : null;
+  if (own === null || !Object.hasOwn(response, own.field)) return false;
+  const held = (response as Record<string, unknown>)[own.field];
+  switch (own.emptied) {
+    case 'LIST':
+      return Array.isArray(held) && held.length === 0;
+    case 'TEXT':
+      return held === null || (typeof held === 'string' && held.trim() === '');
+    case 'SCALAR':
+      return held === null;
   }
-  return false;
+};
+
+/**
+ * WHAT IS IN A QUESTION'S SLOT: nothing, or something.
+ *
+ * ## THE RULE, AND IT IS THE STRICT ONE
+ *
+ * **A slot is EMPTY only when there is no value in it: the key is absent, or it holds `undefined` or `null`.**
+ * `null` is how JSON and a nullable column say "no value", so it is absence written down. Everything else is
+ * PRESENT, and a present value is graded EXACTLY AS IT ARRIVED -- nothing is substituted for it, so the paper
+ * cannot hide a response that `grade()` would have flagged.
+ *
+ * ## `[]` AND `''` ARE PRESENT, AND THIS FUNCTION USED TO SAY OTHERWISE  (`ADV-S1`)
+ *
+ * It was called `isAbsent`, it described itself as "absent, empty, or an empty selection", and it counted a bare
+ * `[]` and a bare `''` as absent for every question type. The line that called it then claimed "a present key is
+ * graded exactly as it arrived". Both could not be true, and the code followed the first: a present `[]` was
+ * replaced by the type's empty shape and reported as a blank with no flag, while `grade()` called directly on the
+ * same value raised `MALFORMED_RESPONSE`. Two layers disagreed about one value, and the layer a submission goes
+ * through was the one that hid it.
+ *
+ * No response shape in the contract is a bare array or a bare string -- `plans/07` section 2: every one is an
+ * object, and an empty selection is `{choiceIds: []}`. So a bare `[]` is not an empty answer. It is the wrong type,
+ * which means something between the student and this function wrote the slot wrongly, and its being empty NOW says
+ * nothing about what the student put there. That is a fault, and a fault is not a blank.
+ */
+type Slot = { readonly kind: 'EMPTY' } | { readonly kind: 'PRESENT'; readonly response: unknown };
+
+const readSlot = (responses: Readonly<Record<string, unknown>>, questionId: string): Slot => {
+  // `Object.hasOwn`, so a question called `constructor` does not find `Object` waiting for it as an answer.
+  const held = Object.hasOwn(responses, questionId) ? responses[questionId] : undefined;
+  return held === undefined || held === null
+    ? { kind: 'EMPTY' }
+    : { kind: 'PRESENT', response: held };
 };
 
 /**
@@ -141,14 +219,23 @@ export const gradePaper = (
   const grades: PaperGrade[] = [];
 
   for (const question of questions) {
-    const present = Object.hasOwn(responses, question.questionId);
-    const response = present ? responses[question.questionId] : undefined;
-    const blank = !present || isAbsent(response);
-    // An absent KEY becomes the type's empty shape; a present key is graded exactly as it arrived.
+    const slot = readSlot(responses, question.questionId);
+    // An EMPTY slot becomes the type's empty shape; a present value is graded exactly as it arrived.
     const outcome = grade({
       spec: question.spec,
-      response: blank ? emptyResponseFor(question.spec) : response,
+      response: slot.kind === 'EMPTY' ? emptyResponseFor(question.spec) : slot.response,
     });
+    /**
+     * UNANSWERED IS THREE THINGS, AND NONE OF THEM CHANGES WHAT WAS GRADED.
+     *
+     * Nothing in the slot; the type's own field, cleared; or the grader's own verdict of `BLANK`. The third is
+     * here so the two layers cannot disagree: `{}` in a numeric slot was counted as ANSWERED by the paper while
+     * the grader's rationale said `BLANK`, and a marker reading both was told two things about one response.
+     */
+    const blank =
+      slot.kind === 'EMPTY' ||
+      clearedOwnField(question.spec, slot.response) ||
+      outcome.rationale.code === 'BLANK';
     grades.push({
       questionId: question.questionId,
       outcome,
