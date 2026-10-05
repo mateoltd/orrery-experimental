@@ -257,12 +257,48 @@ jobs:
         run: pnpm audit:seals
       - name: payload / PII scanner (INV-TELEMETRY-2)
         run: pnpm audit:payloads
-      - name: accessibility (WCAG 2.2 AA)
-        run: pnpm a11y
-      - name: i18n completeness
-        run: pnpm i18n:check
-      - name: dependency audit
-        run: pnpm audit:deps
+      # ── THE NEXT TWO STEPS WERE HERE AND COULD NOT RUN. `P14-T15` (`TM-14`). ─────────────────────────────
+      #
+      # This job ran `pnpm a11y` and `pnpm i18n:check`, and **NEITHER SCRIPT EXISTS.** The job therefore died on
+      # step one with "Missing script", which meant the LAST step -- `osv-scanner` via `audit:deps` -- **never ran at
+      # all.** `plans/14` §8:130 promises "osv-scanner in CI; high/critical blocks merge", and no merge has been
+      # blocked by a vulnerability in the entire life of this workflow. **A vulnerability gate that never executes is
+      # worse than no gate: it is a claim that scans happen.**
+      #
+      # `a11y` is `P13-T1` and `i18n:check` is `P13-T7`; neither is built. **The steps are commented out rather than
+      # deleted, because a deleted CI step is indistinguishable from a control that was deliberately removed** -- and
+      # the comment is what stops the next reader believing CI is checking accessibility or catalogue completeness.
+      #
+      # The dependency audit is promoted ABOVE them now, so it cannot be starved by work that does not exist yet.
+      #
+      # - name: accessibility (WCAG 2.2 AA)      # P13-T1 -- no script exists yet
+      #   run: pnpm a11y
+      # - name: i18n completeness                # P13-T7 -- no script exists yet
+      #   run: pnpm i18n:check
+      # ── THE DEPENDENCY SCAN, WHICH HAS NEVER RUN ONCE. `P14-T15` (`TM-14`, `TM-15`). ─────────────────────
+      #
+      # `plans/14` §8:130 promises "osv-scanner in CI; high/critical blocks merge". **Until this step, no merge has ever
+      # been blocked by a vulnerability**, because the job died on a missing script two steps earlier and the scanner was
+      # the last thing it would have reached.
+      #
+      # `NON-BLOCKING ON PURPOSE, AND THE REASONING IS THE POINT.** The current advisory load is
+      # **15 (9 high, 6 moderate)** — mostly transitive: PostCSS (a build-time CSS transform), `sharp` (an OPTIONAL
+      # dependency of `next@15.5.25` that nothing we wrote imports, though `package.json` still grants it
+      # `onlyBuiltDependencies` — see `docs/DEPENDENCIES.md` §5), and DeepmergeTS. **Making this blocking today would
+      # turn CI red permanently**, and a permanently red check is one people learn to ignore — the exact failure this
+      # row exists to end, reproduced by the fix.
+      #
+      # **THE PROMOTION PATH IS A DECISION, NOT A THRESHOLD:** each of the 9 highs needs a reachability judgement, and
+      # "the fix is a major bump" and "unreachable from our code" are different answers with different costs. They are
+      # recorded in `.tmp/TRACKER.md` under `P14-T15` rather than triaged by guessing here. **This step becomes blocking
+      # when that list is empty — and until then it is honest about what it is: a scan that runs and is read.**
+      - name: dependency audit (osv-scanner) -- NON-BLOCKING until P14-T15's 9 highs are triaged
+        continue-on-error: true
+        uses: google/osv-scanner-action/osv-scanner-action@v2.0.3
+        with:
+          scan-args: |-
+            --lockfile=pnpm-lock.yaml
+            --skip-gitignore
 
   # ─ GATE: the simulation registry is a BUILD ARTEFACT, built here and asserted to exist (P14-T18)
   # `TM-18`: `plans/14` §5:62 lists "registry built by CI only; no user code (ADR-0018)" as a ticked

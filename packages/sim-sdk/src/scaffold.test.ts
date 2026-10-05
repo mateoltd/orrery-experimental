@@ -25,6 +25,30 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '../../..');
 const SIMS = join(repo, 'sims');
+
+/**
+ * EVERY ID THIS SUITE CREATES, IN ONE PLACE, BECAUSE THE CLEANUP WAS A HAND-LISTED PAIR OF PREFIXES AND THAT WAS A BUG.
+ *
+ * The first version swept only `maths.titration-curve*` and `maths.scaffold-*`. A test further down scaffolds
+ * **`maths.projectile-motion-2`** -- which is not one of those prefixes, and is a *plausible real catalogue id*, since
+ * `maths.projectile-motion` exists. So an interrupted run left it behind, and the next `pnpm test` failed with
+ * `ENOENT ... maths.projectile-motion-2/sim.manifest.json` from **`build.test.ts`**, a different file that enumerates
+ * `sims/*` and was running concurrently.
+ *
+ * **THE SYMPTOM POINTED AT A MISSING MANIFEST AND THE CAUSE WAS A HALF-CLEANED SCAFFOLD.** A checklist would have added
+ * a third prefix and left the trap armed for the next id someone writes.
+ *
+ * `scripts/sim-build.mjs --check` enumerates the same directory, and CI runs `--check` on a dirty tree -- **so a developer's
+ * interrupted `pnpm sim:new` breaks the build job**, which is the same hazard one level up and is recorded rather than
+ * papered over. The robust fix is for the scaffolder to write somewhere else under test, which is a change to
+ * `scripts/sim-new.mjs` and not this file's business.
+ */
+const SCAFFOLDED_BY_THIS_SUITE = [
+  'maths.titration-curve',
+  'maths.scaffold-',
+  'maths.projectile-motion-2',
+  'biology.cell-division',
+] as const;
 const TEMPLATE = join(SIMS, '_template');
 
 const SIM_NEW = join(repo, 'scripts/sim-new.mjs');
@@ -67,7 +91,7 @@ beforeEach(() => {
   // `sims/maths.titration-curve already exists` -- an error about a sim nobody created, pointing at the
   // wrong thing entirely. Removing anything left over first means the only failures are real ones.
   for (const entry of readdirSync(SIMS)) {
-    if (entry.startsWith('maths.titration-curve') || entry.startsWith('maths.scaffold-')) {
+    if (SCAFFOLDED_BY_THIS_SUITE.some((id) => entry === id || entry.startsWith(`${id}-`))) {
       rmSync(join(SIMS, entry), { recursive: true, force: true });
     }
   }
