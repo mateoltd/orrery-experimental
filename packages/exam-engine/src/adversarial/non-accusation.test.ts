@@ -149,7 +149,7 @@ describe('a student who did nothing has nothing held against them', () => {
    * student on the fourth rung -- `FREEZE_AND_SUBMIT` -- at the first evaluation. `engine.test.ts` covers a zero
    * threshold only with a count of one or more, where `>=` and the intended rule agree.
    */
-  it.fails('ADV-A2: does not breach a ZERO threshold at a count of zero', () => {
+  it('ADV-A2: does not breach a ZERO threshold at a count of zero', () => {
     const report = classifyBreaches({ counts: {}, thresholds: thresholdsOf(0), ladder: LADDER });
     expect(report.breached).toEqual([]);
 
@@ -345,7 +345,7 @@ describe('INV-ACC-1: a granted relaxation cannot be counted against the student 
    * route through `countsAsStrike` alone and `INV-ACC-1` is not applied at all. `accommodations.ts`'s own header
    * describes this exact shape -- "three implementations of one routing rule" -- as the defect it was written to end.
    */
-  it.fails('ADV-A1: gives ONE answer to "does this count", for an event no relaxation applies to', () => {
+  it('ADV-A1: gives ONE answer to "does this count", for an event no relaxation applies to', () => {
     const policed: readonly (readonly [EvidenceType, WatchdogName])[] = [
       ['FULLSCREEN_EXITED', 'FULLSCREEN'],
       ['POINTERLOCK_LOST', 'POINTER_LOCK'],

@@ -153,12 +153,31 @@ export const classifyBreaches = (input: EscalationInput): BreachReport => {
       continue;
     }
 
+    /**
+     * **A BREACH IS SOMETHING A STUDENT DID, SO THE FIRST COUNT THAT CAN BREACH IS ONE.**  (`ADV-A2`)
+     *
+     * This was a bare `count >= threshold`, and `0 >= 0` is true: under a threshold of `0` a student was in breach at
+     * a count of ZERO, before any event existed. The rung is the number of breached KINDS, so zero tolerance on four
+     * kinds put every student on `FREEZE_AND_SUBMIT` at the first evaluation -- frozen for having started.
+     *
+     * The floor is on the THRESHOLD and not a `threshold === 0` branch, so "no breach without an event" holds for any
+     * number a caller passes (a negative one, a fraction below one) and not only for the single value someone thought
+     * of. `engine.test.ts` covered zero only at a count of one or more, where `>=` and this agree.
+     *
+     * HONEST CONSEQUENCE: `0` and `1` now breach at the same count, the first violation. That is what the note at the
+     * top of this file says `0` means, and what `>=` has always made `1` mean. It is NOT `null`: zero tolerance is
+     * breached by the first event and "not policed" by none, and the guard above is still the only place that
+     * distinction is made.
+     */
+    const firstBreachingCount = Math.max(threshold, 1);
+
     // `>=`, not `>`: a threshold of 3 means the THIRD violation is the breach. A policy reading "up to 3" and one
     // reading "more than 3" differ by exactly one violation, and the student cannot tell which one they are in.
-    if (count >= threshold) {
+    if (count >= firstBreachingCount) {
       breached.push(kind);
-      // A threshold of 0 gives a division by zero; every count is a breach there, which is what 0 means.
-      const overshoot = threshold === 0 ? count : count - threshold + 1;
+      // The same number as before the floor for every threshold, zero included: it used to be special-cased to
+      // `count`, which is what this gives.
+      const overshoot = count - firstBreachingCount + 1;
       // Strict `>` so a tie keeps the earlier kind -- deterministic, and the tie itself is not a finding.
       if (worstKind === null || overshoot > worstOvershoot) {
         worstOvershoot = overshoot;

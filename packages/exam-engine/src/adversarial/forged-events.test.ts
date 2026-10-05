@@ -221,7 +221,7 @@ describe('an event type with no rule is an error, never "no strike"', () => {
    * Reachability is low while a closed schema validates `type` first. It is not zero: no telemetry route exists yet,
    * and the function's contract is that a missing rule throws.
    */
-  it.fails('ADV-E1: throws for names inherited from Object.prototype too', () => {
+  it('ADV-E1: throws for names inherited from Object.prototype too', () => {
     for (const name of ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf']) {
       expect(() => countsAsStrike(name as EvidenceType, STRICTEST), name).toThrow();
     }
@@ -385,7 +385,7 @@ describe('a signed batch cannot be moved, extended, trimmed or edited', () => {
    * not preserve key order, so an event stored and read back canonicalises differently and a genuine batch fails
    * verification -- a timeline flagged as tampered with when nobody touched it.
    */
-  it.fails('ADV-E2: canonicalises `detail` independently of its key order', () => {
+  it('ADV-E2: canonicalises `detail` independently of its key order', () => {
     const one = canonicalEvent({ seq: 0, type: 'TAB_VISIBLE', at: T0, detail: { a: 1, b: 2 } });
     const other = canonicalEvent({ seq: 0, type: 'TAB_VISIBLE', at: T0, detail: { b: 2, a: 1 } });
     expect(one).toBe(other);
@@ -398,7 +398,7 @@ describe('a signed batch cannot be moved, extended, trimmed or edited', () => {
    * `a` with tab `b\u0000c` signs the same bytes as attempt `a\u0000b` with tab `c`. The attempt id is server-issued
    * and will not contain one. The tab id is CLIENT-chosen, and nothing constrains it.
    */
-  it.fails('ADV-E3: keeps the field boundaries when an id contains the separator', () => {
+  it('ADV-E3: keeps the field boundaries when an id contains the separator', () => {
     const one = batchSigningInput({ attemptId: 'a', tabId: 'b\u0000c', events: [] });
     const other = batchSigningInput({ attemptId: 'a\u0000b', tabId: 'c', events: [] });
     expect(one).not.toBe(other);
@@ -410,7 +410,7 @@ describe('a signed batch cannot be moved, extended, trimmed or edited', () => {
    * `flushOnce` calls `signBatch`, then passes the transport every field EXCEPT the signature; `flushOnUnload` does
    * not sign at all. Whatever the transport posts, it is not something a server can verify.
    */
-  it.fails('ADV-E4: hands the transport the signature it computed', async () => {
+  it('ADV-E4: hands the transport the signature it computed', async () => {
     const seen: Omit<SignedBatch, 'signature'>[] = [];
     const batcher = batcherFor('attempt', 'tab', seen);
     batcher.record('TAB_HIDDEN');

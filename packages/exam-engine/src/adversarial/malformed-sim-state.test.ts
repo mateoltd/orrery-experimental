@@ -35,7 +35,9 @@ import { countsAsStrike, EVIDENCE_RULES, EvidenceBatcher } from '../evidence.js'
 
 const RUNS = 300;
 
+/** Every field `QuestionCommon` requires, so these are real specs and not objects cast into being one. */
 const common = {
+  id: 'q1',
   points: 4,
   shuffleOptions: false,
   estimatedSeconds: 60,
@@ -44,23 +46,21 @@ const common = {
 };
 
 /** A simulation item, in both of the grading modes `plans/07` allows it. */
-const simSpec = (gradingMode: 'AUTO' | 'MANUAL'): QuestionSpec =>
-  ({
-    ...common,
-    gradingMode,
-    type: 'simulation',
-    simId: 'pendulum',
-    simVersion: '1.2.0',
-  }) as QuestionSpec;
+const simSpec = (gradingMode: 'AUTO' | 'MANUAL'): QuestionSpec => ({
+  ...common,
+  gradingMode,
+  type: 'simulation',
+  simId: 'pendulum',
+  simVersion: '1.2.0',
+});
 
-const numericSpec = (): QuestionSpec =>
-  ({
-    ...common,
-    gradingMode: 'AUTO',
-    type: 'numeric',
-    key: { value: 5 },
-    tolerance: { absolute: 0.1 },
-  }) as QuestionSpec;
+const numericSpec = (): QuestionSpec => ({
+  ...common,
+  gradingMode: 'AUTO',
+  type: 'numeric',
+  key: { value: 5 },
+  tolerance: { absolute: 0.1 },
+});
 
 const paperOf = (spec: QuestionSpec): PaperQuestion[] => [{ questionId: 'q1', spec }];
 
@@ -158,7 +158,7 @@ describe('a PRESENT simulation response that is rubbish is not a blank', () => {
    * So the two layers disagree about the same value, and the one a submission goes through is the one that hides it.
    * `gradePaper`'s own comment says "a present key is graded exactly as it arrived", which is the behaviour asserted.
    */
-  it.fails('ADV-S1: treats a present `[]` as unreadable, as `grade` itself does', () => {
+  it('ADV-S1: treats a present `[]` as unreadable, as `grade` itself does', () => {
     // The layer below is right about it:
     expect(grade({ spec: numericSpec(), response: [] }).flags).toContain('MALFORMED_RESPONSE');
 
@@ -178,7 +178,7 @@ describe('a PRESENT simulation response that is rubbish is not a blank', () => {
    * empty. So the paper says the student answered, the rationale says they did not, the mark is zero, and nothing is
    * raised: the silent zero for a pipeline fault that `MALFORMED_RESPONSE` exists to prevent.
    */
-  it.fails('ADV-S2: flags an object it cannot read instead of scoring it as an unflagged zero', () => {
+  it('ADV-S2: flags an object it cannot read instead of scoring it as an unflagged zero', () => {
     const { entry, unusable } = outcomeOf(numericSpec(), {
       q1: { state: { angle: 12 }, answer: 5 },
     });
@@ -287,7 +287,7 @@ describe('INV-SIM-2 at the dispatch: a state that fails its schema goes to a hum
    * construction: every arm returns a `SimOutcome`"; this is the arm that does not, and it is the one a malformed
    * state reaches FIRST.
    */
-  it.fails('ADV-S3: routes a validator that THROWS to a human instead of rejecting', async () => {
+  it('ADV-S3: routes a validator that THROWS to a human instead of rejecting', async () => {
     const outcome = await dispatch({
       validateState: () => {
         throw new TypeError('Do not know how to serialize a BigInt');
@@ -305,7 +305,7 @@ describe('INV-SIM-2 at the dispatch: a state that fails its schema goes to a hum
    * auto-zero `INV-SIM-2` is named for. `{ points: undefined }` is handled correctly, by the accident that
    * `Number(undefined)` is `NaN`.
    */
-  it.fails('ADV-S4: does not coerce an unreadable `points` into zero marks', async () => {
+  it('ADV-S4: does not coerce an unreadable `points` into zero marks', async () => {
     for (const points of [null, '', [], false]) {
       const outcome = await dispatch({
         loadGrader: async () => () => ({ points, maxPoints: 4 }),
@@ -321,7 +321,7 @@ describe('INV-SIM-2 at the dispatch: a state that fails its schema goes to a hum
    * the dispatch does not. A bundle -- untrusted under `INV-SIM-1` -- that returns a billion points, or minus fifty,
    * is reported as `GRADED` with exactly that, and the ceiling it is compared against is one the bundle supplied.
    */
-  it.fails('ADV-S5: bounds what a bundle may award to the range it declared', async () => {
+  it('ADV-S5: bounds what a bundle may award to the range it declared', async () => {
     for (const points of [1_000_000_000, -50]) {
       const outcome = await dispatch({
         loadGrader: async () => () => ({ points, maxPoints: 4 }),

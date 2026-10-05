@@ -76,8 +76,11 @@ export interface EventRule {
  * THE CLOSED TABLE.
  *
  * `as const` so a missing row is a type error rather than an `undefined` that reads as "no strike".
+ *
+ * It is declared as `RULES` and exported under the wide type below, because `POLICY_SWITCHES` needs each row's LITERAL
+ * `strike` to know which types owe it a switch, and every other reader wants `Record<EvidenceType, EventRule>`.
  */
-export const EVIDENCE_RULES: Readonly<Record<EvidenceType, EventRule>> = Object.freeze({
+const RULES = {
   EXAM_STARTED: { severity: 'INFO', strike: 'never', why: 'carries the preflight record' },
   FULLSCREEN_ENTERED: { severity: 'INFO', strike: 'never', why: 'the deterrent working' },
   FULLSCREEN_EXITED: {
@@ -189,7 +192,28 @@ export const EVIDENCE_RULES: Readonly<Record<EvidenceType, EventRule>> = Object.
   },
   ATTEMPT_TERMINATED: { severity: 'INFO', strike: 'never', why: 'an outcome, not an offence' },
   ATTEMPT_SUBMITTED: { severity: 'INFO', strike: 'never', why: 'an outcome, not an offence' },
-} as const);
+} as const satisfies Record<EvidenceType, EventRule>;
+
+export const EVIDENCE_RULES: Readonly<Record<EvidenceType, EventRule>> = Object.freeze(RULES);
+
+/**
+ * THE ROW FOR A TYPE, OR A THROW. Every read of the table by a name that arrived at runtime goes through here.
+ *
+ * ## `EVIDENCE_RULES[type] === undefined` WAS NOT A MISSING-ROW CHECK  (`ADV-E1`)
+ *
+ * The table is an object literal, so a bare property read also finds everything on `Object.prototype`:
+ * `constructor`, `toString`, `__proto__`, `valueOf`. Each of those is not `undefined`, so the guard passed, `strike` on
+ * a function is `undefined`, and the switch fell to `default: return false` -- the lenient default the guard's own
+ * comment said must never happen. It is the read `answerStore.ts` already fixed with `Object.hasOwn`, in a second
+ * place.
+ *
+ * A missing rule is a BUG, not a lenient default. Answering `false` would silently un-strike a violation the moment
+ * someone added an event type without a row, or a route misspelt one.
+ */
+export const evidenceRuleFor = (type: EvidenceType): EventRule => {
+  if (!Object.hasOwn(EVIDENCE_RULES, type)) throw new Error(`no evidence rule for ${String(type)}`);
+  return EVIDENCE_RULES[type];
+};
 
 /** The types the client must never emit. See the note at the top of this file. */
 export const SERVER_ONLY_EVENTS: ReadonlySet<EvidenceType> = new Set<EvidenceType>([
@@ -206,15 +230,67 @@ export interface StrikePolicyView {
 }
 
 /**
- * DOES THIS EVENT COUNT AS A STRIKE?
+ * IS A REQUIREMENT SWITCHED ON? One spelling, because there were two and one of them was wrong.
  *
- * The single place the answer is decided, for the four reasons in the note at the top of this file.
+ * `ExamPolicy.requireFullscreen` and `requirePointerLock` are `OFF | WARN | REQUIRE` (`@orrery/contracts`). The
+ * fullscreen arm tested `=== 'WARN' || === 'BLOCK'` and the pointer-lock arm tested `!== 'OFF'`, so under `REQUIRE` --
+ * the strictest value the schema has -- **a fullscreen exit was never a strike**, while a pointer-lock loss was. Nothing
+ * caught it because every test here spells the strict value `BLOCK`, which is the hardening switches' word for it and
+ * not the policy's. `BLOCK` stays accepted for that reason.
+ *
+ * An allow-list rather than `!== 'OFF'`: this view arrives as plain strings, and a value nobody recognises should not
+ * switch a counter ON.
+ */
+const REQUIREMENT_IN_FORCE: ReadonlySet<string> = new Set(['WARN', 'REQUIRE', 'BLOCK']);
+const requirementInForce = (value: string): boolean => REQUIREMENT_IN_FORCE.has(value);
+
+/** The types whose row says `when_policy_says`, read off the table so this list cannot disagree with it. */
+type PolicyDecidedType = {
+  [K in EvidenceType]: (typeof RULES)[K]['strike'] extends 'when_policy_says' ? K : never;
+}[EvidenceType];
+
+/**
+ * WHICH SWITCH EACH `when_policy_says` EVENT ANSWERS TO.
+ *
+ * A `Record` over `PolicyDecidedType`, so a row that says `when_policy_says` and has no entry here is a compile error.
+ * It was a chain of `if`s ending in a bare `return true`, which made "counts, always" the answer for any such type
+ * nobody had listed: the accusing default, reached by forgetting a line.
+ *
+ * Each is policed only when ITS switch is on, so a copy-paste block cannot enable the print counter.
+ */
+const POLICY_SWITCHES: Readonly<Record<PolicyDecidedType, (policy: StrikePolicyView) => boolean>> =
+  Object.freeze({
+    POINTERLOCK_LOST: (policy) => requirementInForce(policy.requirePointerLock),
+    // `WINDOW_BLURRED` and `TAB_HIDDEN` are thresholded rather than switched, and the threshold lives in `thresholds`;
+    // whether the count has passed it is the ladder's decision, not this one's.
+    WINDOW_BLURRED: () => true,
+    TAB_HIDDEN: () => true,
+    COPY_ATTEMPT: (policy) => policy.blockCopyPaste,
+    PASTE_ATTEMPT: (policy) => policy.blockCopyPaste,
+    CONTEXT_MENU: (policy) => policy.blockCopyPaste,
+    PRINT_ATTEMPT: (policy) => policy.blockPrintSave,
+  });
+
+/**
+ * DOES THIS EVENT COUNT AS A STRIKE, FOR A STUDENT HOLDING NO RELAXATION?
+ *
+ * ## THE ONLY READER OF THE `strike` COLUMN, AND THE FUNCTION `accommodations.ts` CALLS  (`ADV-A1`)
+ *
+ * `routeWatchdogEvent` used to answer this question itself, as `severity === 'VIOLATION'`. Severity and strike are two
+ * columns of `plans/09` §7.1 and they disagree on purpose: seven of the nine types that can count are `WARN`. So for a tab
+ * hide by a student with no accommodation this said yes and routing said no, and whichever a telemetry route called,
+ * one invariant went -- `thresholds.tabHides` dead, or `INV-ACC-1` not applied. That is `perQuestionExpiry` (PF-8)
+ * over again: two implementations of one rule, each locally reasonable.
+ *
+ * So routing now asks HERE and holds no strike rule of its own. What this does not know is the student:
+ * **`routeEvidence` in `accommodations.ts` is the whole answer**, and a caller holding a student's relaxations that
+ * stops at this function is not applying `INV-ACC-1`.
+ *
+ * The switch has no `default`. Every `strike` value is decided by a named arm, and a fifth one added to the union is a
+ * compile error here rather than a quiet "never".
  */
 export const countsAsStrike = (type: EvidenceType, policy: StrikePolicyView): boolean => {
-  const rule = EVIDENCE_RULES[type];
-  // A missing rule is a BUG, not a lenient default. Falling through to `false` here would silently un-strike a
-  // violation the moment someone added an event type without a row.
-  if (rule === undefined) throw new Error(`no evidence rule for ${String(type)}`);
+  const rule = evidenceRuleFor(type);
 
   switch (rule.strike) {
     case 'never':
@@ -222,20 +298,9 @@ export const countsAsStrike = (type: EvidenceType, policy: StrikePolicyView): bo
     case 'always':
       return true;
     case 'when_fullscreen_required':
-      return policy.requireFullscreen === 'WARN' || policy.requireFullscreen === 'BLOCK';
+      return requirementInForce(policy.requireFullscreen);
     case 'when_policy_says':
-      // Each of these is policed only when the corresponding switch is on, so a copy-paste cannot enable one by
-      // enabling another.
-      if (type === 'POINTERLOCK_LOST') return policy.requirePointerLock !== 'OFF';
-      if (type === 'COPY_ATTEMPT' || type === 'PASTE_ATTEMPT' || type === 'CONTEXT_MENU') {
-        return policy.blockCopyPaste;
-      }
-      if (type === 'PRINT_ATTEMPT') return policy.blockPrintSave;
-      // `WINDOW_BLURRED` and `TAB_HIDDEN` are thresholded rather than switched, and the threshold lives in
-      // `thresholds`; whether the count has passed it is the ladder's decision, not this one's.
-      return true;
-    default:
-      return false;
+      return POLICY_SWITCHES[type as PolicyDecidedType](policy);
   }
 };
 
@@ -248,19 +313,54 @@ export interface EvidenceRecord {
 }
 
 /**
- * CANONICAL FORM, and it is canonical for a reason a reviewer will ask about.
+ * CANONICAL JSON: keys sorted AT EVERY DEPTH, `undefined` dropped, and nothing else changed.
  *
- * Keys are sorted so a signature computed on a phone matches one computed on a server, and `undefined` is dropped
- * rather than serialised, because `JSON.stringify` drops it anyway and two implementations that disagree about
- * whether a key exists produce two signatures for one batch.
+ * ## IT WALKS THE VALUE BECAUSE SORTING ONE LEVEL IS HOW `ADV-E2` HAPPENED
+ *
+ * `canonicalEvent` sorted the event's own keys and then handed `detail` to `JSON.stringify` as it found it, so
+ * `{ a: 1, b: 2 }` and `{ b: 2, a: 1 }` signed differently under a comment promising the opposite. Sorting `detail` by
+ * name as well would have left the same bug one level further down, which is what a hand-written list of levels does:
+ * `freezePolicy` froze `thresholds` by name and left `availabilityWindow` mutable in exactly this way.
+ *
+ * It bites the moment a server derives the bytes from anything but the raw request body. Postgres `jsonb` does not
+ * preserve key order, so an event stored and read back canonicalised differently and a GENUINE batch failed
+ * verification -- a timeline flagged as tampered with when nobody touched it.
+ *
+ * ## AND THE KEYS ARE QUOTED, WHICH THEY WERE NOT
+ *
+ * The form was `{key:value,...}` with bare keys. `detail` is free-form, so its keys are whatever the sender chose:
+ * `{ a: 1, b: 2 }` and `{ 'a:1,b': 2 }` both came out as `a:1,b:2`. Real JSON has no such pair, and it is also the form
+ * a verifier in any other language can reproduce without reading this file.
+ *
+ * Keys compare by UTF-16 code unit, not by locale: a collation that differs between a phone and a server is a
+ * signature that differs between them.
  */
-export const canonicalEvent = (event: EvidenceRecord): string => {
-  const entries = Object.entries(event)
-    .filter(([, value]) => value !== undefined)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([key, value]) => `${key}:${JSON.stringify(value ?? null)}`);
-  return `{${entries.join(',')}}`;
+const canonicalJson = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    // An array's order is its meaning, so it is kept. A hole is `null`, as `JSON.stringify` has it.
+    return `[${value.map((item) => (item === undefined ? 'null' : canonicalJson(item))).join(',')}]`;
+  }
+  if (typeof value === 'object' && value !== null) {
+    const entries = Object.entries(value)
+      // Dropped rather than serialised: `JSON.stringify` drops it anyway, and two implementations that disagree about
+      // whether a key exists produce two signatures for one batch.
+      .filter(([, inner]) => inner !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([key, inner]) => `${JSON.stringify(key)}:${canonicalJson(inner)}`);
+    return `{${entries.join(',')}}`;
+  }
+  // `?? null`, not a bare `stringify`: an explicit `null` is recorded as `null`, which is a different fact from a key
+  // that is absent, and `stringify` answers `undefined` for a value JSON cannot hold.
+  return JSON.stringify(value ?? null) ?? 'null';
 };
+
+/**
+ * AN EVENT'S CANONICAL FORM, and it is canonical for a reason a reviewer will ask about.
+ *
+ * A signature computed on a phone has to match one computed on a server, from the same event however either side
+ * happened to build the object. See `canonicalJson` for what that requires and what it used to miss.
+ */
+export const canonicalEvent = (event: EvidenceRecord): string => canonicalJson(event);
 
 /** What gets signed: the attempt, the sequence range, and every event in order. */
 export interface SignedBatch {
@@ -272,6 +372,7 @@ export interface SignedBatch {
   /** Hex HMAC over the canonical form, with domain separation. See `signBatch`'s caller for the key. */
   readonly signature: string;
 }
+
 /**
  * THE SIGNATURE INPUT.
  *
@@ -288,6 +389,22 @@ export interface SignedBatch {
  *
  * The separators are written as the ESCAPE `\u0000`, never as a literal byte: PF-4 records that a literal NUL in
  * source is a defect, because it is invisible in every diff and every editor.
+ *
+ * ## THE TWO IDS ARE JSON STRINGS, BECAUSE A SEPARATOR INSIDE A FIELD MOVES THE FIELD  (`ADV-E3`)
+ *
+ * They were joined raw. Attempt `a` with tab `b<NUL>c` then signed the same bytes as attempt `a<NUL>b` with tab `c`,
+ * so a signature for one pair was a signature for the other. The attempt id is server-issued and will not contain a
+ * NUL; **the tab id is chosen by the client and nothing constrains it.**
+ *
+ * `JSON.stringify` escapes every control character, so neither id can contain the separator once encoded. The two seq
+ * fields are digits and the body is last, so the first five separators are always the real ones and the input decodes
+ * to exactly one `(attemptId, tabId, first, last, body)`. Length prefixes would do the same and were not used only
+ * because the range is read back out of fields 3 and 4 by position (`forged-events.test.ts`).
+ *
+ * This changes the signed bytes for EVERY batch (each id gains quotes), not only the hostile ones, and the tag is
+ * still `v1`. That is safe today for one reason: nothing in this repository verifies an evidence signature yet, so
+ * there is no stored signature and no deployed verifier to disagree with. The first verifier must be written against
+ * this function, not against a description of it.
  */
 export const batchSigningInput = (input: {
   readonly attemptId: string;
@@ -299,8 +416,8 @@ export const batchSigningInput = (input: {
   const body = input.events.map(canonicalEvent).join('\n');
   return [
     'orrery.evidence.v1',
-    input.attemptId,
-    input.tabId,
+    JSON.stringify(input.attemptId),
+    JSON.stringify(input.tabId),
     String(first),
     String(last),
     body,
@@ -310,8 +427,19 @@ export const batchSigningInput = (input: {
 /**
  * HOW EVENTS ARE DELIVERED. Injected: this module does not own transport, and P7's outbox owns answer saves, which are a
  * DIFFERENT pipeline with different loss guarantees.
+ *
+ * ## IT TAKES THE WHOLE `SignedBatch`, AND IT USED TO BE FORBIDDEN FROM SEEING THE SIGNATURE  (`ADV-E4`)
+ *
+ * This was `Omit<SignedBatch, 'signature'>`. `flushOnce` signed the batch and then passed every field EXCEPT the
+ * signature; `flushOnUnload` did not sign at all. So the HMAC was computed, tested, and never left the batcher, and
+ * whatever a transport posted was not something a server could verify. The type is what made that invisible: a
+ * transport could not have forwarded the signature if it had wanted to.
+ *
+ * A transport written against the old type still fits -- a function that ignores a field accepts a value that has it.
+ * That is deliberate, because it keeps every existing transport compiling, and it is also the limit: **this hands the
+ * signature over and cannot make a transport send it.**
  */
-export type BatchTransport = (batch: Omit<SignedBatch, 'signature'>) => Promise<boolean>;
+export type BatchTransport = (batch: SignedBatch) => Promise<boolean>;
 
 export interface BatcherOptions {
   /** Events per signature. Small enough that a lost batch loses little. */
@@ -406,19 +534,15 @@ export class EvidenceBatcher {
    *
    * Telemetry is allowed to be lost, so a failed send is not an error the exam should surface. It is counted, and the
    * caller can surface the count in a diagnostic without interrupting a student.
+   *
+   * The SIGNING is inside the `try` as well. It sat above it, so a signer that threw -- a key that failed to import --
+   * rejected out of a function whose one promise is that it does not.
    */
   async flushOnce(): Promise<boolean> {
     const events = this.takeBatch();
     if (events.length === 0) return true;
-    const batch = this.signBatch(events);
     try {
-      const ok = await this.options.transport({
-        attemptId: batch.attemptId,
-        tabId: batch.tabId,
-        fromSeq: batch.fromSeq,
-        toSeq: batch.toSeq,
-        events: batch.events,
-      });
+      const ok = await this.options.transport(this.signBatch(events));
       if (ok) this.#sent += events.length;
       else this.#failed += 1;
       return ok;
@@ -433,17 +557,39 @@ export class EvidenceBatcher {
    *
    * A `pagehide` handler that awaits has already lost the race: the document is going away. `plans/09` §7's position is
    * that telemetry may be lost, so this fires and returns.
+   *
+   * ## AND IT DOES NOT THROW, WHICH IT DID  (`ADV-N1`)
+   *
+   * `flushOnce` wrapped the transport in `try/catch` and this called it bare. A transport that throws synchronously --
+   * `sendBeacon` on a detached document, a serialiser choking on a payload -- threw out of the `pagehide` handler.
+   * `pagehide` is where the ANSWER outbox gets its last flush too (`lifecycleGuard`), so a handler that flushes
+   * telemetry first and answers second lost the answer flush to a telemetry failure: the one priority inversion
+   * `shedding.ts` exists to forbid.
+   *
+   * A transport that REJECTS is the same hazard one tick later, as an unhandled rejection, so the promise is caught
+   * too. `Promise.resolve` because a `sendBeacon` wrapper returns a bare boolean whatever its type says, and calling
+   * `.catch` on `true` would be this method throwing after all.
+   *
+   * ## WHAT IS COUNTED HERE, AND WHAT STILL CANNOT BE
+   *
+   * A throw or a rejection is a failure this path KNOWS about, so it is counted like any other failed batch. A beacon
+   * that was accepted for sending and never arrived is not knowable from here, and neither is a transport that resolves
+   * `false` after the page has gone -- so a resolved promise counts nothing, sent or failed, exactly as before. `seq`
+   * holes, not these counters, are still what `droppedEventCount` has to be computed from.
+   *
+   * It signs, which it did not (`ADV-E4`): the last batch of a sitting is the one most likely to hold the event a
+   * teacher is asked about, and it was the one batch no server could have verified.
    */
   flushOnUnload(): void {
     const events = this.takeBatch();
     if (events.length === 0) return;
-    void this.options.transport({
-      attemptId: this.attemptId,
-      tabId: this.tabId,
-      fromSeq: events[0]?.seq ?? 0,
-      toSeq: events[events.length - 1]?.seq ?? 0,
-      events,
-    });
+    try {
+      void Promise.resolve(this.options.transport(this.signBatch(events))).catch(() => {
+        this.#failed += 1;
+      });
+    } catch {
+      this.#failed += 1;
+    }
   }
 
   get stats(): BatcherStats {

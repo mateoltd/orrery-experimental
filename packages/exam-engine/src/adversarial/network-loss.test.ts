@@ -283,7 +283,7 @@ describe('the unload path', () => {
    * priority inversion `shedding.ts` exists to forbid. (A transport that REJECTS is the same hazard as an unhandled
    * rejection; it is not asserted here because a test cannot observe one without failing the run.)
    */
-  it.fails('ADV-N1: never throws into the page’s unload handler', () => {
+  it('ADV-N1: never throws into the page’s unload handler', () => {
     const batcher = new EvidenceBatcher(
       {
         batchSize: 10,
