@@ -317,6 +317,103 @@ export const bandCannotMove = (position: number, direction: 'UP' | 'DOWN'): stri
 export const bandRemoved = (position: number): string => `Band ${String(position)} removed.`;
 export const bandAdded = (position: number): string => `Band ${String(position)} added.`;
 
+/* ───────────────────────────────────────── two graders, one paper (P9-T8) ── */
+
+/**
+ * WHAT A TEACHER IS TOLD WHEN SOMEBODY ELSE HAS THE SAME PAPER.
+ *
+ * Two rules on top of the three above. The other grader is NAMED AS PRESENT and never as being in the way: the list
+ * is advisory, it can be out of date, and it refuses nothing. And every sentence about a change says WHOSE version is
+ * on the screen, because the failure this guards is a teacher reading a mark as saved after it has been replaced.
+ */
+export const PRESENCE_LABEL = 'Other graders';
+export const PRESENCE_NONE = 'No other grader is currently reported here.';
+export const presenceLine = (name: string, position: number | null): string =>
+  position === null
+    ? `${name} has this paper open.`
+    : `${name} is on response ${String(position)}.`;
+export const PRESENCE_NOTE =
+  'Presence is advisory and can be out of date. It never blocks a save: every save is checked against the version ' +
+  'it was written on.';
+
+export const CHANGED_LABEL = 'Changes saved elsewhere';
+export const CHANGED_ELSEWHERE =
+  'This paper changed elsewhere. Your displayed work is retained. Saving a changed response will ask you to compare ' +
+  'both marks.';
+export const changedLine = (position: number, shown: string, saved: string): string =>
+  `Response ${String(position)}. Shown here: ${shown}. Saved now: ${saved}.`;
+export const RELOAD_SAVED = 'Show the saved versions';
+export const RELOAD_NOTE =
+  'Drafts kept on this device come back, labelled as written before the change.';
+export const RELOAD_BLOCKED =
+  'A draft on this paper could not be kept on this device, and showing the saved versions would clear it. Save ' +
+  'that mark or discard that draft first.';
+export const RELOADED = 'The saved versions are shown now.';
+
+export const CONFLICT_HEADING = 'Another grader saved this response';
+export const CONFLICT_DESCRIPTION =
+  'Compare both versions. Saving your draft replaces the saved mark, which stays in the marking history. Keeping ' +
+  'the saved mark leaves your draft unsaved and visible for reference.';
+export const conflictQuestion = (position: number): string => `Response ${String(position)}`;
+export const conflictMine = (version: string): string => `Your draft, based on version ${version}`;
+export const conflictTheirs = (version: string): string => `Saved version ${version}`;
+export const conflictReplace = (version: string): string => `Save my draft over version ${version}`;
+export const CONFLICT_KEEP = 'Keep the saved mark and retain my draft';
+export const CONFLICT_KEPT = 'The saved mark was kept. Your draft remains unsaved for reference.';
+export const CONFLICT_CLOSED = 'The comparison was closed. Your draft remains unsaved.';
+export const CONFLICT_SAVE_FAILED = 'The save did not complete. Your draft remains unsaved.';
+export const CONFLICT_ANSWER = 'Stored answer';
+
+/** One side of a comparison. A response nobody has marked gets no number here either. */
+export const markSummary = (points: number, feedback: string): string =>
+  feedback.trim() === '' ? `${String(points)} points` : `${String(points)} points. ${feedback}`;
+export const automaticSummary = (points: number): string => `${String(points)} points (automatic)`;
+export const excusedSummary = (reason: string | undefined): string =>
+  `Excused: ${reason === undefined || reason.trim() === '' ? 'no reason shown here' : reason}`;
+export const ACCEPT_AUTO_SUMMARY = 'Accept the automatic mark';
+export const flagSummary = (flagged: boolean): string =>
+  flagged ? 'Flag for follow-up' : 'Remove the flag';
+export const AWAITING_SUMMARY = 'Awaiting a mark';
+
+/* ───────────────────────────────────────────────────── feedback (P9-T4) ── */
+
+export const feedbackFor = (scope: string): string => `Feedback for ${scope}`;
+export const FEEDBACK_VISIBILITY_LABEL = 'Who can read this feedback';
+export const VISIBILITY_TEACHERS = 'Teachers only';
+export const VISIBILITY_STUDENT = 'Student after release';
+export const FEEDBACK_VISIBILITY_NOTE =
+  'Drafts are visible only to their author. Student feedback is withheld until this paper is released.';
+export const FEEDBACK_SAVE_DRAFT = 'Save draft';
+export const FEEDBACK_SAVE = 'Save feedback';
+export const FEEDBACK_DRAFT_KEPT = 'Draft kept on this device.';
+export const FEEDBACK_DRAFT_NOT_KEPT =
+  'Draft could not be kept on this device. Keep this page open.';
+export const FEEDBACK_DRAFT_SAVED = 'Draft saved to the server.';
+export const FEEDBACK_SAVED = 'Feedback saved. Student feedback stays withheld until release.';
+export const FEEDBACK_NOT_SAVED = 'Feedback was not saved. Your draft remains here.';
+
+/** Why the server refused, by the reason `saveFeedback` returns. Each says what still works. */
+export const FEEDBACK_REFUSAL = {
+  CONFLICT:
+    'This comment was changed in another tab or on another device. Your words remain here; compare them with the ' +
+    'saved comment before saving again.',
+  STUDENT_FEEDBACK_AFTER_RELEASE:
+    'Results are out, so feedback a student can read is not added or changed here. A teachers-only note or a ' +
+    'draft can still be saved.',
+  RELEASE_IN_PROGRESS:
+    'This paper is being released as reviewed, so feedback a student can read is not added or changed until that ' +
+    'finishes. A teachers-only note or a draft can still be saved.',
+  RELEASE_MEMBERSHIP_CHANGED:
+    'This paper was added to a release batch while the comment was being saved. Nothing was changed; save again.',
+  NOT_REVIEWABLE: 'This paper is not open for marking, so no feedback was saved.',
+  INVALID_FEEDBACK: 'The comment was not saved: it is empty, or longer than a comment can be.',
+  NOT_FOUND: 'The comment, or the paper it belongs to, is not available to you. Nothing was saved.',
+} as const;
+export const feedbackRefusal = (reason: string | undefined): string =>
+  reason !== undefined && reason in FEEDBACK_REFUSAL
+    ? FEEDBACK_REFUSAL[reason as keyof typeof FEEDBACK_REFUSAL]
+    : (reason ?? FEEDBACK_NOT_SAVED);
+
 /**
  * EVERY SENTENCE IN THIS FILE, with the formatters called on representative values.
  *
@@ -452,5 +549,48 @@ export const allCopy = (): readonly string[] => {
     bandCannotMove(3, 'DOWN'),
     bandRemoved(2),
     bandAdded(4),
+    PRESENCE_LABEL,
+    PRESENCE_NONE,
+    presenceLine('A. Marker', null),
+    presenceLine('A. Marker', 3),
+    PRESENCE_NOTE,
+    CHANGED_LABEL,
+    CHANGED_ELSEWHERE,
+    changedLine(3, markSummary(2, 'Names one force'), markSummary(4, '')),
+    RELOAD_SAVED,
+    RELOAD_NOTE,
+    RELOAD_BLOCKED,
+    RELOADED,
+    CONFLICT_HEADING,
+    CONFLICT_DESCRIPTION,
+    conflictQuestion(3),
+    conflictMine('1'),
+    conflictTheirs('2'),
+    conflictReplace('2'),
+    CONFLICT_KEEP,
+    CONFLICT_KEPT,
+    CONFLICT_CLOSED,
+    CONFLICT_SAVE_FAILED,
+    CONFLICT_ANSWER,
+    automaticSummary(3),
+    excusedSummary('Absent with notice'),
+    excusedSummary(undefined),
+    ACCEPT_AUTO_SUMMARY,
+    flagSummary(true),
+    flagSummary(false),
+    AWAITING_SUMMARY,
+    feedbackFor('question 2'),
+    FEEDBACK_VISIBILITY_LABEL,
+    VISIBILITY_TEACHERS,
+    VISIBILITY_STUDENT,
+    FEEDBACK_VISIBILITY_NOTE,
+    FEEDBACK_SAVE_DRAFT,
+    FEEDBACK_SAVE,
+    FEEDBACK_DRAFT_KEPT,
+    FEEDBACK_DRAFT_NOT_KEPT,
+    FEEDBACK_DRAFT_SAVED,
+    FEEDBACK_SAVED,
+    FEEDBACK_NOT_SAVED,
+    ...Object.values(FEEDBACK_REFUSAL),
   ];
 };
