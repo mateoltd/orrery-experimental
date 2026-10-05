@@ -15,6 +15,11 @@
       "path": "/api/auth/forgot",
       "scoreFree": true,
       "reason": "Dispatches a password-reset email and returns the same conditional sentence whether or not the address has an account -- 'if that address has an account, a reset link is on its way' -- which discloses nothing either way. Sets no cookie, so a successful dispatch cannot be told from a refusal, and is no-store so a shared cache cannot serve one caller a stale answer. Exactly one account lookup and one outbox write happen in both cases, so the database itself carries no existence signal; only the STATUS differs between the two outbox rows, never a skip. No grade data of any kind."
+    },
+    {
+      "path": "/api/results/[attemptId]",
+      "scoreFree": false,
+      "reason": "THE FIRST STUDENT-FACING ROUTE THAT RETURNS A MARK, and the first test of this audit's own premise. PREDICATE, not conclusion: it returns grade data ONLY when the attempt's OWN ReleaseBatch membership is RELEASED -- loadStudentResults resolves that membership itself, and before it does it returns the SEALED arm, which has NO SCORE FIELD AT ALL, so a handler cannot leak a mark it never receives and cannot be edited into leaking one without the type objecting. The identity is the session and nothing else: studentId is not in the path, not in the query string, not in a header and not read from a body, so a caller cannot ask for somebody else's paper. A development identity (`Caller.kind === 'dev'`) is REFUSED, because the gate is meant to be a verified caller and a discriminant is the only thing that survives being scrolled past. Missing and other-owner attempts share ONE 404, because 403-for-not-yours confirms the row exists and turns this into an existence oracle over every attempt in the school. Unauthenticated callers get 401 before the path is even read, so the anonymous answer does not depend on whether the attempt exists. `force-dynamic` removes Next's own handler cache, because a correct body served from a cache is still a leak; RESULTS_HEADERS adds `private, no-store` and `Vary: Cookie`."
     }
   ]
 }
