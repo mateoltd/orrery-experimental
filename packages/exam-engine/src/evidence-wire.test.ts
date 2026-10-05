@@ -86,12 +86,48 @@ describe('`ADV-E2`: the canonical form does not depend on how an object was buil
     expect(one).toContain('{"a":0,"b":{"x":2,"y":1}}');
   });
 
-  it('loses nothing: the canonical form parses back to the event it was made from', () => {
-    // The other half. A canonicaliser that dropped a key, or flattened a nested value, would also be order-independent.
+  it('loses nothing: it is exactly `JSON.stringify` of the same value with its keys sorted', () => {
+    /**
+     * The other half. A canonicaliser that dropped a key, or flattened a nested value, would also be order-independent.
+     *
+     * ## THE ORACLE IS NOT `JSON.parse`, AND THE FIRST VERSION OF THIS TEST WAS FLAKY BECAUSE IT WAS
+     *
+     * It read `expect(JSON.parse(canonicalEvent(event))).toEqual(JSON.parse(JSON.stringify(event)))` and failed about
+     * one full-suite run in twenty, on a different input each time, never under the seed it printed. The canonical
+     * form was right every time. **`JSON.parse` was returning the wrong KEY**, on Node v24.21.0 (V8 13.6.233.17):
+     *
+     *     JSON.parse('{"\\\\":1}');                 // one key, a backslash -- correct
+     *     Object.keys(JSON.parse('{"\\"":1}'));     // ['\\'] -- should be ['"']
+     *
+     * A one-character key written as an escape comes back as a backslash once an object keyed by a backslash has been
+     * parsed, so the answer depends on what the process parsed EARLIER. That is why it would not reproduce alone, and
+     * `hostileString` is made of exactly those characters. Values are not affected, only keys.
+     *
+     * So the expectation is built without parsing anything: the same value, keys sorted at every depth, through the
+     * standard serialiser. It is also the stronger statement -- it pins the bytes, not just what they decode to.
+     *
+     * The hazard outlives this test. A verifier that does `JSON.parse(body)` and canonicalises the result can be handed
+     * a `detail` key that is not the one the client signed, and would report a genuine batch as tampered with.
+     */
+    const sortedDeep = (value: Json): Json => {
+      if (Array.isArray(value)) return value.map(sortedDeep);
+      if (typeof value === 'object' && value !== null) {
+        const entries = Object.entries(value as { readonly [key: string]: Json });
+        // Insertion order is what `JSON.stringify` follows, for every key `hostileString` can produce. It would NOT be
+        // for integer-like keys, which an object always lists first and in numeric order; none are generated here.
+        return Object.fromEntries(
+          entries
+            .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+            .map(([key, inner]) => [key, sortedDeep(inner)]),
+        );
+      }
+      return value;
+    };
+
     fc.assert(
       fc.property(fc.dictionary(hostileString, jsonArb, { maxKeys: 4 }), (detail) => {
-        const event = eventWith(detail);
-        expect(JSON.parse(canonicalEvent(event))).toEqual(JSON.parse(JSON.stringify(event)));
+        const expected = { at: T0, detail: sortedDeep(detail), seq: 3, type: 'TAB_VISIBLE' };
+        expect(canonicalEvent(eventWith(detail))).toBe(JSON.stringify(expected));
       }),
       { numRuns: RUNS },
     );
