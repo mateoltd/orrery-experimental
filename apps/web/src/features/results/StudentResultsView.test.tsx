@@ -1,9 +1,6 @@
+import { type ReleasedResults, sealedResults } from '@orrery/db/student-results';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-  type ReleasedResults,
-  sealedResults,
-} from '@orrery/db/student-results';
 import { resultsResponse } from './results-response';
 import { StudentResultsView } from './StudentResultsView';
 

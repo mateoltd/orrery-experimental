@@ -1,7 +1,4 @@
-import {
-  RESULTS_HEADERS,
-  type StudentResults,
-} from '@orrery/db/student-results';
+import { RESULTS_HEADERS, type StudentResults } from '@orrery/db/student-results';
 
 /** The route supplies an authenticated owner; missing and other-owner results share one response. */
 export function resultsResponse(results: StudentResults | null): Response {

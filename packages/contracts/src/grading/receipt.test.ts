@@ -505,8 +505,7 @@ describe('a SIGNED chain verifies: the final comparison had to be finalised too'
      * The point of adding `finalise` is not to make comparisons pass. If this returns null the fix has silently
      * disabled the check it was meant to restore.
      */
-    const { stored } = signedChain();
-    const original = signedChain().revision;
+    const { revision: original, stored } = signedChain();
     // THE TAMPER KEEPS THE RECORDED HASH. Recomputing `answerHash` alongside the answer would leave the chain
     // internally consistent -- which is a different scenario entirely, and one the receipt is *designed* to accept.
     const tampered: Revision = { ...original, answer: { v: 2 } };
@@ -524,7 +523,7 @@ describe('a SIGNED chain verifies: the final comparison had to be finalised too'
 
   it('treats an UNSIGNED stored fold as the distinct named outcome, not a divergence', () => {
     /** With no MAC the stored value IS the fold, which is what a pre-P8-T10 receipt on disk contains. */
-    const { revision, stored } = signedChain();
+    const { revision } = signedChain();
     const unsigned = foldRevision(seedHash(seed, digest), revision, digest);
     expect(verifyReceipt(seed, [revision], ['q1'], unsigned, digest)).toBeNull();
   });

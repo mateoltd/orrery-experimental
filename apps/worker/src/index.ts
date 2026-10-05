@@ -32,9 +32,9 @@ import { systemClock } from '@orrery/clock';
 import { loadEnv } from '@orrery/config/env';
 import { createLogger } from '@orrery/config/logging';
 import { getPrisma } from '@orrery/db';
-import { runDeadlineSweep } from '@orrery/db/sweep';
 import { runReleaseTick } from '@orrery/db/release-worker';
 import { runStudentDigestTick } from '@orrery/db/student-digest';
+import { runDeadlineSweep } from '@orrery/db/sweep';
 
 const db = getPrisma();
 
