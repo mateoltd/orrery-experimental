@@ -15,13 +15,23 @@
  * more rows in the log already say. The cost of the choice is stated in `flagsFrom`: open flags are found by reading a
  * key's actions, not by an indexed `status = OPEN`.
  *
- * ## AND WHY NO SCORE-BEARING COLUMN IS EVER SELECTED IN THIS FILE
+ * ## AND WHERE THE SCORES ACTUALLY ENTER, WHICH THIS COMMENT PREVIOUSLY GOT WRONG
  *
- * `readAutoGradeReviewTargets` and `readKeyPopulation` both answer questions about marks -- "is this sealed?", "how many
- * papers carry this key?" -- and both answer them in the `where` clause, which the database evaluates without handing
- * the value to this process. That is why neither appears in `audit/score-projections.json`: there is no `select:`
- * here naming `autoScore`, `manualScore` or `finalScore` for `scripts/audit-projections.mjs` to object to, and there
- * is no mark in the process to leak into a payload, a log line or an exception message.
+ * The first version of this header claimed **no score-bearing column is ever selected in this file**, and that claim was
+ * false: `scripts/audit-projections.mjs` failed the file for an undeclared `autoScore`, and the second read at the flag
+ * decision does select `autoScore` and `manualScore`. **A comment asserting a guarantee the code breaks is worse than no
+ * comment**, because it is the kind of claim nobody re-reads -- and this file's own projection is now declared in
+ * `audit/score-projections.json` rather than argued away.
+ *
+ * The accurate position, which the declaration records:
+ *
+ * · `readAutoGradeReviewTargets` and `readKeyPopulation` decide everything about marks in the `where` clause, which the
+ *   database evaluates without handing the value over. **Neither returns a figure.**
+ * · The ONE score-bearing select is the second read under the marking lock, and its values are reduced to two booleans
+ *   (`hasAutomaticMark`, `hasManualMark`) for `decideAutoGradeKeyFlag`. **Neither value reaches a payload, a log line, an
+ *   exception message or an `AuditEvent`.**
+ * · That read is not redundant: the first is not under the lock, so a concurrent manual mark landing between the two
+ *   would leave the recorded reason untrue.
  *
  * ## THE FLAG MOVES NOTHING, AND `lockAttemptForMarking` IS WHY THE RECORD IS TRUE
  *
@@ -374,8 +384,18 @@ export async function flagAutoGradeKey(
         return { ok: false as const, reason: 'NOT_FOUND' as const, awaitingHuman: false };
 
       /**
-       * `existsAutoScore` and `existsManualScore` rather than the values. A flag is about the ROW being sealed, not
-       * about the figure on it, and a query that selected the mark would put a mark on the review path for no gain.
+       * THE VALUES ARE SELECTED AND THEN THROWN AWAY, AND THE COMMENT HERE PREVIOUSLY CLAIMED OTHERWISE.
+       *
+       * It used to say "`existsAutoScore` and `existsManualScore` rather than the values... a query that selected the
+       * mark would put a mark on the review path for no gain" -- **while the query directly below it selected both marks.**
+       * `scripts/audit-projections.mjs` caught that, which is precisely what it is for.
+       *
+       * The intent was right and only the implementation drifted: what leaves here are two booleans, so the mark never
+       * reaches a payload or a log. **The read cannot simply be deleted either** -- the first read is not under the
+       * lock, so a concurrent manual mark between the two would make the recorded reason untrue.
+       *
+       * So: the values are declared in `audit/score-projections.json` with that predicate, rather than being quietly
+       * re-read as though the select were not there.
        */
       const marks = await tx.questionResponse.findUniqueOrThrow({
         where: { id: target.id },

@@ -428,9 +428,11 @@ const pausingHandle = (
      * instant this test exists to observe: every score written, the visibility gate not yet flipped.
      */
     async $executeRawUnsafe(query: string, ...values: unknown[]): Promise<number> {
-      const rows = await (inner as unknown as {
-        $executeRawUnsafe(q: string, ...v: unknown[]): Promise<number>;
-      }).$executeRawUnsafe(query, ...values);
+      const rows = await (
+        inner as unknown as {
+          $executeRawUnsafe(q: string, ...v: unknown[]): Promise<number>;
+        }
+      ).$executeRawUnsafe(query, ...values);
       written += 1;
       if (written === pauseAfter) await onPause();
       return rows;

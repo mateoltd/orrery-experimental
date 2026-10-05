@@ -442,8 +442,7 @@ describe.skipIf(!process.env.DATABASE_URL)('the release TRANSACTION, against rea
                   if (innerProperty === '$executeRawUnsafe') {
                     return async (query: string, ...values: unknown[]) => {
                       updates += 1;
-                      if (updates === 1)
-                        throw new Error('injected failure while writing scores');
+                      if (updates === 1) throw new Error('injected failure while writing scores');
                       return (
                         inner as unknown as {
                           $executeRawUnsafe: (q: string, ...v: unknown[]) => Promise<number>;

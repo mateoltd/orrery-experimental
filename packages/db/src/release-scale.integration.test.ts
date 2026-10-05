@@ -478,9 +478,11 @@ const timedHandle = (
      */
     async $executeRawUnsafe(query: string, ...values: unknown[]): Promise<number> {
       const at = now();
-      const rows = await (inner as unknown as {
-        $executeRawUnsafe(q: string, ...v: unknown[]): Promise<number>;
-      }).$executeRawUnsafe(query, ...values);
+      const rows = await (
+        inner as unknown as {
+          $executeRawUnsafe(q: string, ...v: unknown[]): Promise<number>;
+        }
+      ).$executeRawUnsafe(query, ...values);
       breakdown.bulkMs += ms(at);
       breakdown.bulkStatements += 1;
       return rows;
@@ -708,7 +710,9 @@ describe.skipIf(!process.env.DATABASE_URL)('a 5,000-attempt release, measured', 
      * The first version of the fix deleted the assertion. That would have left `releaseBatch` free to regress to one
      * write per member with nothing to notice, which is how the 742 ms margin came back the next time.
      */
-    expect(b.perAttemptWrites, 'production must not write one statement per member any more').toBe(0);
+    expect(b.perAttemptWrites, 'production must not write one statement per member any more').toBe(
+      0,
+    );
     expect(
       b.bulkStatements,
       'the batched writer must not scale its round-trip count with the cohort',
