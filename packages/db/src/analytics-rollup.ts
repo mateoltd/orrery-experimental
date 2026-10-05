@@ -98,10 +98,18 @@ export const toRollup = <T>(assignmentId: string, row: StoredRollup): Rollup<T> 
   };
 };
 
+/**
+ * THE FOUR METHODS, AND `upsert` IS GONE.
+ *
+ * `upsert` cannot express "update only if the revision matches, otherwise insert" -- its two branches are chosen by
+ * whether the row exists, so the `where` carrying the revision guard would be silently ignored on the update path. **The
+ * interface is the thing that makes the guard unskippable**: a caller cannot reach `writeRollup` without a `create` and
+ * an `updateMany` to do it with.
+ */
 export interface RollupDb {
   analyticsRollup: {
     findUnique(args: unknown): Promise<StoredRollup | null>;
-    upsert(args: unknown): Promise<unknown>;
+    create(args: unknown): Promise<unknown>;
     updateMany(args: unknown): Promise<{ count: number }>;
   };
 }
@@ -143,35 +151,81 @@ export async function writeRollup<T>(
   kind: RollupKind,
   rollup: Rollup<T>,
   expectedRevision: number,
+  /**
+   * WHEN THE COMPUTATION RAN, PASSED IN AND NOT READ OFF THE ROLLUP.
+   *
+   * The first version called `recompute(rollup, rollup.value, rollup.computedAt)`, and for an empty rollup
+   * `computedAt` is `0` -- so a first computation was stamped with the EPOCH, which `toRollup` then read as "never
+   * computed" and **threw the value away**. The write succeeded and the figure was gone, which is the worst pair of
+   * outcomes available.
+   *
+   * **The epoch is a sentinel, and a sentinel must never be a value.** Taking the instant as an argument also satisfies
+   * `INV-TIME-1`: time comes from an injected clock, never from a field a previous state happened to carry.
+   */
+  at: Millis,
 ): Promise<
   | { readonly ok: true; readonly revision: number }
-  | { readonly ok: false; readonly reason: 'MOVED' }
+  | { readonly ok: false; readonly reason: 'BAD_INSTANT' | 'MOVED' }
 > {
-  const next = recompute(rollup, rollup.value as T, rollup.computedAt);
-  const row = (await db.analyticsRollup.upsert({
-    where: { assignmentId_kind: { assignmentId, kind } },
-    create: {
-      assignmentId,
-      kind,
-      value: (next.value ?? undefined) as never,
-      computedAt: new Date(next.computedAt),
-      invalidatedBy: next.invalidatedBy as never,
-      isRecomputing: false,
-      revision: 1,
-    },
-    update: {
-      value: (next.value ?? undefined) as never,
-      computedAt: new Date(next.computedAt),
-      invalidatedBy: next.invalidatedBy as never,
-      isRecomputing: false,
-      revision: { increment: 1 },
-    },
-    select: { revision: true },
-  })) as { revision: number } | null;
+  if (!Number.isFinite(at) || at <= 0) return { ok: false, reason: 'BAD_INSTANT' };
+  const next = recompute(rollup, rollup.value as T, at);
+  const value = (next.value ?? undefined) as never;
+  const computedAt = new Date(next.computedAt);
+  const invalidatedBy = next.invalidatedBy as never;
 
-  if (row === null) return { ok: false, reason: 'MOVED' };
-  return { ok: true, revision: row.revision };
+  /**
+   * A COMPARE-AND-SET, AND THE FIRST VERSION WAS NOT ONE.
+   *
+   * `writeRollup` accepted `expectedRevision` and **never used it** — it went through `upsert`, whose `update` branch
+   * increments unconditionally. So a computation that started before a regrade and finished after it would **overwrite
+   * the newer figure with a stale one carrying a fresh timestamp** — which is the one wrong state `serve()` cannot
+   * detect, because every field it inspects says "current".
+   *
+   * **Only `pnpm lint` noticed**, via `'expectedRevision' is defined but never used`, and it was a warning in someone
+   * else's lane report rather than a failure I read. An unused parameter is not a style error here; it is the whole
+   * guard, missing.
+   *
+   * `updateMany` with the revision in the `where`, and its COUNT is the arbiter — a count of zero is a refusal rather
+   * than a silent overwrite, the same reasoning as `writeReleasedScores`' row-count check and for the same reason.
+   */
+  const updated = await db.analyticsRollup.updateMany({
+    where: { assignmentId, kind, revision: expectedRevision },
+    data: { value, computedAt, invalidatedBy, isRecomputing: false, revision: { increment: 1 } },
+  });
+  if (updated.count > 0) return { ok: true, revision: expectedRevision + 1 };
+
+  /**
+   * THE ROW MAY SIMPLY NOT EXIST YET, WHICH IS A FIRST COMPUTATION RATHER THAN A CONFLICT.
+   *
+   * A create attempt is only correct when nothing is there to overwrite. If something IS there at a different revision,
+   * the `@@unique` on `(assignmentId, kind)` turns the insert into `P2002` -- **so the database, not this function,
+   * distinguishes "first write" from "someone else moved first."**
+   */
+  try {
+    await db.analyticsRollup.create({
+      data: {
+        assignmentId,
+        kind,
+        value,
+        computedAt,
+        invalidatedBy,
+        isRecomputing: false,
+        revision: 1,
+      },
+    });
+    return { ok: true, revision: 1 };
+  } catch (error) {
+    if (isUniqueViolation(error)) return { ok: false, reason: 'MOVED' };
+    throw error;
+  }
 }
+
+/** `P2002` is Prisma's unique-constraint violation, and it is how "someone else moved first" arrives. */
+const isUniqueViolation = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  (error as { code: unknown }).code === 'P2002';
 
 /**
  * RECORD AN INVALIDATION, APPENDING RATHER THAN REPLACING.

@@ -1,0 +1,38 @@
+{
+  "name": "@orrery/telemetry",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "default": "./dist/schema.js"
+    },
+    "./ingest": {
+      "types": "./dist/ingest.d.ts",
+      "default": "./dist/ingest.js"
+    },
+    "./retention": {
+      "types": "./dist/retention.d.ts",
+      "default": "./dist/retention.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit false --emitDeclarationOnly false --pretty",
+    "test": "vitest run",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@orrery/auth": "workspace:*",
+    "@orrery/clock": "workspace:*",
+    "@orrery/config": "workspace:*",
+    "@orrery/exam-engine": "workspace:*"
+  }
+}

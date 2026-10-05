@@ -39,7 +39,15 @@ if (existsSync(envTest)) {
     }
   }
 }
-const { planCohort, readBaseline, percentile, thinkTimeMs } = await import(
+/**
+ * `writeBaseline` IS IMPORTED HERE, AND IT WAS NOT — it was called at the bottom of this file and lint found it as an
+ * undefined name. **A reference to a function that was never imported fails at the moment that line runs**, which is
+ * inside `if (process.env.LOAD_WRITE_BASELINE === '1')`, so the opt-in write path had never been executed by anyone.
+ *
+ * `harness.ts:236` exports it next to `readBaseline`, which is already imported from the same module, so this is a
+ * one-word omission rather than a design question.
+ */
+const { planCohort, readBaseline, writeBaseline, percentile, thinkTimeMs } = await import(
   join(root, 'packages/load-profile/dist/harness.js')
 );
 const { PROVENANCE, COHORT, THINK_TIME } = await import(

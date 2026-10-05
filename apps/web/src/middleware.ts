@@ -1,4 +1,5 @@
-import { guardRequest, type ImpersonationState } from '@orrery/auth/impersonation';
+import { guardImpersonatedRequest, IMPERSONATION_COOKIE } from '@orrery/auth/impersonation';
+import { systemClock } from '@orrery/clock';
 import { type NextRequest, NextResponse } from 'next/server';
 import { resolveCspSimOrigin, type SimOriginEnv } from './server/csp-sim-origin';
 
@@ -36,17 +37,20 @@ import { resolveCspSimOrigin, type SimOriginEnv } from './server/csp-sim-origin'
  * impersonation", which means the request is treated as the admin's own — the safe direction,
  * because a broken cookie degrades to a normal session rather than to an untracked one.
  */
-function readImpersonation(req: NextRequest): ImpersonationState | null {
-  const raw = req.cookies.get(IMPERSONATION_COOKIE)?.value;
-  if (!raw) return null;
-  // TODO(signed-cookie): verify the signature. Deliberately returns null until it does, so an
-  // unsigned cookie cannot GRANT an impersonation. Refusing to parse unverified input is the
-  // only safe behaviour; the alternative — parse and hope — is a privilege escalation.
-  return null;
-}
-
-/** Matches SESSION_COOKIE's prefix rule; `__Host-` means the browser enforces the scope. */
-const IMPERSONATION_COOKIE = '__Host-orrery-impersonating';
+/**
+ * THE SIGNATURE IS NOW VERIFIED, AND THE `TODO` IS GONE.
+ *
+ * The stub was an unconditional `return null` behind `TODO(signed-cookie)` -- correct while it refused, because an
+ * unsigned cookie cannot GRANT an impersonation, and the comment's own argument ("parse and hope — that is a privilege
+ * escalation") is why refusing was right. **It also meant the file below took `now` from a client header while insisting
+ * the identity came from a server-signed cookie**, which is the same class of mistake one line away: one boundary
+ * verified, one not, in the same expression.
+ *
+ * `inspectImpersonationCookie` verifies an HMAC over EVERY field of `ImpersonationState` — the admin, the target, both
+ * instants, the reason and both display names — with a domain tag so the session-token secret cannot be confused with
+ * this one, and a 32-byte secret floor. **It does NOT cover the acting session**: that is the caller's job and a route
+ * handler can supply it (`impersonation.ts` documents the gap rather than pretending to close it).
+ */
 
 /** Routes that must not be treated as document requests. */
 const isDocument = (req: NextRequest): boolean => {
@@ -57,7 +61,7 @@ const isDocument = (req: NextRequest): boolean => {
   return req.method === 'GET';
 };
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   /**
    * The impersonation gate runs FIRST, before the CSP, before the route table, before
    * `can()`.  (P1-T10)
@@ -72,11 +76,24 @@ export function middleware(req: NextRequest) {
    * sets: a header would be a flag the impersonating browser controls, which is the opposite of
    * the guarantee.
    */
-  const impersonation = readImpersonation(req);
-  const verdict = guardRequest({
+  /**
+   * THE CLOCK IS THE SERVER'S. `INV-TIME-1`: never `new Date()` for a decision, and never a client's word for one.
+   *
+   * **THIS WAS THE LIVE DEFECT `TM-04` DESCRIBES, AND IT IS WORSE THAN "A CLIENT CAN WIDEN ITS OWN WINDOW".**
+   * `checkImpersonation` tests `now >= state.expiresAt`, so a LARGER claimed instant makes the window look **CLOSED** --
+   * and `guardRequest` answers `!live.active` with `allowed: true`. A client sending `x-now: 2999-01-01` therefore does
+   * not lengthen its impersonation: it makes a **live** one read as over, and every impersonation safeguard (the
+   * banner, `CANNOT_EXTEND`, the audit trail's premise that the reader knows they are not themselves) **stops applying
+   * for the rest of the window** while the admin's own privileges carry the request.
+   *
+   * The header was removed rather than clamped. A clamp still reads a client's number, and the whole point of
+   * `INV-TIME-1` is that a decision does not.
+   */
+  const verdict = await guardImpersonatedRequest({
     method: req.method,
-    state: impersonation,
-    now: Date.parse(req.headers.get('x-now') ?? '') || 0,
+    rawCookie: req.cookies.get(IMPERSONATION_COOKIE.name)?.value,
+    secret: process.env.AUTH_SECRET ?? null,
+    clock: systemClock,
   });
   if (!verdict.allowed) {
     return NextResponse.json(

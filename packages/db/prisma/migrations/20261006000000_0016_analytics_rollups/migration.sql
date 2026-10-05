@@ -37,6 +37,16 @@ CREATE TABLE IF NOT EXISTS "AnalyticsRollup" (
     "assignmentId" TEXT NOT NULL,
     "kind" "AnalyticsRollupKind" NOT NULL,
     "value" JSONB,
+    -- THE EXPLICIT LITERAL, AND `'epoch'` DOES NOT WORK HERE DESPITE BEING THE SAME INSTANT.
+    --
+    -- Postgres ACCEPTS `'epoch'` as a timestamp input and then NORMALISES it: the stored default comes back out of
+    -- `information_schema` as `'1970-01-01 00:00:00+00'::timestamp with time zone`. So a schema written as
+    -- `@default(dbgenerated("'epoch'"))` can never match a replay of this migration, and `gate:schema` fails forever
+    -- on a difference that is not a difference.
+    --
+    -- **I CHANGED THIS FILE FIRST, ON THE GATE'S WORD, AND WAS WRONG.** `gate:schema` reported the disagreement and I
+    -- assumed the migration was the side that had to move; the real cause was Postgres normalising the literal, and the
+    -- schema is what has to carry the normalised spelling. Both now say `'1970-01-01 00:00:00+00'`.
     "computedAt" TIMESTAMPTZ(3) NOT NULL DEFAULT '1970-01-01 00:00:00+00',
     -- THE WHOLE LIST, OLDEST FIRST, NOT THE LATEST REASON.
     --
@@ -52,7 +62,10 @@ CREATE TABLE IF NOT EXISTS "AnalyticsRollup" (
     -- That is the one wrong state `serve()` cannot detect, because every field it looks at says "current".
     "revision" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- NO DEFAULT, because `@updatedAt` IS CLIENT-APPLIED BY PRISMA -- exactly the trap `release-bulk-write.ts` had to
+    -- handle explicitly for the release. A database default here would be a second source of truth for one column, and
+    -- `gate:schema` flags the disagreement between it and the schema.
+    "updatedAt" TIMESTAMPTZ(3) NOT NULL,
 
     CONSTRAINT "AnalyticsRollup_pkey" PRIMARY KEY ("id")
 );

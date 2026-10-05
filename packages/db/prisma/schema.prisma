@@ -1562,7 +1562,15 @@ model AnalyticsRollup {
   value      Json?
 
   /** `Rollup<T>['computedAt']`. Zero means NEVER computed, which is a different state from "computed long ago". */
-  computedAt DateTime @default(dbgenerated("'epoch'")) @db.Timestamptz(3)
+  /**
+   * NEVER COMPUTED, AND THE SPELLING IS THE NORMALISED ONE ON PURPOSE.
+   *
+   * `'epoch'` is the same instant and Postgres accepts it, but it STORES it normalised as
+   * `'1970-01-01 00:00:00+00'::timestamp with time zone` -- so `dbgenerated("'epoch'")` can never match a replay of the
+   * migration and `gate:schema` fails on a difference that is not one. The literal below is what the database actually
+   * reports, which is the only spelling a diff can reconcile.
+   */
+  computedAt DateTime @default(dbgenerated("'1970-01-01 00:00:00+00'::timestamp with time zone")) @db.Timestamptz(3)
 
   /**
    * `Rollup<T>['invalidatedBy']`, WHOLE, oldest first — not just the latest.

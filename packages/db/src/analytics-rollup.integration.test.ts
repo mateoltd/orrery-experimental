@@ -8,7 +8,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it } from 'vitest';
-import { invalidateRollup, ROLLUP_KINDS, readRollup } from './analytics-rollup.js';
+import { invalidateRollup, ROLLUP_KINDS, readRollup, writeRollup } from './analytics-rollup.js';
 import { type PrismaClient as GeneratedClient, PrismaClient } from './prisma.js';
 
 let client: PrismaClient | null = null;
@@ -251,6 +251,113 @@ describe('AN INVALIDATION APPENDS, AND A CONCURRENT WRITE IS REFUSED', () => {
     expect(loser.ok === false && loser.reason).toBe('MOVED');
     const rollup = await readRollup(db as unknown as Db, id, 'FORM_STATS');
     expect(rollup.invalidatedBy.map((i) => i.reason)).toEqual(['REGRADE']);
+  });
+});
+
+describe('writeRollup IS A COMPARE-AND-SET, WHICH IT WAS NOT AT FIRST', () => {
+  it('a FIRST computation creates the row', async () => {
+    const db = prisma();
+    const id = await assignment();
+    const empty = await readRollup<{ n: number }>(db as unknown as Db, id, 'FORM_STATS');
+    const result = await writeRollup(
+      db as unknown as Db,
+      id,
+      'FORM_STATS',
+      { ...empty, value: { n: 1 } } as never,
+      0,
+      1_700_000_000_000,
+    );
+    expect(result.ok).toBe(true);
+    const rollup = await readRollup<{ n: number }>(db as unknown as Db, id, 'FORM_STATS');
+    expect(rollup.value).toEqual({ n: 1 });
+  });
+
+  it('REFUSES a stale writer rather than overwriting a newer figure', async () => {
+    /**
+     * **The failure the `revision` column exists to prevent.** A computation that started before an invalidation and
+     * finished after it would otherwise overwrite the newer figure with a stale one carrying a FRESH timestamp -- the one
+     * wrong state `serve()` cannot detect, because every field it inspects says "current".
+     *
+     * The first version of `writeRollup` took `expectedRevision` and ignored it, going through `upsert`. Only
+     * `pnpm lint` noticed, as an unused-parameter warning in someone else's report.
+     */
+    const db = prisma();
+    const id = await assignment();
+    const empty = await readRollup<{ n: number }>(db as unknown as Db, id, 'FORM_STATS');
+    await writeRollup(
+      db as unknown as Db,
+      id,
+      'FORM_STATS',
+      { ...empty, value: { n: 1 } } as never,
+      0,
+      1_700_000_000_000,
+    );
+
+    /** Somebody else moves first: the row is now at revision 1. */
+    const stale = await writeRollup(
+      db as unknown as Db,
+      id,
+      'FORM_STATS',
+      { ...empty, value: { n: 99 } } as never,
+      0,
+      1_700_000_000_000,
+    );
+    expect(stale.ok).toBe(false);
+    expect(stale.ok === false && stale.reason).toBe('MOVED');
+
+    const rollup = await readRollup<{ n: number }>(db as unknown as Db, id, 'FORM_STATS');
+    /** The newer figure survives; the stale one is nowhere. */
+    expect(rollup.value).toEqual({ n: 1 });
+  });
+
+  it('REFUSES the epoch as a computation time, because the epoch means NEVER COMPUTED', async () => {
+    /**
+     * **A sentinel must never be a value.** The first writer called `recompute(rollup, rollup.value, rollup.computedAt)`,
+     * and an empty rollup's `computedAt` is `0` -- so a first computation was stamped with the epoch, which the reader
+     * then read as "never computed" and **discarded**. The write reported success and the figure was gone: the worst
+     * pair of outcomes available, and nothing failed loudly.
+     */
+    const db = prisma();
+    const id = await assignment();
+    const empty = await readRollup<{ n: number }>(db as unknown as Db, id, 'FORM_STATS');
+    const result = await writeRollup(
+      db as unknown as Db,
+      id,
+      'FORM_STATS',
+      { ...empty, value: { n: 1 } } as never,
+      0,
+      0,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.reason).toBe('BAD_INSTANT');
+    expect(await db.analyticsRollup.count({ where: { assignmentId: id } })).toBe(0);
+  });
+
+  it('an UP-TO-DATE writer is accepted', async () => {
+    const db = prisma();
+    const id = await assignment();
+    const empty = await readRollup<{ n: number }>(db as unknown as Db, id, 'FORM_STATS');
+    await writeRollup(
+      db as unknown as Db,
+      id,
+      'FORM_STATS',
+      { ...empty, value: { n: 1 } } as never,
+      0,
+      1_700_000_000_000,
+    );
+    const current = await readRollup<{ n: number }>(db as unknown as Db, id, 'FORM_STATS');
+    const next = await writeRollup(
+      db as unknown as Db,
+      id,
+      'FORM_STATS',
+      { ...current, value: { n: 2 } } as never,
+      1,
+      1_700_000_100_000,
+    );
+    expect(next.ok).toBe(true);
+    expect((await readRollup<{ n: number }>(db as unknown as Db, id, 'FORM_STATS')).value).toEqual({
+      n: 2,
+    });
   });
 });
 

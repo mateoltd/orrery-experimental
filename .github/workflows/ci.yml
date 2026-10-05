@@ -123,7 +123,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [clock, ids, rng, config, grading, exam-engine, analytics, contracts]
+        # `telemetry` WAS MISSING while its 75 tests existed, so they ran NOWHERE in CI: a package tested locally and
+        # never in CI is one nobody is told about. `auth` and `db` are here for the same reason -- both carry security
+        # decisions that no CI run was exercising.
+        package: [clock, ids, rng, config, exam-engine, analytics, contracts, auth, db, telemetry]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -135,10 +138,14 @@ jobs:
         # Per-package, so a failure names the package instead of "tests failed".
         run: pnpm --filter "@orrery/${{ matrix.package }}" test
       - name: coverage gate for the 100%-branch money packages
-        # grading, exam-engine and analytics decide grades, deadlines and statistics
-        # ABOUT STUDENTS. 100% branch is the floor (plans/00 §6.3). Lowering it requires
-        # a GATE-CHANGE: rationale, which `gate-integrity` enforces.
-        if: contains(fromJson('["grading","exam-engine","analytics"]'), matrix.package)
+        # exam-engine and analytics decide grades, deadlines and statistics ABOUT STUDENTS. 100% branch is the floor
+        # (plans/00 §6.3). Lowering it requires a GATE-CHANGE: rationale, which `gate-integrity` enforces.
+        #
+        # **`grading` WAS IN THIS LIST AND IS NOT A PACKAGE.** `pnpm --filter "@orrery/grading" test:coverage` fails, so
+        # the `test` job could not go green -- which is `TM-14`'s shape recurring inside `P14-T15`'s own fix. Only
+        # packages that DECLARE a `test:coverage` script belong here; the lane's report found this and I checked each
+        # name against its `package.json`.
+        if: contains(fromJson('["exam-engine","analytics"]'), matrix.package)
         run: pnpm --filter "@orrery/${{ matrix.package }}" test:coverage
 
   # ─────────────────────────────────────────────── GATE: integration (Testcontainers)
