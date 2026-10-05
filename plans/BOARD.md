@@ -65,11 +65,11 @@ Lanes available: **6**. P0 is mostly sequential; P0-T1, T2, T3 and T6 can run in
 | P11 Item analysis & reporting | pending | 0 / 12 | M7 |
 | P12 Sim scale-out | pending | 0 / 7 | M8 |
 | P13 Accessibility & i18n | pending | 0 / 9 | M8 |
-| P14 Security, privacy, compliance | pending | 0 / 10 | M10 |
+| P14 Security, privacy, compliance | pending | 0 / 18 | M10 |
 | P15 Reliability & performance | pending | 0 / 8 | M10 |
 | P16 Interoperability | pending | 0 / 9 | M9 |
 | P17 Pilot & GA | pending | 0 / 7 | M10 |
-| | | **0 / 194** | |
+| | | **0 / 202** | |
 
 ---
 

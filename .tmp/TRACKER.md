@@ -3617,16 +3617,84 @@ The plan's five a11y rules are cheap to satisfy once and easy to get wrong nine 
 
 | Task | Description | Status | Commit | Evidence |
 |---|---|---|---|---|
-| P14-T1 | Threat model walk-through; OWASP Top 10 review. **Depends on nothing** — it is a document exercise and can start in P0 (`D-31`). Output is a findings list with severities and task IDs, **not** a tick-box | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P14-T1 | Threat model walk-through; OWASP Top 10 review. **Depends on nothing** — it is a document exercise and can start in P0 (`D-31`). Output is a findings list with severities and task IDs, **not** a tick-box | **DONE -- AND IT CONVINCED ME OF A CRITICAL DEFECT I HAD MISSED** | `6649797` | `docs/THREAT-MODEL.md`, 776 lines, **22 severity-argued findings across OWASP Top 10**, plus two categories reported
+as **nothing found by reading** (injection; SSRF) rather than padded.
+**TM-01 IS CRITICAL AND WORSE THAN THE SESSION GAP I HAD BEEN REPORTING.** `ORRERY_DEV_USER_ID` appears in no
+`.env.example`, no compose file and no CI env, so a clean checkout runs with it **unset** -- and
+`classrooms/[classroomId]/roster/page.tsx:166-168` **defaults to the all-zeroes UUID instead of refusing.** I checked
+the fail-open question directly rather than taking it on trust: the all-zeroes user does not exist,
+`resolveActorForRequest` returns `null`, and the page answers `forbidden`. **SO IT FAILS CLOSED TODAY AND FAILS OPEN THE
+MOMENT THE APP IS MADE TO WORK -- and no deployment can avoid setting that variable.** Once set, the roster page is an
+**unauthenticated read AND write**, since `changeRoleAction` / `removeMembersAction` / `restoreMembersAction` all execute
+as one shared user. The authorisation kernel is not the weak point; **the identity handed to it is.**
+**AND IT CORRECTED ME.** I passed "no CSP is configured" as an unverified lead and it **refuted** it -- a per-request
+nonce CSP exists in `apps/web/src/middleware.ts`. It also refuted its own cross-classroom-write hypothesis. A threat
+model that repeats an unverified rumour is the failure it exists to prevent.
+**TM-22 INDICTED MY OWN GATE** and the fix rides in the same commit. Only **8 of 29 invariants are `active`** and
+hard-checked; 21 are `staged` and **11 of those names had rotted** -- `packages/grading/` was never created,
+`audit:payloads` does not exist, and there is **no rate limiter anywhere in the tree** despite `INV-ABUSE-1` naming one.
+Section 2b of `invariant-registry.mjs` now reports all eleven and deliberately does **not** fail, because a staged
+invariant is a promise about work not yet done and failing would mean the gate cannot run until the backlog lands.
+**PLAN CONTRADICTIONS TO ACT ON:** `plans/14` §7.2 calls the retention sweep "a real cron job... not a promise" and
+`apps/worker/src/index.ts:138` throws. |
 | P14-T2 | CSP tightening, `audit:payloads` hardening, canary log-scrubbing test | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
 | P14-T3 | Sandbox escape re-test against the production host component | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
 | P14-T4 | Rate-limit audit; verify every limit by test | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
-| P14-T5 | Dependency audit and the documented exception process | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P14-T5 | Dependency audit and the documented exception process | **PARTIAL -- THE INVENTORY AND THE PROCESS EXIST; THE VULNERABILITY STATUS IS UNKNOWN** | `6649797` | `docs/DEPENDENCIES.md`, 330 lines. **§1 SAYS FIRST THAT THE INVENTORY IS COMPLETE AND THE VULNERABILITY STATUS IS
+UNKNOWN** -- which is the correct thing to lead with, because an inventory that implies it knows the answers is worse
+than none. Direct dependencies as declared **and as resolved**, lockfile shape, and security-relevant duplication
+(**two `katex`, two `zod`, and five more**). It also flags `sharp`: a package this repository grants build-script
+permission to and does not depend on. The **exception process is defined** -- what may be excepted, who approves, the
+compensating control, lifetime, and expiry behaviour -- and **§7 grants no exceptions**, saying so rather than
+manufacturing some. Not done: the vulnerability scan itself, which is `P14-T15` (TM-14 found the CI job wired to
+something that fails before reaching `osv-scanner`, so `audit:deps` **never runs**). |
 | P14-T6 | Data inventory and retention schedules; retention sweep in dry-run then live | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
 | P14-T7 | DSAR export and erasure, rehearsed end to end with timings | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
 | P14-T8 | Minors posture, consent versioning, sub-processor register, privacy policy and terms drafts | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
 | P14-T9 | File scanning live; `svg` rejection and CSV-injection escaping verified | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
-| P14-T10 | **Published academic-integrity policy** and student-facing integrity disclosure | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P14-T10 | **Published academic-integrity policy** and student-facing integrity disclosure | **DONE** | `6649797` | `docs/ACADEMIC-INTEGRITY-POLICY.md`, 271 lines, student-facing, with an **implementation-status annex** so it cannot
+| P14-T11 | Mount the real session: sign-in/forgot routes, `requireUser()`, and wire the route-protection table | NOT STARTED | -- | **NEW, proposed by `docs/THREAT-MODEL.md` TM-01/TM-02/TM-06/TM-07. This is the phase's critical path.**
+`transport.ts` posts to `/api/auth/sign-in` and `/api/auth/forgot`; **neither route exists**, so signing in cannot
+succeed and no request anywhere reads a session cookie. `config.ts` already builds a Better Auth instance with Argon2id
+and `__Host-` cookie attributes and **has no production caller.** Build the two routes, a fail-closed `requireUser()`,
+replace both `sessionUserId()` placeholders, and wire `decideRoute`'s default-deny table (imported today only by its own
+test). **Independently of the rest: make the roster page REFUSE rather than default to the all-zeroes UUID** --
+"unconfigured" must not become "serves somebody's roster". Also `requirePepper()` is documented in `plans/14` and does
+not exist.
+**DOES NOT EXIT UNTIL `P10-T4`, `P9-T4` and the P11 rows can stop citing "no session layer"**, because an
+ownership-gated query behind an environment-variable identity is not gated. |
+| P14-T12 | Make the impersonation gate live: real cookie signature, and stop measuring the window against a client clock | NOT STARTED | -- | **NEW** (TM-03, TM-04). The impersonation gate is **inert and currently fail-safe** -- which is why it is Medium and
+not Critical: it refuses rather than permits. It stops being fail-safe the moment it is wired. The cookie signature is
+unimplemented, and the impersonation window is measured against a **client-supplied `x-now`**, so a client can widen its
+own window. Time must come from the server clock (`INV-TIME-1`) before this gate is trusted. |
+| P14-T13 | Fix the CSP origin variable name: it reads `SIMS_ORIGIN`, the validated name is `SIM_ORIGIN` | NOT STARTED | -- | **NEW** (TM-09). A typo between two similar variable names, so the allowed origin is almost certainly not the one
+that was validated. **Small, live, and exactly the class of defect that a security property asserted in a comment cannot
+catch.** |
+| P14-T14 | Telemetry ingestion endpoint, with `detail` constrained by a type rather than a comment | NOT STARTED | -- | **NEW** (TM-10, TM-20). **No telemetry ingestion endpoint exists**, so `INV-TELEMETRY-2` protects nothing. When it is
+built, `detail` keys must be **constrained by a type**, because "no PII" written in a comment is not a control --
+and `detail` is exactly where a student's answer or an identifier would arrive. |
+| P14-T15 | Make CI's `policy` and `test` jobs able to go green, so `osv-scanner` and `audit:deps` actually run | NOT STARTED | -- | **NEW** (TM-14). Both jobs currently fail before reaching the scanner, `audit:deps` **never runs**, and **3 of 5
+required checks are unevaluable** -- which means `plans/14` §8's "high/critical blocks merge" is a promise no CI run
+is currently keeping. A vulnerability gate that never executes is worse than none: it is a claim that scans happen. |
+| P14-T16 | Add the missing `audit:payloads` gate; then stop asserting four properties in comments | NOT STARTED | -- | **NEW** (TM-15, TM-19, TM-20, TM-21, TM-22). `INV-Q-1` and `INV-TELEMETRY-2` both cite an `audit:payloads` script
+**that does not exist.** Then the four comment-only properties: `msg` is not redacted and the canary test varies only
+field names; telemetry `detail` is unconstrained; "exactly one place mounts generated markup" rests on **a lint ban
+that was never written**; and the invariant registry cannot see its own staleness (partly fixed in `6649797`, which made
+the eleven visible rather than making them fail). |
+| P14-T17 | Verify the evidence signature; two comments describe it as already fixed | NOT STARTED | -- | **NEW** (TM-17). The evidence signature is **never verified**, and two source comments describe a fix that does not
+exist. An unverified signature on integrity evidence means the evidence is only as trustworthy as the database. |
+| P14-T18 | Build the simulation registry in a job | NOT STARTED | -- | **NEW** (TM-18). The sim registry is **not built by any job**, so the artefact `P12-T6`'s bundle budget and `P13-T4`'s
+conformance manifest are graded against is latent. Latent today, live the moment a sim is served. |
+outrun the code.
+**IT LEADS BY REFUSING TO OVERCLAIM, WHICH IS THE WHOLE TASK:** "We can reliably enforce *when* you take the paper and
+*which questions* you were given. We cannot reliably detect *whether you cheated*, and any system that tells you
+otherwise is reporting its false-positive rate as accuracy." **IT THEN DOES THE BASE-RATE ARITHMETIC OUT LOUD** rather
+than quoting a vendor -- a 99%-accurate, 30%-sensitive detector against a 2% prevalence cohort, where automated
+detection catches **none** of the cheaters and a human reviewer catches one -- and notes that proctoring research found
+no completion-time change, so a before/after comparison cannot distinguish "less cheating" from "no cheating". Covered:
+what is enforced server-side, what is recorded, what is *inferred* and what is not, what a teacher sees, retention,
+what a student can see and challenge, and the appeal route. **`plans/09` and the existing invariants are cross-referenced
+rather than restated.** |
 
 #### P15 Reliability, performance, DR · 8 tasks · M10
 

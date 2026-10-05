@@ -321,6 +321,14 @@ See `15-A11Y-I18N.md` §6 for the deliverable list (P13-T1…T9).
 | P14-T8 | Minors posture, consent versioning, sub-processor register, privacy policy and terms drafts | P14-T6 | M |
 | P14-T9 | File scanning live; `svg` rejection and CSV-injection escaping verified | P14-T1 | S |
 | P14-T10 | **Published academic-integrity policy** and student-facing integrity disclosure | P8-T14 | M |
+| P14-T11 | Mount the real session: sign-in/forgot routes, `requireUser()`, wire the route-protection table | P14-T1 | M |
+| P14-T12 | Make the impersonation gate live: real cookie signature; stop measuring its window against a client clock | P14-T1 | S |
+| P14-T13 | Fix the CSP origin variable name (`SIMS_ORIGIN` vs the validated `SIM_ORIGIN`) | P14-T1 | S |
+| P14-T14 | Telemetry ingestion endpoint, with `detail` constrained by a type rather than a comment | P14-T2 | M |
+| P14-T15 | Make CI's `policy` and `test` jobs able to go green so `osv-scanner` and `audit:deps` actually run | P14-T1 | S |
+| P14-T16 | Add the missing `audit:payloads` gate; stop asserting four properties in comments | P14-T1 | M |
+| P14-T17 | Verify the evidence signature; two comments describe it as already fixed | P14-T8 | S |
+| P14-T18 | Build the simulation registry in a job | P14-T1 | S |
 
 **Exit:** the `14` §10 checklist is fully ticked; the threat model and the integrity policy are each reviewed by someone who did not write them.
 
