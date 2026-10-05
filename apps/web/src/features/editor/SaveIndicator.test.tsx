@@ -18,6 +18,7 @@ import {
   SaveIndicator,
   type SaveState,
   STATE_TEXT,
+  translatorFor,
   useAutosave,
 } from './SaveIndicator.js';
 
@@ -91,9 +92,19 @@ describe('the state machine', () => {
     expect(isLegalTransition('saving', 'dirty')).toBe(true);
   });
 
+  /**
+   * THE ONLY EDIT THIS FILE NEEDED FOR `P13-T7`, AND IT IS THE SAME ASSERTION.
+   *
+   * `STATE_TEXT` was a `Record<kind, string>` of English and is now `(kind, t) => string`, because a
+   * constant cannot consult a locale. The property under test — every state has text, because a state
+   * that is only a class name is not announced — is unchanged, and it is now a stronger statement: it
+   * walks the catalogue rather than a local literal, so it fails if a key is renamed as well as if one
+   * is emptied.
+   */
   it('every state has text, because a state that is only a class name is not announced', () => {
+    const t = translatorFor();
     for (const kind of ['idle', 'dirty', 'saving', 'saved', 'failed', 'conflict'] as const) {
-      expect(STATE_TEXT[kind], kind).toBeTruthy();
+      expect(STATE_TEXT(kind, t), kind).toBeTruthy();
     }
   });
 });
@@ -128,6 +139,54 @@ describe('SaveIndicator', () => {
   it('uses role="alert" for a conflict, and says how many blocks need a decision', () => {
     render(<SaveIndicator state={{ kind: 'conflict', conflicts: 3 }} />);
     expect(screen.getByRole('alert').textContent).toContain('3 blocks need a decision');
+  });
+
+  /**
+   * THE SENTENCE WAS ALREADY WRONG IN ENGLISH BEFORE ANY TRANSLATION EXISTED.
+   *
+   * It read `` {n} block{n === 1 ? '' : 's'} need a decision ``, so one conflicting block announced
+   * "1 block need a decision" inside a `role="alert"` — a screen reader saying a grammatically broken
+   * sentence to an author whose work is blocked. The verb now lives in the plural arms, which is what
+   * fixes English AND is what a four-form language needs, so the two were the same change.
+   */
+  it("AGREES WITH ITSELF AT ONE CONFLICT, which `n === 1 ? '' : 's'` did not", () => {
+    render(<SaveIndicator state={{ kind: 'conflict', conflicts: 1 }} />);
+    const text = screen.getByRole('alert').textContent ?? '';
+    expect(text).toContain('1 block needs a decision');
+    expect(text).not.toContain('1 block need a decision');
+  });
+
+  /**
+   * THE COMPONENT ACTUALLY ASKS THE FRAMEWORK, RATHER THAN CARRYING ITS OWN FORMATS.
+   *
+   * **WITHOUT THIS, `P13-T7` COULD HAVE BEEN SATISFIED BY A CATALOGUE NOBODY READS.** The date in the
+   * `role="status"` is the same instant, the same zone and the same component — only the locale
+   * differs, and it renders the way `en-US` renders that instant. A hard-coded `toISOString()` cannot
+   * produce this, which is what makes the assertion evidence rather than decoration.
+   */
+  it('RENDERS THE SAME INSTANT THE WAY THE REQUESTED LOCALE RENDERS IT', () => {
+    const at = Date.parse('2026-09-27T12:00:00Z');
+    const { unmount } = render(<SaveIndicator state={{ kind: 'saved', at }} locale="en-GB" />);
+    const gb = screen.getByRole('status').textContent;
+    unmount();
+    render(<SaveIndicator state={{ kind: 'saved', at }} locale="en-US" />);
+    const us = screen.getByRole('status').textContent;
+    expect(gb).toContain('27 Sept 2026');
+    expect(us).toContain('Sep 27, 2026');
+    expect(us).not.toBe(gb);
+    // An unshipped locale falls back to the SOURCE catalogue rather than throwing: a stored profile
+    // must not take the page down over a settings row.
+    cleanup();
+    render(<SaveIndicator state={{ kind: 'saved', at }} locale="de-DE" />);
+    expect(screen.getByRole('status').textContent).toContain('27 Sept 2026');
+  });
+
+  it('ANNOUNCES THE COUNT IN THE RIGHT GRAMMATICAL NUMBER, because the string is SPOKEN', () => {
+    render(<SaveIndicator state={{ kind: 'failed', attempts: 1, reason: 'offline' }} />);
+    expect(screen.getByRole('alert').textContent).toContain('1 attempt so far');
+    cleanup();
+    render(<SaveIndicator state={{ kind: 'failed', attempts: 4, reason: 'offline' }} />);
+    expect(screen.getByRole('alert').textContent).toContain('4 attempts so far');
   });
 
   it('says "Saving…" while in flight rather than flashing "Saved"', () => {
@@ -215,7 +274,16 @@ describe('NEVER says Saved after a failure', () => {
     // And the timestamp is in the ACCESSIBLE TEXT, not just in a `title`. "Saved" alone leaves a
     // screen-reader user unable to tell a save from a few minutes ago, which is the difference
     // between trusting the indicator and ignoring it.
-    expect(screen.getByRole('status').textContent).toContain('2026-09-27T12:00:00.000Z');
+    //
+    // **THE EXPECTED VALUE CHANGED, AND STRICTLY TIGHTENED (`P13-T7`).** It was the raw ISO string
+    // `2026-09-27T12:00:00.000Z`, which is the worst possible thing to hand a screen reader: no word
+    // boundaries, and a machine timestamp inside a sentence about a person. It is now the locale's own
+    // rendering, pinned to `en-GB`, so this assertion is about the FORMAT and not merely about the
+    // presence of some characters — `toContain(new Date(...).toISOString())` would have accepted a
+    // string that was still a machine timestamp.
+    expect(screen.getByRole('status').textContent).toContain('at 27 Sept 2026, 12:00');
+    // ...and explicitly not the ISO form, which is the property the old assertion failed to state.
+    expect(screen.getByRole('status').textContent).not.toContain('2026-09-27T12:00:00.000Z');
   });
 });
 

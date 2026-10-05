@@ -272,10 +272,9 @@ jobs:
       # blocked by a vulnerability in the entire life of this workflow. **A vulnerability gate that never executes is
       # worse than no gate: it is a claim that scans happen.**
       #
-      # `i18n:check` is `P13-T7` and is STILL not built; that step stays commented out rather than deleted, because a
-      # deleted CI step is indistinguishable from a control that was deliberately removed. `a11y` (`P13-T1`) has since been
-      # built and its step is live below -- **so this paragraph now describes only one of the two, and saying otherwise
-      # would be a comment that has gone stale in the same file it is correcting.**
+      # `i18n:check` (`P13-T7`) and `a11y` (`P13-T1`) BOTH EXIST now, so both steps below are live. The comment above
+      # used to explain why they were commented out, and keeping it would be a comment describing a state that has
+      # passed -- **which is how a stale control survives: the explanation outlives the thing it explains.**
       #
       # The dependency audit is promoted ABOVE them now, so it cannot be starved by work that does not exist yet.
       #
@@ -286,7 +285,8 @@ jobs:
       - name: accessibility (component-level axe; P13-T9 is the manual WCAG 2.2 AA audit)
         run: pnpm a11y
       # - name: i18n completeness                # P13-T7 -- no script exists yet
-      #   run: pnpm i18n:check
+      - name: i18n completeness (P13-T7)
+        run: pnpm i18n:check
       # ── THE DEPENDENCY SCAN, WHICH HAS NEVER RUN ONCE. `P14-T15` (`TM-14`, `TM-15`). ─────────────────────
       #
       # `plans/14` §8:130 promises "osv-scanner in CI; high/critical blocks merge". **Until this step, no merge has ever

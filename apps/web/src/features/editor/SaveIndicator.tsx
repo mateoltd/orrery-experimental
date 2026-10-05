@@ -36,8 +36,31 @@
  * without the user hunting for it. The state is in the TEXT, not only in a class name — "Saved"
  * and "Saved at 14:32" are announced, whereas a green dot is not. The failing state is a
  * `role="alert"`, because a failure that is merely polite is a failure that gets missed.
+ *
+ * ## WHY THIS COMPONENT, AND NOT AN EASIER ONE  (P13-T7)
+ *
+ * **EVERY STRING ON THIS SCREEN IS READ ALOUD.** The whole surface is `role="status"` and
+ * `role="alert"`, so a mistranslated or mis-inflected word here is spoken to a student by a screen
+ * reader with no visual context to correct it — and that is also why this component was chosen to be
+ * the one converted: a framework proven on static page furniture would be proven on the case where
+ * getting it wrong is worst.
+ *
+ * It also carried the three defects `P13-T7` exists to remove, all recorded in `catalogues.ts`:
+ * two English two-form plurals built by `n === 1 ? '' : 's'`, a date rendered as a raw ISO string,
+ * and a sentence that was already wrong in English ("1 block need a decision").
  */
 
+import {
+  CATALOGUES,
+  createTranslator,
+  DEFAULT_LOCALE,
+  FALLBACK_ZONE,
+  type Locale,
+  type MessageIssue,
+  type MessageKey,
+  resolveLocale,
+  type Translator,
+} from '@orrery/i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type SaveResult =
@@ -84,36 +107,104 @@ const LEGAL: Readonly<Record<SaveState['kind'], readonly SaveState['kind'][]>> =
 export const isLegalTransition = (from: SaveState['kind'], to: SaveState['kind']): boolean =>
   LEGAL[from].includes(to);
 
-export const STATE_TEXT: Readonly<Record<SaveState['kind'], string>> = {
-  idle: 'No changes',
-  dirty: 'Unsaved changes',
-  saving: 'Saving…',
-  saved: 'Saved',
-  failed: "Couldn't save — retrying",
-  conflict: 'Someone else saved first',
+/**
+ * THE SIX STATES, AS MESSAGE KEYS RATHER THAN AS ENGLISH.
+ *
+ * A `Record<kind, string>` of English is the shape that makes a component untranslatable: the key and
+ * the copy are the same string, so extracting it means renaming every lookup at every call site.
+ * Keying them instead means `SaveState['kind']` and the catalogue key cannot drift, and the compiler
+ * rejects a key that does not exist.
+ */
+const STATE_KEYS: Readonly<Record<SaveState['kind'], MessageKey>> = {
+  idle: 'save.state.idle',
+  dirty: 'save.state.dirty',
+  saving: 'save.state.saving',
+  saved: 'save.state.saved',
+  failed: 'save.state.failed',
+  conflict: 'save.state.conflict',
 };
+
+/**
+ * What the live region says for a state.
+ *
+ * A FUNCTION and not a constant because a constant cannot consult the locale. The six states have
+ * exactly six strings, so the risk of this being a place where copy is lost is nil — the test walks
+ * all six and asserts each renders non-empty, which is the same assertion the constant version made.
+ */
+export const STATE_TEXT = (kind: SaveState['kind'], t: Translator): string => t(STATE_KEYS[kind]);
+
+/**
+ * THE REPORTER, WRITTEN OUT RATHER THAN INHERITED.
+ *
+ * **`onIssue` IS A REQUIRED ARGUMENT IN `@orrery/i18n`, BECAUSE A DEFAULTED REPORTER IS A REPORTER
+ * NOBODY SETS** — and a missing key with no reporter renders as the key with nothing logged anywhere.
+ * `console.warn` is this component's decision about what a gap does, and it is written out so a
+ * reviewer can see it rather than inherit it. `console.error` was considered and is worse: it makes a
+ * degraded page look like a broken one in a log a teacher is asked to read.
+ */
+const report = (issue: MessageIssue): void =>
+  console.warn(
+    `@orrery/i18n: ${issue.kind} for ${String(issue.key)} (${issue.locale}): ${issue.detail}`,
+  );
+
+const translators = new Map<string, Translator>();
+
+/**
+ * THE TRANSLATOR FOR A LOCALE, MEMOISED.
+ *
+ * **THE CATALOGUE IS CHOSEN BY THE RESOLVED LOCALE, NOT BY THE REQUESTED ONE.** `resolveLocale` turns
+ * an unshipped tag into the source locale and reports that it did, so a student whose profile carries a
+ * language this build dropped gets English copy rather than a crash and rather than the *wrong*
+ * catalogue. Memoised because `createTranslator` is cheap but `Intl` construction is not, and this is on
+ * a render path.
+ */
+export function translatorFor(locale: Locale | string = DEFAULT_LOCALE): Translator {
+  const key = resolveLocale(locale).locale;
+  const hit = translators.get(key);
+  if (hit !== undefined) return hit;
+  const built = createTranslator(CATALOGUES[key], {
+    locale: key,
+    onIssue: report,
+    timeZone: FALLBACK_ZONE,
+  });
+  translators.set(key, built);
+  return built;
+}
 
 export interface SaveIndicatorProps {
   readonly state: SaveState;
   readonly onRetry?: () => void;
   readonly onResolve?: () => void;
+  /**
+   * The locale to render in.
+   *
+   * **A PROP AND NOT A CONTEXT, AND THE REASON IS SCOPE.** `P13-T7` converts one component; the app has
+   * no locale plumbing yet, so a `React.Context` here would be an invention with one reader and no
+   * provider — a framework that looks finished and is not. The prop is the smallest thing that is
+   * honest, and it defaults to the source locale so every existing call site is unchanged.
+   *
+   * The default is `DEFAULT_LOCALE` and never the browser's language, because the two differ and the
+   * component must not depend on which machine rendered it.
+   */
+  readonly locale?: Locale | string;
 }
 
 export function SaveIndicator(props: SaveIndicatorProps) {
   const { state } = props;
+  const t = translatorFor(props.locale ?? DEFAULT_LOCALE);
   // `alert` for a failure, `status` for everything else. A failure announced politely is a
   // failure that gets missed, and the whole requirement is that it is not missed.
   if (state.kind === 'failed') {
     return (
       <div role="alert" className="orrery-save orrery-save--failed">
         {/* The state is in the TEXT. A coloured dot is not announced. */}
-        <span>{STATE_TEXT.failed}</span>
+        <span>{STATE_TEXT(state.kind, t)}</span>
         <span className="visually-hidden">
-          {` ${state.reason} ${state.attempts} attempt${state.attempts === 1 ? '' : 's'} so far.`}
+          {t('save.failure.detail', { reason: state.reason, count: state.attempts })}
         </span>
         {props.onRetry && (
           <button type="button" onClick={props.onRetry}>
-            Try again now
+            {t('save.action.retry')}
           </button>
         )}
       </div>
@@ -122,13 +213,11 @@ export function SaveIndicator(props: SaveIndicatorProps) {
   if (state.kind === 'conflict') {
     return (
       <div role="alert" className="orrery-save orrery-save--conflict">
-        <span>
-          {STATE_TEXT.conflict} — {state.conflicts} block{state.conflicts === 1 ? '' : 's'} need a
-          decision
-        </span>
+        {/* The VERB IS IN THE PLURAL ARMS, because it was wrong before. `1 block need a decision`. */}
+        <span>{`${STATE_TEXT(state.kind, t)} — ${t('save.conflict.detail', { count: state.conflicts })}`}</span>
         {props.onResolve && (
           <button type="button" onClick={props.onResolve}>
-            Review
+            {t('save.action.review')}
           </button>
         )}
       </div>
@@ -136,9 +225,18 @@ export function SaveIndicator(props: SaveIndicatorProps) {
   }
   return (
     <div role="status" aria-live="polite" className="orrery-save">
-      <span>{STATE_TEXT[state.kind]}</span>
+      <span>{STATE_TEXT(state.kind, t)}</span>
       {state.kind === 'saved' && (
-        <span className="visually-hidden">{` at ${new Date(state.at).toISOString()}`}</span>
+        /**
+         * `{when, date}` AND NOT `toISOString()`, because this text is ANNOUNCED.
+         *
+         * `2026-09-27T12:00:00.000Z` read aloud is a stream of letters, digits and punctuation with no
+         * word boundaries; read visually it is a machine timestamp inside a sentence about a person. The
+         * date format is a property of the locale, so it belongs in the message — and `FALLBACK_ZONE`
+         * is the zone, because an instant rendered in the host's zone differs between a developer's
+         * laptop and the production server.
+         */
+        <span className="visually-hidden">{t('save.saved.at', { when: new Date(state.at) })}</span>
       )}
     </div>
   );

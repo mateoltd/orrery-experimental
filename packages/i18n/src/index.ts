@@ -27,102 +27,84 @@
  * The tests here pin real DST transition instants in real zones. Not a mock, and not
  * "roughly now" — a fixed instant, so the assertion is about the calendar and not about
  * whatever day the suite happens to run.
+ *
+ * ## WHAT MOVED OUT, AND WHY  (P13-T7)
+ *
+ * The locale vocabulary — `LOCALES`, `DEFAULT_LOCALE`, `resolveLocale`, the zone helpers —
+ * now lives in `./locale.ts` and is re-exported here unchanged, because `./intl.ts` needs
+ * `FALLBACK_ZONE` and a zone validity check, and leaving them here would make `intl` and this
+ * file import each other. Nothing outside this package can tell, which is the point.
+ *
+ * **`describeDistance` NO LONGER DECIDES ITS OWN PLURALS.** It used to append `'s'`
+ * when `n !== 1` — `n === 1 ? … : …` — which is correct in English and wrong in every language
+ * with more than two forms. The phrases are now messages in `./catalogues.ts` with real ICU
+ * plural arms, selected by `Intl.PluralRules` for the locale. The English output is byte-for-byte
+ * what it was, which is why the existing tests are unchanged; what changed is what happens in a
+ * locale that has four forms.
  */
 
 import type { Duration, Millis } from '@orrery/clock';
+import { enGB } from './catalogues.js';
+import {
+  DEFAULT_LOCALE,
+  FALLBACK_ZONE,
+  formatOffset,
+  isValidZone,
+  offsetMinutesAt,
+  resolveLocale,
+} from './locale.js';
+import { formatMessage } from './message.js';
 
-/** Shipped in v1. A third, non-Latin locale at GA — chosen to stress the framework. */
-export const LOCALES = ['en-GB', 'en-US'] as const;
-export type Locale = (typeof LOCALES)[number];
-
-export const DEFAULT_LOCALE: Locale = 'en-GB';
-
-export function isSupportedLocale(value: string): value is Locale {
-  return (LOCALES as readonly string[]).includes(value);
-}
-
+export { type AuditFinding, type AuditReport, type AuditRule, auditCatalogues } from './audit.js';
+export type { CatalogueTag, CompleteCatalogue, MessageKey } from './catalogues.js';
 /**
- * Resolve a stored locale, falling back rather than throwing.
- *
- * A profile with a locale this build does not ship must still render — a student who set
- * `de-DE` while it was available must not get a 500 because we removed it. The fallback is
- * recorded so the UI can offer to switch rather than silently changing their reading.
+ * `CATALOGUES` IS EXPORTED SO AN APP DOES NOT HAVE TO KNOW WHERE THEY LIVE. An app that
+ * imports `enGB` by path is an app whose path is a detail of this package's layout.
  */
-export function resolveLocale(value: string | null | undefined): {
-  locale: Locale;
-  fellBack: boolean;
-} {
-  if (value === null || value === undefined) return { locale: DEFAULT_LOCALE, fellBack: false };
-  return isSupportedLocale(value)
-    ? { locale: value, fellBack: false }
-    : { locale: DEFAULT_LOCALE, fellBack: true };
-}
-
-/**
- * The IANA zone used when a profile has none, and the zone the CONTENT is authored in.
- *
- * `UTC` rather than the server's local zone. A deadline stored as an instant is unaffected,
- * but anything that formats a bare date with no zone attached is affected by the process's
- * `TZ`, and a build server in `America/Chicago` must not become the product's timezone.
- */
-export const FALLBACK_ZONE = 'UTC';
-
-/** Is this a zone the runtime actually knows? */
-export function isValidZone(zone: string): boolean {
-  try {
-    new Intl.DateTimeFormat('en-GB', { timeZone: zone });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * The UTC offset of `zone` AT `instant`, in minutes.
- *
- * Per-instant, not "now". Derived by formatting the instant in the zone, reading the
- * `timeZoneName: 'longOffset'` part, and parsing it — which is the only reliable way, since
- * the offset is a property of the zone's rules at that moment and there is no portable API
- * that hands it to you directly.
- */
-export function offsetMinutesAt(instant: Millis, zone: string): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: zone,
-    timeZoneName: 'longOffset',
-    hour12: false,
-  }).formatToParts(new Date(instant));
-  return parseOffsetName(offsetNameFrom(parts));
-}
-
-/**
- * Pull the `timeZoneName` part out of a `formatToParts` result.
- *
- * Extracted purely so the no-part case is TESTABLE. Every real IANA zone emits the part, so
- * the `?? 'GMT+00:00'` fallback was unreachable through the public API and therefore
- * unverified — and an unverified default in a deadline renderer is an unverified timezone
- * label. `offsetNameFrom([])` is now directly assertable.
- */
-export function offsetNameFrom(parts: readonly Intl.DateTimeFormatPart[]): string {
-  return parts.find((p) => p.type === 'timeZoneName')?.value ?? 'GMT+00:00';
-}
-
-/** `GMT+01:00`, `GMT-05:00`, `GMT` -> minutes east of UTC. */
-export function parseOffsetName(name: string): number {
-  const match = /GMT([+-])(\d{1,2})(?::(\d{2}))?/.exec(name);
-  if (!match) return 0;
-  const [, sign, hours, minutes] = match;
-  const total = Number(hours) * 60 + Number(minutes ?? 0);
-  return sign === '-' ? -total : total;
-}
-
-/** `+01:00` / `-05:30` / `+00:00`. */
-export function formatOffset(minutes: number): string {
-  const sign = minutes < 0 ? '-' : '+';
-  const abs = Math.abs(minutes);
-  const h = String(Math.floor(abs / 60)).padStart(2, '0');
-  const m = String(abs % 60).padStart(2, '0');
-  return `${sign}${h}:${m}`;
-}
+export { CATALOGUES, enGB, enUS } from './catalogues.js';
+export {
+  formatterCacheSize,
+  formattersFor,
+  hasPluralCategoryList,
+  type LocaleFormatters,
+  localeFormatters,
+  pluralCategories,
+} from './intl.js';
+/** Re-exported unchanged from `./locale.ts`; see the header. */
+export {
+  DEFAULT_LOCALE,
+  FALLBACK_ZONE,
+  formatOffset,
+  isSupportedLocale,
+  isValidZone,
+  LOCALES,
+  type Locale,
+  offsetMinutesAt,
+  offsetNameFrom,
+  parseOffsetName,
+  resolveLocale,
+  SOURCE_LOCALE,
+} from './locale.js';
+export type {
+  DateStyle,
+  MessageArgs,
+  MessageArgValue,
+  MessageNode,
+  NumberStyle,
+} from './message.js';
+/** Re-exported so `@orrery/i18n` stays ONE entry point. */
+export {
+  categoriesCovered,
+  compiledCount,
+  formatMessage,
+  hasPlural,
+  isCategoryKeyword,
+  MessageSyntaxError,
+  PluralCategoryGapError,
+  parseMessage,
+  placeholdersIn,
+} from './message.js';
+export { createTranslator, type MessageIssue, type Translator } from './translator.js';
 
 export interface DeadlineRender {
   /** The absolute local rendering, e.g. `Fri 25 Oct 2026, 01:30`. */
@@ -181,7 +163,7 @@ export function formatDeadline(input: FormatDeadlineInput): DeadlineRender {
     // Rendered in UTC deliberately: this is the unambiguous fallback for anyone confused by
     // the local rendering, and it must not itself depend on a zone.
     utc: `${new Date(instant).toISOString().replace('.000', '')} UTC`,
-    relative: describeDistance(instant, now),
+    relative: describeDistance(instant, now, locale),
     differsFromReader:
       input.readerZone !== null &&
       input.readerZone !== undefined &&
@@ -200,23 +182,54 @@ export function formatDeadline(input: FormatDeadlineInput): DeadlineRender {
  * Rounds UP, so a deadline 1ms away reads `in less than a minute` rather than `now`, and one
  * 60.001s away reads `in 2 minutes`. A deadline that reads `in 1 minute` when it has already
  * passed is a bug in the reassurance, not in the arithmetic.
+ *
+ * **`locale` IS OPTIONAL AND DEFAULTS TO THE SOURCE, NOT TO THE HOST.** The phrases are messages
+ * with ICU plural arms, so the grammatical form is `Intl.PluralRules`' to choose. The old
+ * `n === 1 ? '' : 's'` had no locale to consult and hard-coded English's two forms; there is no
+ * spelling of that which is right anywhere but English.
  */
-export function describeDistance(instant: Millis, now: Millis): string | null {
+export function describeDistance(
+  instant: Millis,
+  now: Millis,
+  locale: string | null | undefined = DEFAULT_LOCALE,
+): string | null {
   const delta = instant - now;
   if (delta <= 0) return null;
   const MINUTE = 60_000;
   const HOUR = 60 * MINUTE;
   const DAY = 24 * HOUR;
-  if (delta < MINUTE) return 'in less than a minute';
-  if (delta < HOUR)
-    return `in ${Math.ceil(delta / MINUTE)} minute${plural(Math.ceil(delta / MINUTE))}`;
-  if (delta < DAY) return `in ${Math.ceil(delta / HOUR)} hour${plural(Math.ceil(delta / HOUR))}`;
+  if (delta < MINUTE) return relative('underAMinute', null, locale);
+  if (delta < HOUR) return relative('minutes', Math.ceil(delta / MINUTE), locale);
+  if (delta < DAY) return relative('hours', Math.ceil(delta / HOUR), locale);
   const days = Math.ceil(delta / DAY);
   if (days > 7) return null;
-  return `in ${days} day${plural(days)}`;
+  return relative('days', days, locale);
 }
 
-const plural = (n: number): string => (n === 1 ? '' : 's');
+type RelativePhrase = 'underAMinute' | 'minutes' | 'hours' | 'days';
+
+/**
+ * The four relative-distance messages, held ONCE, in the catalogue.
+ *
+ * `enGB` is the source catalogue rather than a second copy of these sentences: `P13-T8` is going to
+ * rewrite this copy, and a second copy here would be a sentence that silently stopped being the one
+ * a student reads. `resolveLocale` is applied to the locale rather than to the pattern, so a locale
+ * we do not ship falls back to the source phrases — the same fallback a stored profile gets, and
+ * the fallback is visible in `resolveLocale`'s `fellBack`.
+ *
+ * `count: null` marks the arm with no number in it. A fourth key for a sentence that is not a count
+ * would make the key count a lie.
+ */
+function relative(
+  which: RelativePhrase,
+  count: number | null,
+  locale: string | null | undefined,
+): string {
+  return formatMessage(enGB[`deadline.relative.${which}`], count === null ? {} : { count }, {
+    locale: resolveLocale(locale).locale,
+    timeZone: FALLBACK_ZONE,
+  });
+}
 
 /**
  * Whether a deadline is close enough that the UI should escalate its treatment.

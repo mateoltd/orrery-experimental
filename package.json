@@ -31,6 +31,8 @@
     "gate:sim-registry": "node scripts/audit-sim-registry.mjs",
     "gate:telemetry": "node scripts/audit-telemetry-leak.mjs",
     "a11y": "node scripts/audit-a11y.mjs",
+    "i18n:check": "node scripts/i18n-check.mjs",
+    "i18n:scan": "node scripts/i18n-scan.mjs",
     "sim:validate": "node scripts/sim-validate.mjs --all",
     "sim:new": "node scripts/sim-new.mjs",
     "sim:build": "node scripts/sim-build.mjs --all",
