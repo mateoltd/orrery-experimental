@@ -89,7 +89,7 @@ export interface WriteDecisionInput {
   readonly attemptStatus: AttemptStatus;
   /** `null` means no per-question window. */
   readonly questionDeadlineAt: Millis | null;
-  /** `null` means no overall window. */
+  /** `null` means no overall window. MILLIS, because `decideWrite` is pure and knows nothing of Prisma. */
   readonly deadlineAt: Millis | null;
   /** The revision the client believes it is writing over. */
   readonly expectedRevision: number;
@@ -333,9 +333,35 @@ export interface SubmitInput {
  * connection. What is NOT true any more is that `submitAnswer` can be driven by a hand-rolled mock -- and given what
  * the mock-based version concealed, that is an improvement.
  */
+/**
+ * `$transaction` AND `$queryRawUnsafe` ARE HERE BECAUSE CONCURRENT WRITERS WERE NOT SERIALISED (ADV-DB2).
+ *
+ * The capability was five delegates, and the function made four independent round trips with no transaction. Two
+ * students — or one student on two devices, which is the ordinary case — could both read "no stored revision", both
+ * decide `accept`, both upsert and both append an `AnswerRevision`. The observed failure was worse than a lost update:
+ * **one of the two callers received an unhandled Prisma exception** rather than a decision, because the loser's
+ * `upsert` collided while the winner's `create` had already committed. From the student's side that is
+ * indistinguishable from the network dropping, and the answer they were told was saved is the one that lost.
+ *
+ * The unique constraint on `(attemptId, idemKey)` does **not** save this: two devices hold two different keys, which is
+ * the entire point of a second device.
+ *
+ * So the function now takes a transaction and pins the attempt row with `FOR UPDATE` at the top. That serialises
+ * writers per attempt — which is correct anyway, since every write to one attempt must serialise — and lets the second
+ * writer re-read the revision the first one just wrote, so `decideWrite` returns `STALE_REVISION` and the caller gets
+ * a 409 with the server's copy. **That is the same lesson as the `runExclusive` advisory-lock leak in `c0b28b5`**,
+ * which was two pooled round trips where one session was required: a multi-statement invariant needs one transaction,
+ * and a unique constraint only covers the case where two writers agree on a key.
+ */
 export type SubmitDb = Pick<
   PrismaClient,
-  'assessmentSlot' | 'examAttempt' | 'questionResponse' | 'answerRevision' | 'attemptEventRecord'
+  | 'assessmentSlot'
+  | 'examAttempt'
+  | 'questionResponse'
+  | 'answerRevision'
+  | 'attemptEventRecord'
+  | '$transaction'
+  | '$queryRawUnsafe'
 >;
 
 /** The attempt columns this module reads. Declared here so the query and its consumer cannot drift. */
@@ -368,10 +394,24 @@ const ATTEMPT_SELECT = {
 interface AttemptRow {
   readonly id: string;
   readonly status: string;
-  readonly deadlineAt: Millis | null;
   readonly classroomId: string | null;
   /** `Record<slotId, readonly questionId[]>`. `null` when the paper was never resolved. */
   readonly variantMap: Record<string, readonly string[]> | null;
+  /**
+   * A `Date`, BECAUSE THAT IS WHAT PRISMA RETURNS FOR A `DateTime`.
+   *
+   * **I PUT THIS COMMENT ON THE WRONG FIELD FIRST.** `WriteDecisionInput.deadlineAt` also reads
+   * `readonly deadlineAt: Millis | null`, my search replaced the first occurrence, and the compiler caught the
+   * mismatch immediately -- which is the only reason it was caught at all. Worth recording: the trap is not "a cast
+   * hides a wrong type", it is that **two fields in one file legitimately have different types**, and a find-and-replace
+   * picks one of them. `decideWrite` is pure and works in millis; `AttemptRow` is a database row and works in `Date`.
+   *
+   * The original defect: this said `Millis | null` while the column is `@db.Timestamptz(3)`, and nothing noticed
+   * because the row is produced by `as AttemptRow | null`. **A cast is not a translation** -- it silences the one check
+   * that would have found it. The file already says that sentence about `release.ts`'s leaked `finalScore`, and here it
+   * was the mechanism.
+   */
+  readonly deadlineAt: Date | null;
   readonly assignment: { readonly resourceVersionId: string } | null;
   /** `null` for an attempt that has not started. See the read note at `ATTEMPT_SELECT`. */
   readonly policySnapshot: unknown;
@@ -425,10 +465,49 @@ const readExpiry = (
  * the granted extension lives in additive rows and has to be summed here — otherwise a write path accepts or refuses
  * against a stale deadline and a teacher's granted extension silently does nothing.
  */
+/**
+ * ⚠️ **THIS FUNCTION WAS SILENTLY DISABLED, AND IT IS THE DEADLINE `INV-LATE-1` IS ENFORCED WITH.**
+ *
+ * ```ts
+ * return attempt.deadlineAt + added * 1000 + (attempt.pausedAccumSec ?? 0);
+ * ```
+ *
+ * `deadlineAt` is a `@db.Timestamptz(3)` column, so Prisma hands back a **`Date`**. `Date + number` is **string
+ * concatenation** -- `new Date(...) + 0` is `"Sun Mar 01 2026 ... GMT+01000"`, a string -- and the declared return type
+ * `Millis | null` is a lie the `as AttemptRow` cast made true to the compiler.
+ *
+ * So `effectiveDeadline` returned a STRING, `expiryVerdict` compared `now > deadline + graceMs`, and `number > string`
+ * is `NaN > NaN`, which is **false for every input**. The consequence is not a rounding error:
+ *
+ * **THE ATTEMPT DEADLINE WAS NEVER ENFORCED.** Not loosened -- never evaluated. A write an hour after the paper closed
+ * was accepted, stored, and reported `isLate: false`. `INV-LATE-1` was satisfied only for the *per-question* window,
+ * whose value came from `QuestionResponse.questionDeadlineAt` and happened to be converted with `.getTime()` already.
+ *
+ * **AND IT COMPOUNDED WITH THE `runExclusive` LEAK FIXED IN `c0b28b5`.** That leak meant the deadline sweep stopped
+ * running, so attempts stayed `IN_PROGRESS` past their deadline instead of being auto-submitted by cron -- and
+ * `ATTEMPT_NOT_IN_PROGRESS` is the clause that would otherwise have closed the hole. Two defects, each survivable,
+ * and together they meant **a closed exam accepted writes indefinitely**. That is the strongest argument in this
+ * repository's history for testing a boundary at the point it is produced rather than trusting the type of the thing
+ * that carries it: `isPastDeadline` was correct, `expiryVerdict` was correct, `decideWrite` was correct, and the value
+ * arriving at all three was a string.
+ *
+ * **THE UNIT ERROR BESIDE IT WAS MASKED BY THIS ONE, and it is a real second bug.** `pausedAccumSec` is seconds, by
+ * the column's name and by `C15`'s intent -- a student granted a ten-minute break is owed ten minutes. It was added as
+ * milliseconds, so a break of 600 s contributed 600 ms. The first version of the fix corrected only the type and the
+ * unit error was still there, which is why it is called out separately rather than buried: a cast can hide a unit as
+ * easily as a type, and reading for one does not find the other.
+ */
 const effectiveDeadline = (attempt: AttemptRow): Millis | null => {
   if (attempt.deadlineAt === null) return null;
-  const added = attempt.extensions.reduce((sum, extension) => sum + extension.addedSec, 0);
-  return attempt.deadlineAt + added * 1000 + (attempt.pausedAccumSec ?? 0);
+  const addedSec = attempt.extensions.reduce((sum, extension) => sum + extension.addedSec, 0);
+  // `C14`: extensions are ADDITIVE rows and `deadlineAt` is never rewritten, so the granted extra time and the time
+  // spent paused have to be added here or a write path honours the deadline the student was given and ignores both.
+  //
+  // BOTH TERMS ARE SECONDS AND BOTH ARE CONVERTED. The millisecond conversion is not a detail: `addedSec` was already
+  // multiplied and `pausedAccumSec` was not, so the one term nobody writes a test for -- accumulated pause -- was the
+  // one that was wrong by a factor of a thousand, and it was wrong in the direction that costs a student time they
+  // were owed.
+  return attempt.deadlineAt.getTime() + (addedSec + (attempt.pausedAccumSec ?? 0)) * 1000;
 };
 
 /**
@@ -457,7 +536,17 @@ const effectiveDeadline = (attempt: AttemptRow): Millis | null => {
  * get' comes from `variantMap`, never from re-running the draw" -- re-resolving here could produce a different paper
  * than the one the student was actually served, which would reject correct answers and accept wrong ones.
  */
-const assignedPaper = async (db: SubmitDb, attempt: AttemptRow): Promise<ReadonlySet<string>> => {
+/**
+ * ONLY `assessmentSlot`, declared as its own capability rather than as `SubmitDb`.
+ *
+ * `SubmitDb` now includes `$transaction` and `$queryRawUnsafe`, and the handle Prisma hands a transaction callback is
+ * `Omit<PrismaClient, '$transaction' | ...>` -- so a `tx` is deliberately NOT a `SubmitDb`. That asymmetry is correct
+ * and this type is where it is honoured: a helper that only reads slots cannot be handed the transaction methods, and
+ * cannot grow the power to open one.
+ */
+type PaperDb = Pick<PrismaClient, 'assessmentSlot'>;
+
+const assignedPaper = async (db: PaperDb, attempt: AttemptRow): Promise<ReadonlySet<string>> => {
   if (attempt.variantMap !== null && attempt.variantMap !== undefined) {
     return new Set(Object.values(attempt.variantMap).flat());
   }
@@ -485,176 +574,205 @@ export async function submitAnswer(
   clock: Clock,
   graceMs: Duration = 0,
 ): Promise<SubmitResult> {
-  const attempt = (await db.examAttempt.findUnique({
-    where: { id: input.attemptId },
-    select: ATTEMPT_SELECT,
-  })) as AttemptRow | null;
+  /**
+   * ⚠️ ONE TRANSACTION, AND A ROW LOCK AT THE TOP OF IT (ADV-DB2).
+   *
+   * This used to be four independent round trips with no transaction, which let two concurrent writers both decide
+   * `accept` on the same question and then collide on the way in -- one of them receiving an unhandled exception rather
+   * than a decision. See the note on `SubmitDb` for the full account and for why the `(attemptId, idemKey)` unique
+   * constraint does not cover it.
+   *
+   * **`SELECT ... FOR UPDATE` ON THE ATTEMPT ROW, FIRST, BEFORE ANY READ THAT DECIDES.** The lock has to be taken
+   * before the revision is read, or the two writers serialise *after* they have both already decided and the loser
+   * still has to fail. Taking it first means the second writer waits, re-reads the revision the winner just wrote, and
+   * `decideWrite` returns `STALE_REVISION` -- a 409 carrying the server's copy, which is the outcome the 409 UX in
+   * `reconcileDialog.ts` already knows how to present.
+   *
+   * ON THE ATTEMPT AND NOT THE RESPONSE: the response row **does not exist yet** on a first write, and there is no row
+   * to lock. Locking the attempt is also the coarser and more correct choice, since two students cannot write the same
+   * attempt but two devices of one student can.
+   *
+   * `attemptId` goes in as a bind value. `runExclusive` uses `pg_advisory_lock(hashtext($1))`, so this key is a
+   * **hash** rather than the two-int form -- one 32-bit key space, which is acceptable here because the lock's scope is
+   * a single row's lifetime rather than a named subsystem.
+   */
+  return db.$transaction(async (tx) => {
+    await tx.$queryRawUnsafe(
+      'SELECT 1 FROM "ExamAttempt" WHERE id = $1 FOR UPDATE',
+      input.attemptId,
+    );
 
-  if (attempt === null) {
-    return {
-      outcome: 'rejected',
-      status: 404,
-      body: {
-        ok: false,
-        reason: 'ATTEMPT_NOT_IN_PROGRESS',
-        message: 'this attempt does not exist',
-        isConflict: false,
-      },
-    };
-  }
+    const attempt = (await tx.examAttempt.findUnique({
+      where: { id: input.attemptId },
+      select: ATTEMPT_SELECT,
+    })) as AttemptRow | null;
 
-  // 1. THE LEDGER. A duplicate key is a replay, whatever the current revision or clock says.
-  const prior = (await db.answerRevision.findFirst({
-    where: { attemptId: input.attemptId, idemKey: input.idempotencyKey },
-    select: { revision: true, responseStatus: true, responseBody: true },
-  })) as { revision: number; responseStatus: number | null; responseBody: unknown } | null;
-
-  if (prior !== null) {
-    return {
-      outcome: 'replayed',
-      status: prior.responseStatus ?? 200,
-      body: prior.responseBody,
-      revision: prior.revision,
-    };
-  }
-
-  const stored = (await db.questionResponse.findUnique({
-    where: { attemptId_questionId: { attemptId: input.attemptId, questionId: input.questionId } },
-    select: {
-      revision: true,
-      answer: true,
-      questionId: true,
-      questionDeadlineAt: true,
-      questionClosedReason: true,
-    },
-  })) as {
-    revision: number;
-    answer: unknown;
-    questionId: string;
-    /** `null` means no per-question window, and that is a legitimate state rather than an error. */
-    questionDeadlineAt: Date | null;
-    questionClosedReason: string | null;
-  } | null;
-
-  // 2. IS THIS QUESTION IN THE ATTEMPT'S PAPER?  (P8-T11 integration)
-  //
-  // **IT WAS `stored !== null`, WHICH MEANT NO FIRST ANSWER COULD EVER BE ACCEPTED.**
-  //
-  // A response row exists only after a successful write, so on a first write `stored` is null, membership came out
-  // false, and every student saving their first answer was rejected with `QUESTION_NOT_IN_ATTEMPT` -- a rejection
-  // whose message talks about the paper while the actual fault is that membership was inferred from the very table
-  // the write was supposed to create. The unit tests could not see it: they call `decideWrite` directly and pass
-  // `questionInAttempt: true`.
-  //
-  // Membership is assigned-variant membership, as the field's own doc says, so it comes from the attempt's resolved
-  // `variantMap` -- written once at attempt start and authoritative thereafter. Falling back to the resource version's
-  // FIXED slots covers an attempt whose paper was never resolved, rather than refusing every write on it.
-  const assignedQuestionIds = await assignedPaper(db, attempt);
-  const questionInAttempt = assignedQuestionIds.has(input.questionId);
-
-  const expiryPolicy = readExpiry(attempt.policySnapshot);
-
-  // 3. DECIDE.
-  const decision = decideWrite({
-    attemptStatus: attempt.status as AttemptStatus,
-    // P8-T11 integration: the PER-QUESTION window, read from the response row.
-    //
-    // **IT WAS A HARDCODED `null`, SO `INV-LATE-1` WAS NOT ENFORCED PER QUESTION AT ALL** -- every question inherited
-    // only the attempt-wide deadline. `ExamAttempt` carries `pausedAccumSec` and `QuestionResponse` carries
-    // `questionDeadlineAt`/`questionClosedReason` precisely because `plans/09` gives each question its own window, and
-    // a hardcoded null silently disabled the stricter of the two deadlines.
-    questionDeadlineAt: stored?.questionDeadlineAt?.getTime() ?? null,
-    deadlineAt: effectiveDeadline(attempt),
-    expectedRevision: input.expectedRevision,
-    storedRevision: stored?.revision ?? -1,
-    isDuplicate: false,
-    storedResponseBody: stored?.answer,
-    questionInAttempt,
-    perQuestionExpiry: expiryPolicy.perQuestionExpiry,
-    perQuestionTimeLimitSec: expiryPolicy.perQuestionTimeLimitSec,
-    graceMs,
-    clock,
-  });
-
-  // 4. REJECTION: an event, never a ledger row.
-  //
-  // Narrowed on `ok !== true` rather than `ok === false`, because `decideWrite`'s union also has the `'replayed'`
-  // variant. That variant is unreachable here -- the ledger was read above and `isDuplicate` is therefore false --
-  // but the type system cannot know that, and `ok === false` alone would leave the union un-narrowed.
-  if (decision.ok !== true) {
-    if (decision.ok === 'replayed') {
+    if (attempt === null) {
       return {
-        outcome: 'replayed',
-        status: decision.status,
-        body: decision.body,
-        revision: decision.revision,
+        outcome: 'rejected',
+        status: 404,
+        body: {
+          ok: false,
+          reason: 'ATTEMPT_NOT_IN_PROGRESS',
+          message: 'this attempt does not exist',
+          isConflict: false,
+        },
       };
     }
-    await db.attemptEventRecord.create({
-      data: {
-        attemptId: input.attemptId,
-        type: 'LATE_SAVE_REJECTED',
-        actorId: input.actorId ?? null,
-        payload: {
-          questionId: input.questionId,
-          reason: decision.reason,
-          expectedRevision: input.expectedRevision,
-          storedRevision: stored?.revision ?? null,
-        },
+
+    // 1. THE LEDGER. A duplicate key is a replay, whatever the current revision or clock says.
+    const prior = (await tx.answerRevision.findFirst({
+      where: { attemptId: input.attemptId, idemKey: input.idempotencyKey },
+      select: { revision: true, responseStatus: true, responseBody: true },
+    })) as { revision: number; responseStatus: number | null; responseBody: unknown } | null;
+
+    if (prior !== null) {
+      return {
+        outcome: 'replayed',
+        status: prior.responseStatus ?? 200,
+        body: prior.responseBody,
+        revision: prior.revision,
+      };
+    }
+
+    const stored = (await tx.questionResponse.findUnique({
+      where: { attemptId_questionId: { attemptId: input.attemptId, questionId: input.questionId } },
+      select: {
+        revision: true,
+        answer: true,
+        questionId: true,
+        questionDeadlineAt: true,
+        questionClosedReason: true,
       },
+    })) as {
+      revision: number;
+      answer: unknown;
+      questionId: string;
+      /** `null` means no per-question window, and that is a legitimate state rather than an error. */
+      questionDeadlineAt: Date | null;
+      questionClosedReason: string | null;
+    } | null;
+
+    // 2. IS THIS QUESTION IN THE ATTEMPT'S PAPER?  (P8-T11 integration)
+    //
+    // **IT WAS `stored !== null`, WHICH MEANT NO FIRST ANSWER COULD EVER BE ACCEPTED.**
+    //
+    // A response row exists only after a successful write, so on a first write `stored` is null, membership came out
+    // false, and every student saving their first answer was rejected with `QUESTION_NOT_IN_ATTEMPT` -- a rejection
+    // whose message talks about the paper while the actual fault is that membership was inferred from the very table
+    // the write was supposed to create. The unit tests could not see it: they call `decideWrite` directly and pass
+    // `questionInAttempt: true`.
+    //
+    // Membership is assigned-variant membership, as the field's own doc says, so it comes from the attempt's resolved
+    // `variantMap` -- written once at attempt start and authoritative thereafter. Falling back to the resource version's
+    // FIXED slots covers an attempt whose paper was never resolved, rather than refusing every write on it.
+    const assignedQuestionIds = await assignedPaper(tx, attempt);
+    const questionInAttempt = assignedQuestionIds.has(input.questionId);
+
+    const expiryPolicy = readExpiry(attempt.policySnapshot);
+
+    // 3. DECIDE.
+    const decision = decideWrite({
+      attemptStatus: attempt.status as AttemptStatus,
+      // P8-T11 integration: the PER-QUESTION window, read from the response row.
+      //
+      // **IT WAS A HARDCODED `null`, SO `INV-LATE-1` WAS NOT ENFORCED PER QUESTION AT ALL** -- every question inherited
+      // only the attempt-wide deadline. `ExamAttempt` carries `pausedAccumSec` and `QuestionResponse` carries
+      // `questionDeadlineAt`/`questionClosedReason` precisely because `plans/09` gives each question its own window, and
+      // a hardcoded null silently disabled the stricter of the two deadlines.
+      questionDeadlineAt: stored?.questionDeadlineAt?.getTime() ?? null,
+      deadlineAt: effectiveDeadline(attempt),
+      expectedRevision: input.expectedRevision,
+      storedRevision: stored?.revision ?? -1,
+      isDuplicate: false,
+      storedResponseBody: stored?.answer,
+      questionInAttempt,
+      perQuestionExpiry: expiryPolicy.perQuestionExpiry,
+      perQuestionTimeLimitSec: expiryPolicy.perQuestionTimeLimitSec,
+      graceMs,
+      clock,
     });
-    const status = decision.isConflict ? 409 : 422;
-    return { outcome: 'rejected', status, body: decision };
-  }
 
-  // 4. ACCEPTANCE: one upsert, one appended revision. The hash is of the BYTES SENT (C5) — re-reading the jsonb
-  // column does not preserve key order and does not distinguish 1 from 1.0, so a re-read hash is not the hash of
-  // what was sent.
-  const body: SaveBody = {
-    attemptId: input.attemptId,
-    questionId: input.questionId,
-    revision: decision.nextRevision,
-    isLate: decision.isLate,
-  };
+    // 4. REJECTION: an event, never a ledger row.
+    //
+    // Narrowed on `ok !== true` rather than `ok === false`, because `decideWrite`'s union also has the `'replayed'`
+    // variant. That variant is unreachable here -- the ledger was read above and `isDuplicate` is therefore false --
+    // but the type system cannot know that, and `ok === false` alone would leave the union un-narrowed.
+    if (decision.ok !== true) {
+      if (decision.ok === 'replayed') {
+        return {
+          outcome: 'replayed',
+          status: decision.status,
+          body: decision.body,
+          revision: decision.revision,
+        };
+      }
+      await tx.attemptEventRecord.create({
+        data: {
+          attemptId: input.attemptId,
+          type: 'LATE_SAVE_REJECTED',
+          actorId: input.actorId ?? null,
+          payload: {
+            questionId: input.questionId,
+            reason: decision.reason,
+            expectedRevision: input.expectedRevision,
+            storedRevision: stored?.revision ?? null,
+          },
+        },
+      });
+      const status = decision.isConflict ? 409 : 422;
+      return { outcome: 'rejected', status, body: decision };
+    }
 
-  const response = (await db.questionResponse.upsert({
-    where: { attemptId_questionId: { attemptId: input.attemptId, questionId: input.questionId } },
-    create: {
+    // 4. ACCEPTANCE: one upsert, one appended revision. The hash is of the BYTES SENT (C5) — re-reading the jsonb
+    // column does not preserve key order and does not distinguish 1 from 1.0, so a re-read hash is not the hash of
+    // what was sent.
+    const body: SaveBody = {
       attemptId: input.attemptId,
       questionId: input.questionId,
-      position: 0,
-      answer: input.answerJson as never,
       revision: decision.nextRevision,
       isLate: decision.isLate,
-    },
-    update: {
-      answer: input.answerJson as never,
-      revision: decision.nextRevision,
-      isLate: decision.isLate,
-    },
-    select: { id: true, revision: true },
-  })) as { id: string; revision: number };
+    };
 
-  await db.answerRevision.create({
-    data: {
-      responseId: response.id,
-      attemptId: input.attemptId,
-      revision: decision.nextRevision,
-      source: input.source ?? 'CLIENT',
-      actorId: input.actorId ?? null,
-      previousHash: null,
-      answerHash: input.answerHash,
-      answerBytes: input.answerBytes,
-      // `new Date(clock.now())`, never `new Date()`: INV-TIME-1. The argument form reads the injected clock, so a
-      // revision's `serverTs` is reproducible in a test and moves only when the test moves it.
-      serverTs: new Date(clock.now()),
-      clientTs: input.clientTs ?? null,
-      idemKey: input.idempotencyKey,
-      // Stored so a duplicate key can be replayed VERBATIM. C18: recomputing this desynchronised the client.
-      responseStatus: 200,
-      responseBody: body as never,
-    },
+    const response = (await tx.questionResponse.upsert({
+      where: { attemptId_questionId: { attemptId: input.attemptId, questionId: input.questionId } },
+      create: {
+        attemptId: input.attemptId,
+        questionId: input.questionId,
+        position: 0,
+        answer: input.answerJson as never,
+        revision: decision.nextRevision,
+        isLate: decision.isLate,
+      },
+      update: {
+        answer: input.answerJson as never,
+        revision: decision.nextRevision,
+        isLate: decision.isLate,
+      },
+      select: { id: true, revision: true },
+    })) as { id: string; revision: number };
+
+    await tx.answerRevision.create({
+      data: {
+        responseId: response.id,
+        attemptId: input.attemptId,
+        revision: decision.nextRevision,
+        source: input.source ?? 'CLIENT',
+        actorId: input.actorId ?? null,
+        previousHash: null,
+        answerHash: input.answerHash,
+        answerBytes: input.answerBytes,
+        // `new Date(clock.now())`, never `new Date()`: INV-TIME-1. The argument form reads the injected clock, so a
+        // revision's `serverTs` is reproducible in a test and moves only when the test moves it.
+        serverTs: new Date(clock.now()),
+        clientTs: input.clientTs ?? null,
+        idemKey: input.idempotencyKey,
+        // Stored so a duplicate key can be replayed VERBATIM. C18: recomputing this desynchronised the client.
+        responseStatus: 200,
+        responseBody: body as never,
+      },
+    });
+
+    return { outcome: 'saved', status: 200, body, revision: decision.nextRevision };
   });
-
-  return { outcome: 'saved', status: 200, body, revision: decision.nextRevision };
 }
