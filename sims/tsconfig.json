@@ -1,9 +1,12 @@
 {
   // `sims/` is not a pnpm workspace (ADR-0013, and the note in pnpm-workspace.yaml), so `turbo run
   // typecheck` walks PAST it and `vitest run --config sims/vitest.config.ts` TRANSPILES without checking
-  // types. The 286 errors that sat in 52 files -- every gold grader among them -- were invisible to CI by
-  // construction, not by accident. This project is the fix: `pnpm sim:typecheck` runs `tsc --noEmit`
-  // over this directory, and the `static` job in .github/workflows/ci.yml runs it.
+  // types. The drift was invisible to CI by construction, not by accident.
+  //
+  // `pnpm sim:typecheck` runs `tsc --noEmit -p sims/tsconfig.json` over this directory. **IT IS NOT YET IN `pnpm gates`
+  // OR IN CI, AND THAT IS DELIBERATE: it currently reports 431 errors, and a permanently red check is one people learn
+  // to ignore.** The first version of this comment claimed the `static` job already ran it, which was false -- the
+  // comment described the intended end state in the present tense. Enabling it is the last step, once it passes.
   //
   // WHY THE SUBPATHS MAP TO SOURCE AND NOT TO `dist`.
   //
