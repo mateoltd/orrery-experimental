@@ -18,6 +18,7 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
+import { availableParallelism } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -182,9 +183,8 @@ if (correctness.errorRate5xx > 0.001) {
   failures.push(`5xx rate ${(correctness.errorRate5xx * 100).toFixed(3)}% exceeds 0.1%`);
 }
 
-const baseline = readBaseline();
 const machine = {
-  cpus: (await import('node:os')).availableParallelism?.() ?? 0,
+  cpus: availableParallelism(),
   node: process.version,
   platform: process.platform,
 };
