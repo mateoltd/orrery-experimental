@@ -466,6 +466,70 @@ describe('the receipt BINDS TO THE KEYS, which it did not until P8-T10', () => {
   });
 });
 
+describe('a SIGNED chain verifies: the final comparison had to be finalised too', () => {
+  const key = 'k'.repeat(32);
+  const hmac: Mac = (message) => createHmac('sha256', key).update(message, 'utf8').digest('hex');
+  const digest: Digest = (value) => createHmac('sha256', key).update(value, 'utf8').digest('hex');
+  const seed = { attemptId: 'a1', assignmentId: 'as1', policySnapshot: { v: 1 } };
+
+  /** A genuine single-link chain, signed the way the platform would store it. */
+  const signedChain = () => {
+    const answer = { v: 1 };
+    const revision: Revision = {
+      questionId: 'q1',
+      revision: 1,
+      source: 'SUBMIT',
+      answer,
+      answerHash: digest(JSON.stringify(answer)),
+      previousHash: null,
+    };
+    const folded = foldRevision(seedHash(seed, digest), revision, digest);
+    return { revision, stored: signReceipt(folded, hmac) };
+  };
+
+  /**
+   * THE DEFECT THIS EXISTS TO PIN. `verifyReceipt` compared the bare fold `H\u2099` against the stored `mac(H\u2099)` for any chain with
+   * revisions, so **every legitimately signed receipt reported a divergence at the anchor** while asserting every link
+   * was fine. The empty-chain branch already called `finalise`; the second of the two final comparisons did not.
+   *
+   * Every pre-existing test passed a BARE FOLD as the stored receipt, so it was verifying an unsigned receipt -- which is
+   * exactly why the omission survived a green suite.
+   */
+  it('accepts a signed receipt when the MAC is supplied', () => {
+    const { revision, stored } = signedChain();
+    expect(verifyReceipt(seed, [revision], ['q1'], stored, digest, hmac)).toBeNull();
+  });
+
+  it('still refuses a signed receipt whose chain was altered', () => {
+    /**
+     * The point of adding `finalise` is not to make comparisons pass. If this returns null the fix has silently
+     * disabled the check it was meant to restore.
+     */
+    const { stored } = signedChain();
+    const original = signedChain().revision;
+    // THE TAMPER KEEPS THE RECORDED HASH. Recomputing `answerHash` alongside the answer would leave the chain
+    // internally consistent -- which is a different scenario entirely, and one the receipt is *designed* to accept.
+    const tampered: Revision = { ...original, answer: { v: 2 } };
+    expect(verifyReceipt(seed, [tampered], ['q1'], stored, digest, hmac)?.because).toMatch(
+      /does not hash to the value recorded/,
+    );
+  });
+
+  it('still refuses when the signature was made with a different key', () => {
+    const { revision, stored } = signedChain();
+    const wrongKey: Mac = (message) =>
+      createHmac('sha256', 'z'.repeat(32)).update(message, 'utf8').digest('hex');
+    expect(verifyReceipt(seed, [revision], ['q1'], stored, digest, wrongKey)).not.toBeNull();
+  });
+
+  it('treats an UNSIGNED stored fold as the distinct named outcome, not a divergence', () => {
+    /** With no MAC the stored value IS the fold, which is what a pre-P8-T10 receipt on disk contains. */
+    const { revision, stored } = signedChain();
+    const unsigned = foldRevision(seedHash(seed, digest), revision, digest);
+    expect(verifyReceipt(seed, [revision], ['q1'], unsigned, digest)).toBeNull();
+  });
+});
+
 describe('a receipt is only as trustworthy as its SIGNATURE', () => {
   const folded = 'a'.repeat(64);
   const key = 'k'.repeat(32);

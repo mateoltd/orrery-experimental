@@ -315,7 +315,19 @@ export const verifyReceipt = (
     computed = foldRevision(computed, revision, digest);
   }
 
-  if (computed === storedReceipt) return null;
+  /**
+   * FINALISE HERE TOO, NOT ONLY IN THE EMPTY-CHAIN BRANCH ABOVE.  (`D-31` receipt-mismatch defect)
+   *
+   * `computed` is the bare fold `Hₙ`; the stored receipt is `mac(Hₙ)`. Comparing them directly can never match, so
+   * **EVERY LEGITIMATELY SIGNED RECEIPT WITH AT LEAST ONE REVISION REPORTED A DIVERGENCE** — and the message blamed
+   * the final fold while asserting every link was fine, which is the most confusing possible answer for a teacher
+   * holding a real paper.
+   *
+   * The empty-chain branch above already called `finalise`. There are two final comparisons in this function and the
+   * second one did not, which is why unit tests that passed a bare fold as the stored receipt stayed green: they were
+   * verifying an *unsigned* receipt, and the omission only shows up when the receipt is signed.
+   */
+  if (finalise(computed) === storedReceipt) return null;
 
   /**
    * EVERY LINK AGREED, so the difference is in the final fold rather than in any answer -- which happens when the
