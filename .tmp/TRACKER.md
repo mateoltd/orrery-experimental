@@ -3399,3 +3399,119 @@ than a silent workaround.
 **Not fixed here, deliberately.** It means adding a blank branch to two handlers in `grading/index.ts` — shared,
 100%-covered code from P7-T2 and P7-T4 — which is a change to make deliberately with the full suite in view, not at
 the end of a session while the context is spent. It is the first thing to pick up on this task.
+
+---
+
+### P12 – P17 — every task, listed
+
+**These fifty tasks had NO ROWS AT ALL until now, and that was a defect in this file rather than a statement about the
+work.** The phase heading said "P12 – P17 — status" and named them as phases, while the authoritative summary tables —
+the part a reader scans — stopped at P11. So the plan looked nearly finished to anyone counting rows, which is the one
+thing an authoritative tracker must never do. This has happened before in this file (PF-1: a heading that was wrong
+about a phase that stood finished above it) and the remedy is the same: **list them, so the remaining work is visible,
+countable and owned.**
+
+Descriptions are quoted from `plans/20-PHASE-PACKETS.md` and the per-phase documents for P13, P14 and P16, which is
+where `scripts/count-tasks.mjs` reads them from. **Every row below is `NOT STARTED` with `--` for a commit, and that is
+a claim about the code, not an estimate**: nothing in P12–P17 has been built, and where a description asserts something
+that may already partly exist, `P12-T1`'s note is the pattern -- verify by grep and correct the row, because a row
+reading NOT STARTED for a task that is six-eighths built is PF-1 in its purest form.
+
+
+#### P12 Sim scale-out to 220 · 7 tasks · M3
+
+Scale-out is mostly **volume**, not new architecture: the 24 gold sims proved the shape. The load-bearing tasks are `P12-T2`'s **author lanes** (a sim is a card → code → conformance run, and one sim in flight per lane) and `P12-T4`'s registry hygiene at 220 entries.
+
+
+| Task | Description | Status | Commit | Evidence |
+|---|---|---|---|---|
+| P12-T1 | Catalogue plan from `11`, with spec cards and the 3-point review rubric | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P12-T2 | 6 parallel author lanes, one sim in flight each: card → code → conformance → review | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P12-T3 | Per-sim review: pedagogy, technical conformance, accessibility; licence and provenance mandatory | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P12-T4 | Registry hygiene: versioning, deprecation, replacement, per-sim analytics, flakiness tracking | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P12-T5 | Catalogue polish: subject browsing, auto-captured screenshots, search, "used in N resources" | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P12-T6 | Bundle budget enforcement; prove the app bundle is unchanged from the 24-sim baseline | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P12-T7 | Content QA sweep: all 220 load, grade, and pass accessibility; any regression blocks merge | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+
+#### P13 Accessibility & i18n · 9 tasks · M8
+
+The plan's five a11y rules are cheap to satisfy once and easy to get wrong nine times, which is why `packages/contracts/src/a11y/questionInteraction.ts` exists as a TABLE. **`P13-T9` is an INDEPENDENT MANUAL WCAG 2.2 AA audit** — the one task in the plan whose value is a second opinion rather than code, and the one most likely to be marked done on the strength of automated coverage.
+
+
+| Task | Description | Status | Commit | Evidence |
+|---|---|---|---|---|
+| P13-T1 | Automated axe across all key routes in CI; component-level axe in Vitest | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P13-T2 | Editor accessibility: block handle names, keyboard movement, no traps, focus management | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P13-T3 | Exam surface accessibility: focus order, live-region policy, `2.4.11` compliance with sticky UI, announcement thresholds | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P13-T4 | Simulation text alternatives enforced in the conformance manifest | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P13-T5 | KaTeX MathML output and screen-reader verification | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P13-T6 | Accommodations UX: grant during a live exam, register, audit export | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P13-T7 | i18n framework: extraction, ICU, `Intl` dates/numbers, `i18n:check` gate | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P13-T8 | en-GB + en-US catalogues; RTL layout check in CI; +30% text-expansion tests | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P13-T9 | **Independent manual WCAG 2.2 AA audit**, findings triaged and remediated, signed off | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+
+#### P14 Security, privacy, compliance · 10 tasks · M10
+
+`P14-T1` says outright that it **depends on nothing existing**, which makes it the cheapest high-value task in the plan and the one most likely to be deferred. **`P14-T9` is the one with a standing finding behind it** — file scanning live, `svg` rejection, CSV-injection escaping — and the repo already has `scripts/audit-seals.mjs` as the pattern for a privacy property that is enforced rather than documented.
+
+
+| Task | Description | Status | Commit | Evidence |
+|---|---|---|---|---|
+| P14-T1 | Threat model walk-through; OWASP Top 10 review. **Depends on nothing** — it is a document exercise and can start in P0 (`D-31`). Output is a findings list with severities and task IDs, **not** a tick-box | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P14-T2 | CSP tightening, `audit:payloads` hardening, canary log-scrubbing test | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P14-T3 | Sandbox escape re-test against the production host component | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P14-T4 | Rate-limit audit; verify every limit by test | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P14-T5 | Dependency audit and the documented exception process | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P14-T6 | Data inventory and retention schedules; retention sweep in dry-run then live | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P14-T7 | DSAR export and erasure, rehearsed end to end with timings | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P14-T8 | Minors posture, consent versioning, sub-processor register, privacy policy and terms drafts | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P14-T9 | File scanning live; `svg` rejection and CSV-injection escaping verified | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P14-T10 | **Published academic-integrity policy** and student-facing integrity disclosure | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+
+#### P15 Reliability, performance, DR · 8 tasks · M10
+
+**`P15-T3` DEPENDS ON `P8-T16` AND SAYS IT HARDEN**: it is the only task in the plan whose description is about not trusting the task before it. **`P15-T7` is a RESTORE DRILL with a MEASURED RTO**, which is the difference between a backup policy and a recovery capability.
+
+
+| Task | Description | Status | Commit | Evidence |
+|---|---|---|---|---|
+| P15-T1 | Performance pass: Core Web Vitals per route, exam bundle budget, sim lazy loading, image pipeline | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P15-T2 | Index review with `EXPLAIN (ANALYZE, BUFFERS)` on the documented hot paths | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P15-T3 | **Harden** the load artefact `P8-T16` built; replace the synthetic think-time profile with the real distribution if P11 has data, else say so in the header | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P15-T4 | Chaos: worker kill mid-release, Postgres failover, Redis down, sim origin blocked | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P15-T5 | SLOs, alerts, and a runbook per alert — written before needed | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P15-T6 | Migration rehearsal from staging; rollback drill | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P15-T7 | **Restore drill**; real RTO measured and written down. Stated limitation: P15 data is synthetic, so this does not exercise a real cohort's volume — that happens at P17 | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P15-T8 | Read-replica split so browsing never competes with an exam cohort | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+
+#### P16 Interoperability · 9 tasks · M9
+
+**`P16-T7` CARRIES THE RELEASE RULE**: LTI AGS grade passback is a score leaving the platform, so `INV-RELEASE-2` applies to a third party and the passback must be gated on release and tested as such. `P16-T9` requires documenting **the supported subset and the honest gaps**, which is the part that stops interoperability work from becoming a claim the product cannot keep.
+
+
+| Task | Description | Status | Commit | Evidence |
+|---|---|---|---|---|
+| P16-T1 | `interop` package skeleton, `ExternalBinding` model, codec registry | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P16-T2 | QTI 2.2 export: items, tests, partial-credit response processing, export manifest | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P16-T3 | QTI 3.0 export superset | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P16-T4 | QTI import with a mapping report; round-trip golden tests | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P16-T5 | xAPI statement emission, queued, batched, idempotent, dead-lettered | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P16-T6 | LTI 1.3: OIDC login, tool launch, Deep Linking | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P16-T7 | LTI AGS grade passback with the release rule enforced and tested | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P16-T8 | OneRoster 1.2 roster sync with dry run and diff | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P16-T9 | Documentation: the supported subset, the honest gaps, and import/export guides | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+
+#### P17 Pilot & GA · 7 tasks · M10
+
+**`P17-T4` is the pilot: 3 classrooms, 30 students, 2 full exam cycles.** `D-15` is the decision this whole plan has been waiting on — the `P8-T16` load profile is **declared synthetic** precisely because real time-on-item data does not exist until P17, so P17 is what makes P8-T16's numbers mean anything.
+
+
+| Task | Description | Status | Commit | Evidence |
+|---|---|---|---|---|
+| P17-T1 | 30 curated seed resources, each with at least one simulation, validated in registry CI | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P17-T2 | Demo classroom, teacher and student with realistic content | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P17-T3 | Onboarding: teacher first-run, student first-run, and the practice-attempt recommendation | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P17-T4 | **Pilot**: 3 classrooms, 30 students, 2 full exam cycles, every defect triaged to fixed | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P17-T5 | Support tooling: in-app reporting, admin surface for the already-built impersonation + suspension | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P17-T6 | Documentation: author, sim author, teacher, student, admin runbook, API reference | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P17-T7 | GA checklist: all P0–P16 gates, migration rehearsal, rollback plan, launch monitoring | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
