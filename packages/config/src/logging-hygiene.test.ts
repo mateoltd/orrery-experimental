@@ -9,11 +9,23 @@
  * A canary test is the right shape for this: the failure mode is a field name nobody
  * thought about, added in a hurry under an exam deadline. No amount of reading the redaction
  * regex catches that. Seeding a value and looking for it afterwards does.
+ *
+ * ## AND IT VARIES POSITION, NOT ONLY NAME (`TM-19`)
+ *
+ * The first version of this file varied the **field name** and its own title said so — *"never emits a
+ * canary, whatever the field is called"*. That is a real property and it left the larger one untested:
+ * `msg` is not a field, so a canary interpolated into the message was invisible to every assertion here.
+ * `log.info(\`failed for ${email}\`)` compiles, runs, and was logged in full.
+ *
+ * So `POSITIONS` below plants every credential-shaped canary in each position a value can occupy on a
+ * record: a sensitive-named field, a benign-named field, a nested field, the **message**, an `Error`'s
+ * **message**, and a field **named `msg`**. A test that varies one axis cannot catch a leak on another,
+ * which is the whole finding.
  */
 
 import { FrozenClock } from '@orrery/clock';
 import { describe, expect, it } from 'vitest';
-import { createLogger, examLogger, redact } from './logging.js';
+import { createLogger, examLogger, redact, scrubMessage } from './logging.js';
 
 const CANARIES = {
   answerKey: 'CANARY-ANSWER-KEY-7f3a9c',
@@ -108,6 +120,104 @@ describe('Error serialisation', () => {
     expect(out).toContain('boom');
     expect(out).toContain('abc123');
     expect(out).not.toContain('{}');
+  });
+});
+
+/**
+ * `TM-19`: A CANARY IN EVERY POSITION, NOT ONLY IN EVERY FIELD.
+ *
+ * The six positions below are the six ways a value reaches a `LogRecord`. Four are fields, and fields are what the
+ * first version of this file tested — twice, under two names, which is one axis. The other two are the ones that
+ * leaked:
+ *
+ *  1. a sensitive-named field   · 2. a benign-named field   · 3. a nested field
+ *  4. **the message**            · 5. **an `Error`'s message**   · 6. **a field literally named `msg`**
+ *
+ * Only credential-SHAPED canaries are planted in positions 4–6, and that is the finding's own limit rather than a
+ * convenience: `scrubMessage` recognises an address, a bearer credential, a JWT and a long high-entropy run, and it
+ * cannot recognise an answer key, because an answer key has no shape. Positions 1–3 carry the full set, since
+ * `SENSITIVE_KEY` decides on the key and the key is what a content canary is judged by.
+ */
+const CREDENTIAL_CANARIES = {
+  email: 'CANARY-EMAIL-student@school.invalid',
+  bearer: 'bearer CANARY-BEARER-7d2f4a6b8c1e',
+  jwt: 'eyJhbGciOiJIUzI1NiJ9.CANARY-JWT-payload.CANARY-JWT-signature',
+  highEntropy: 'CANARYHIGHDENSITYRUN0123456789abcdefZ',
+} as const;
+
+/** Every way a value can get onto a record. Each returns the serialised line(s). */
+const POSITIONS: readonly {
+  readonly name: string;
+  readonly log: (log: ReturnType<typeof createLogger>, canary: string) => void;
+}[] = [
+  { name: 'a sensitive-named field', log: (l, c) => l.info('started', { studentEmail: c }) },
+  { name: 'a benign-named field', log: (l, c) => l.info('started', { note: c }) },
+  { name: 'a nested field', log: (l, c) => l.info('started', { meta: { deep: { note: c } } }) },
+  { name: 'the message', log: (l, c) => l.info(`failed for ${c}`) },
+  {
+    name: "an Error's message",
+    log: (l, c) => l.error('boom', { error: new Error(`no row for ${c}`) }),
+  },
+  {
+    name: 'a field named `msg`',
+    log: (l, c) => l.info('attempt failed', { msg: `failed for ${c}` }),
+  },
+];
+
+describe('TM-19: a canary in every POSITION on the record, not only in every field', () => {
+  for (const position of POSITIONS) {
+    it(`never emits a canary placed in ${position.name}`, () => {
+      const written: string[] = [];
+      const log = createLogger('exam', {}, { write: (r) => written.push(JSON.stringify(r)) });
+      for (const canary of Object.values(CREDENTIAL_CANARIES)) position.log(log, canary);
+      const out = written.join('\n');
+      for (const canary of Object.values(CREDENTIAL_CANARIES)) {
+        expect(out, `canary survived in ${position.name}: ${canary}`).not.toContain(canary);
+      }
+    });
+  }
+
+  it('keeps the message it was given, so the scrubber is not deleting every log', () => {
+    // A leak test satisfied by emitting nothing is satisfied by a broken logger. The useful sentence has to survive
+    // alongside the redacted one, or "we scrub everything" and "we log nothing" are indistinguishable.
+    const written: string[] = [];
+    const log = createLogger('exam', {}, { write: (r) => written.push(JSON.stringify(r)) });
+    log.info(`failed for ${CREDENTIAL_CANARIES.email}`, { attemptId: 'att_9', durationMs: 120 });
+    const out = written.join('\n');
+    expect(out).toContain('failed for [redacted]');
+    expect(out).toContain('att_9');
+    expect(out).toContain('120');
+  });
+
+  it('refuses an over-long message rather than truncating half of one', () => {
+    // Truncation is right for an array (a partial array is honest) and wrong for a sentence: half a message with a
+    // canary in the surviving half reads like a complete record.
+    const written: string[] = [];
+    const log = createLogger('exam', {}, { write: (r) => written.push(JSON.stringify(r)) });
+    log.info(`failed for ${CREDENTIAL_CANARIES.email} ${'x'.repeat(2_100)}`);
+    const out = written.join('\n');
+    expect(out).toContain('message refused');
+    expect(out).not.toContain('x'.repeat(100));
+  });
+
+  it("scrubs an Error's STACK, whose first line is the message it had just redacted", () => {
+    // Pinned separately because it is a distinct property from "the message is scrubbed", and because the received value
+    // when it was missing is the clearest possible statement of the defect: `[redacted]` on the line above the canary.
+    const out = JSON.stringify(
+      redact({ error: new Error(`no row for ${CREDENTIAL_CANARIES.email}`) }),
+    );
+    expect(out).not.toContain(CREDENTIAL_CANARIES.email);
+    // And the stack is still a stack: refusing it would delete the only diagnostic an incident has.
+    expect(out).toContain('logging-hygiene.test');
+  });
+
+  it('names the limit: a content canary in a field is caught by its KEY, and nothing catches one in a sentence', () => {
+    // This is the honest boundary of `scrubMessage`, asserted rather than left in a comment. `answerKey` is on
+    // `SENSITIVE_KEY`, so the field form is redacted; a bare answer key in prose is indistinguishable from any other
+    // sentence, and a guard claiming otherwise would be claiming something false.
+    const out = JSON.stringify(redact({ answerKey: CANARIES.answerKey }));
+    expect(out).not.toContain(CANARIES.answerKey);
+    expect(scrubMessage(`the answer is ${CANARIES.answerKey}`)).toContain(CANARIES.answerKey);
   });
 });
 

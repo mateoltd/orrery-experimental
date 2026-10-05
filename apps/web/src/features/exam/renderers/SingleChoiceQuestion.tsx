@@ -124,7 +124,9 @@ export function SingleChoiceQuestion({
  * the string. A question whose prompt needs a formula or a diagram is a different spec shape, and pretending to
  * support it here would mean silently dropping the maths -- which is worse than not offering it.
  *
- * `strings` is left to React's default escaping. There is no `dangerouslySetInnerHTML` anywhere in this file, and
- * adding one for a question bank would be an XSS hole reachable by anyone who can edit a bank.
+ * `strings` is left to React's default escaping. `dangerouslySetInnerHTML` is banned outright by `eslint.config.js`
+ * (`NO_MARKUP_SINKS[0]`, added in `P14-T16`), so adding one here for a question bank would be an XSS hole reachable by
+ * anyone who can edit a bank **and** a lint error. The ban is asserted to fire by
+ * `packages/config/src/lint-rules.verify.test.ts`.
  */
 const renderInline = (text: string): string => text;

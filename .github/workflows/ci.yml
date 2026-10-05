@@ -260,6 +260,67 @@ jobs:
       - name: dependency audit
         run: pnpm audit:deps
 
+  # ─ GATE: the simulation registry is a BUILD ARTEFACT, built here and asserted to exist (P14-T18)
+  # `TM-18`: `plans/14` §5:62 lists "registry built by CI only; no user code (ADR-0018)" as a ticked
+  # release gate, and NOTHING built `sims/registry/registry.json`. The escape gate
+  # (`scripts/sim-sandbox-escape.mjs`) tests escapes AGAINST that registry, so the artefact the
+  # sandbox's central ADR is argued from was produced by nobody. Latent — a registry nobody builds
+  # means nothing is served, which fails safe — and Medium because "no user code reaches the sandbox"
+  # rested on a directory listing.
+  #
+  # ITS OWN JOB rather than a step inside `build`, because it is the only job whose subject is a
+  # GENERATED FILE: `build` proves packages compile, and a green `build` says nothing about whether
+  # `sims/registry/` exists. `audit-sim-registry.mjs` then asserts the artefact against the FILES
+  # rather than against the build's exit code, because `sim-build.mjs`'s `main()` returns without
+  # writing anything when it discovers no manifests and still prints "sim:build passed" — the defect
+  # its own header calls "a registry that does not exist, reported as a success".
+  sim-registry:
+    name: sim-registry
+    needs: [install, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # Per-package, the convention `build` already uses: the registry builder loads
+      # `packages/sim-registry/dist` and `packages/contracts/dist` BY PATH, because a root script
+      # importing a workspace package name needs a link the per-package build does not create.
+      - name: build the workspace
+        run: pnpm build
+      - name: build every simulation and write the registry
+        run: pnpm run sim:build
+      - name: the registry ARTEFACT gate
+        # Asserts the artefact EXISTS; that its entry set equals the manifest set IN BOTH DIRECTIONS,
+        # which is what "no user code reaches the sandbox" means mechanically; that every bundle path
+        # resolves to a real file carrying the byte count the registry claims; that the digest
+        # recomputes, so the file was BUILT rather than typed; and that the catalogue index carries no
+        # field a bundle path could go in.
+        run: node scripts/audit-sim-registry.mjs
+      - name: the registry is UNCHANGED by a second build of the same tree
+        # A build artefact that is not reproducible is not an artefact, it is a timestamp. The builder
+        # sorts its entries and hashes the sorted set precisely so two builds of one tree agree — "an
+        # order-dependent digest makes every rebuild look like a change, and a change detector that
+        # always fires is one people learn to ignore" — and this asserts the agreement rather than
+        # trusting the comment that says so.
+        run: |
+          set -euo pipefail
+          cp sims/registry/registry.json /tmp/registry.first.json
+          cp sims/registry/index.json /tmp/index.first.json
+          pnpm run sim:build
+          diff -u /tmp/registry.first.json sims/registry/registry.json
+          diff -u /tmp/index.first.json sims/registry/index.json
+          echo "the registry is byte-identical across two builds of one tree"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: sim-registry
+          path: sims/registry/
+          retention-days: 7
+
   # ───────────────────────────────────── GATE INTEGRITY: the gate cannot be edited quietly
   # D-35. This is the job that makes the other gates mean something.
   gate-integrity:

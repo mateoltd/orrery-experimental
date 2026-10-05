@@ -153,7 +153,9 @@ function ConflictRow(props: {
                     between the two things as they will actually appear -- and so this panel
                     cannot drift from the one rendering. The markup is mounted by `TrustedHtml`,
                     the one component in the app allowed to do it, rather than by an inline
-                    `dangerouslySetInnerHTML` that a reviewer would have to audit here. */}
+                    `dangerouslySetInnerHTML` that a reviewer would have to audit here. The "allowed to" is now
+                    enforced: `eslint.config.js` bans every string-to-markup sink and bans `new DOMParser`
+                    outside `TrustedHtml.tsx`, so a second mount site is a lint error (P14-T16, TM-21). */}
                 <div className="orrery-conflicts__preview">
                   {block === null ? (
                     <p className="muted">(deleted)</p>

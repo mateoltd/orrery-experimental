@@ -10,6 +10,102 @@ import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
+/**
+ * THE `no-restricted-syntax` ENTRIES, NAMED, because two blocks need the same one and a duplicated rule message is a
+ * rule message that drifts.
+ *
+ * The second use is the `TrustedHtml.tsx` exemption below, which has to re-declare what it keeps: flat config merges rule
+ * options by REPLACEMENT, so a block that narrows `no-restricted-syntax` to one selector silently drops the other entries
+ * for that file. Naming them here is what makes that narrowing visible instead of accidental.
+ */
+const NO_BARE_NEW_DATE = {
+  selector: "NewExpression[callee.name='Date'][arguments.length=0]",
+  message:
+    'INV-TIME-1: `new Date()` with no argument reads the host clock. ' +
+    'Inject a Millis and use @orrery/clock. `new Date(injectedMillis)` is a ' +
+    'conversion and is fine.',
+};
+
+/**
+ * THE STRING-TO-MARKUP SINKS, and `plans/14` §4:39's whole content argument rests on them being unreachable.
+ *
+ * ## "EXACTLY ONE PLACE MOUNTS GENERATED MARKUP" WAS A COMMENT RESTING ON A RULE THAT WAS NEVER WRITTEN (`TM-21`)
+ *
+ * `apps/web/src/features/editor/TrustedHtml.tsx:18-20` said: *"`dangerouslySetInnerHTML` is banned by the lint config …
+ * the ban is what makes 'there is exactly one place that does this' a checkable claim rather than a convention."* No such
+ * ban existed. `grep -rn dangerouslySetInnerHTML` returned that comment and three others, so the property held **only**
+ * because nobody had written the attribute — which is the convention the sentence claimed it was not.
+ *
+ * ## WHY FIVE SELECTORS AND NOT ONE
+ *
+ * Because a rule with one selector is a rule with one bypass, and the bypass is what a future contributor will find. Each
+ * of these assigns a STRING to a place the browser will parse as markup:
+ *
+ *  1. `dangerouslySetInnerHTML` — the one everybody knows about.
+ *  2. `innerHTML` / `outerHTML` assignment — the one-liner everybody reaches for, and it is what `TrustedHtml.tsx:22-28`
+ *     says it exists to avoid.
+ *  3. `insertAdjacentHTML` — same sink, less famous, so it is the one that actually gets used.
+ *  4. `document.write` — the same hazard with a worse blast radius.
+ *  5. `setAttribute('srcdoc', …)` — **the bypass that matters here**, because this repository mounts simulations in an
+ *     iframe and `srcdoc` is how you get markup into one without touching `innerHTML`. A ban on 1–4 alone would have been
+ *     satisfied by an iframe carrying untrusted HTML.
+ *
+ * ## AND `DOMParser`, WHICH IS THE ONE THAT MAKES "EXACTLY ONE PLACE" A COUNTABLE CLAIM
+ *
+ * The other four are about string assignment. `TrustedHtml` does not assign a string to anything — it parses the markup in
+ * an inert document and moves the resulting NODES in (`TrustedHtml.tsx:48-49`) — so banning the four above leaves the
+ * component as the only place that mounts generated markup **by convention**. Banning `new DOMParser` everywhere else makes
+ * it a count: one exemption, one file, and a second mount site is a lint error rather than a review finding.
+ *
+ * **`DOMParser` IS NOT BANNED IN `TrustedHtml.tsx`, AND THE EXEMPTION IS A BLOCK BELOW RATHER THAN A SUPPRESSION** —
+ * `ADR-0027`'s point is that an over-broad rule teaches people to add an `eslint-disable`, and a suppression on the one
+ * file the rule exists to protect is the worst possible place to hand out a habit. The exemption names the file, and
+ * `lint-rules.verify.test.ts` asserts both halves: that a second `DOMParser` elsewhere fails, and that `TrustedHtml`'s own
+ * copy passes.
+ */
+const NO_MARKUP_SINKS = [
+  {
+    selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",
+    message:
+      'ADR-0018: `dangerouslySetInnerHTML` is banned. Render through <TrustedHtml>, which parses our own output in an ' +
+      'inert document. `plans/14` §4:39 is "no user HTML, ever" — and this is the line that makes it true.',
+  },
+  {
+    selector:
+      "AssignmentExpression[left.type='MemberExpression'][left.property.name=/^(inner|outer)HTML$/]",
+    message:
+      'ADR-0018: assigning a string to innerHTML/outerHTML is the banned sink in its one-line form. <TrustedHtml> ' +
+      'parses markup and moves nodes, so the string never reaches a parser here.',
+  },
+  {
+    selector: "CallExpression[callee.property.name='insertAdjacentHTML']",
+    message:
+      'ADR-0018: `insertAdjacentHTML` is the same sink as innerHTML and is less likely to be recognised, which is why ' +
+      'it is here. Use <TrustedHtml>.',
+  },
+  {
+    selector:
+      "CallExpression[callee.object.name='document'][callee.property.name=/^(write|writeln)$/]",
+    message: 'ADR-0018: `document.write` parses its argument as markup. Use <TrustedHtml>.',
+  },
+  {
+    selector:
+      "CallExpression[callee.property.name='setAttribute'][arguments.0.value=/^(srcdoc|innerHTML|outerHTML)$/]",
+    message:
+      'ADR-0018: setting an iframe `srcdoc` is how markup reaches a frame without touching innerHTML. Simulations are ' +
+      'mounted in an iframe from the sim origin, so a srcdoc here would be untrusted markup in the one element that ' +
+      'crosses the sandbox boundary.',
+  },
+];
+
+const NO_DOM_PARSER = {
+  selector: "NewExpression[callee.name='DOMParser']",
+  message:
+    'ADR-0018: parsing a markup STRING belongs to exactly one file, `apps/web/src/features/editor/TrustedHtml.tsx`. ' +
+    'That component is the single mount site `plans/14` §4:39 depends on, and this rule is what makes "exactly one" a ' +
+    'count rather than a convention.',
+};
+
 export default [
   // NOTE: `.tmp/**` is deliberately absent. The lint-rule verification test writes its
   // fixtures there and needs ESLint to lint them; `.tmp/` is gitignored so nothing leaks.
@@ -84,12 +180,12 @@ export default [
         'error',
         {
           // ONLY the no-argument form, which is the one that reads the wall clock.
-          selector: "NewExpression[callee.name='Date'][arguments.length=0]",
-          message:
-            'INV-TIME-1: `new Date()` with no argument reads the host clock. ' +
-            'Inject a Millis and use @orrery/clock. `new Date(injectedMillis)` is a ' +
-            'conversion and is fine.',
+          ...NO_BARE_NEW_DATE,
         },
+        // ADR-0018 / TM-21: the string-to-markup sinks, and the `DOMParser` count. See `NO_MARKUP_SINKS` above for why
+        // there are five sinks rather than the one everybody remembers.
+        ...NO_MARKUP_SINKS,
+        NO_DOM_PARSER,
       ],
       // A leading underscore means "deliberately unused", and it is the only way to say so
       // without a disable comment. `signInFailure(_kind)` takes a kind and does not read it —
@@ -217,6 +313,28 @@ export default [
       'no-restricted-globals': 'off',
       'no-restricted-properties': 'off',
       'no-restricted-syntax': 'off',
+    },
+  },
+  {
+    // THE ONE PLACE THAT MOUNTS GENERATED MARKUP, AND THE EXEMPTION IS THIS BLOCK RATHER THAN A SUPPRESSION (`TM-21`).
+    //
+    // Flat config merges rule options by REPLACEMENT, so this file cannot say "one selector off". It therefore declares
+    // `no-restricted-syntax` in full, with `NO_DOM_PARSER` omitted — **which means every other entry has to be re-stated,
+    // or the exemption silently also exempts this file from `new Date()`.** The entry below is the whole reason the
+    // entries are named constants rather than inline literals.
+    //
+    // **`ADR-0027` IS THE ARGUMENT AGAINST AN INLINE `eslint-disable`.** A suppression on the one file the ban exists to
+    // protect teaches the habit in the worst possible place, and it is invisible to a reviewer reading the component. A
+    // named block with a rationale is greppable and is asserted from both sides by `lint-rules.verify.test.ts`.
+    files: ['apps/web/src/features/editor/TrustedHtml.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        { ...NO_BARE_NEW_DATE },
+        // Every sink above still applies here. `TrustedHtml` parses OUR output, so the string sinks are as forbidden in
+        // this file as anywhere else — the exemption is for the PARSER, not for markup.
+        ...NO_MARKUP_SINKS,
+      ],
     },
   },
   {

@@ -11,7 +11,7 @@
  * is deleted, and a rule whose only proof is "it's in the config file" is untested.
  */
 
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
@@ -59,10 +59,17 @@ let fixtureCount = 0;
 /** Every fixture path written, so a test run cannot leave files in a real source directory. */
 const written: string[] = [];
 
-async function lint(code: string, dir: string = scratch) {
+/**
+ * Lint a fixture, and `extension` exists because a JSX fixture written as `.ts` does not PARSE.
+ *
+ * The first version of the `dangerouslySetInnerHTML` probe was written as `.ts` and ESLint reported a parse error rather
+ * than `no-restricted-syntax`, so `fired()` failed with `got: ["Parsing error: ..."]` — which is a test that fails for the
+ * wrong reason, and a reader would have gone looking for a config problem that was not there.
+ */
+async function lint(code: string, dir: string = scratch, extension: 'ts' | 'tsx' = 'ts') {
   // A UNIQUE path per call. Reusing one path risks ESLint serving a cached result, which
   // would let a dead rule look alive — the exact failure this test exists to prevent.
-  const file = join(dir, `fixture-${fixtureCount++}.ts`);
+  const file = join(dir, `fixture-${fixtureCount++}.${extension}`);
   writeFileSync(file, code, 'utf8');
   written.push(file);
   const results = await eslint.lintFiles([file], { warnIgnored: false });
@@ -166,6 +173,118 @@ describe('ADR-0005 — packages stay framework-light', () => {
 describe('ADR-0016 — no barrel files', () => {
   it('rejects a `**/index` subpath import', async () => {
     fired(await lint("import { x } from './index';\nexport const y = x;"), 'no-restricted-imports');
+  });
+});
+
+describe('ADR-0018 — exactly one place mounts generated markup (`TM-21`)', () => {
+  /**
+   * WHY THIS BLOCK EXISTS AT ALL
+   *
+   * `apps/web/src/features/editor/TrustedHtml.tsx:18-20` claimed *"`dangerouslySetInnerHTML` is banned by the lint
+   * config … the ban is what makes 'there is exactly one place that does this' a checkable claim rather than a
+   * convention."* No such ban existed. `grep -rn dangerouslySetInnerHTML` returned that comment and three others, so the
+   * property held only because nobody had written the attribute — which is the convention the sentence claimed it was not.
+   *
+   * **`grep -rn dangerouslySetInnerHTML` IS WHY THESE FIXTURES ARE WRITTEN BY HAND RATHER THAN DISCOVERED.** A source scan
+   * for the attribute finds four COMMENTS and no code, so an audit that trusted it would have concluded the ban is
+   * unnecessary. Every fixture below is written explicitly, because the whole finding is that reading the source does not
+   * tell you whether the rule exists.
+   */
+  it('rejects `dangerouslySetInnerHTML`', async () => {
+    fired(
+      await lint(
+        'export const P = () => <div dangerouslySetInnerHTML={{ __html: "<b>x</b>" }} />;',
+        scratch,
+        'tsx',
+      ),
+      'no-restricted-syntax',
+    );
+  });
+
+  it('rejects `innerHTML` and `outerHTML` assignment — the one-line form of the same sink', async () => {
+    for (const property of ['innerHTML', 'outerHTML']) {
+      fired(
+        await lint(`export function m(h: HTMLElement, s: string) { h.${property} = s; }`),
+        'no-restricted-syntax',
+      );
+    }
+  });
+
+  it('rejects `insertAdjacentHTML`, which is the sink that gets used because it is less famous', async () => {
+    fired(
+      await lint(
+        "export function m(h: HTMLElement, s: string) { h.insertAdjacentHTML('beforeend', s); }",
+      ),
+      'no-restricted-syntax',
+    );
+  });
+
+  it('rejects `document.write`', async () => {
+    fired(
+      await lint('export function m(s: string) { document.write(s); }'),
+      'no-restricted-syntax',
+    );
+  });
+
+  it('rejects `setAttribute("srcdoc", …)` — the bypass that matters for a sandboxed iframe', async () => {
+    // Without this selector the ban is satisfied by putting untrusted markup in the one element that crosses the sim
+    // origin boundary, which is the single most attractive bypass in a repository that mounts simulations in an iframe.
+    for (const attribute of ['srcdoc', 'innerHTML', 'outerHTML']) {
+      fired(
+        await lint(
+          `export function m(f: HTMLIFrameElement, s: string) { f.setAttribute('${attribute}', s); }`,
+        ),
+        'no-restricted-syntax',
+      );
+    }
+  });
+
+  it('rejects a SECOND `DOMParser` — this is what makes "exactly one place" countable', async () => {
+    // `TrustedHtml` does not assign a string to anything; it parses and moves nodes. So the four sinks above do not make
+    // it the only mount site — banning the parser everywhere else is what does.
+    fired(
+      await lint(
+        "export function p(s: string) { void new DOMParser().parseFromString(s, 'text/html'); }",
+        appSrc,
+      ),
+      'no-restricted-syntax',
+    );
+  });
+
+  it('ALLOWS the mount site itself, or the ban is unsatisfiable and somebody adds a suppression', async () => {
+    // The positive half. A rule that rejects the one legitimate implementation is a rule that gets an `eslint-disable`
+    // added to it, and then it protects nothing (ADR-0027).
+    const real = join(root, 'apps', 'web', 'src', 'features', 'editor', 'TrustedHtml.tsx');
+    const results = await eslint.lintFiles([real], { warnIgnored: false });
+    const rules = results.flatMap((r) => r.messages).map((m) => m.ruleId ?? m.message);
+    expect(
+      rules,
+      `TrustedHtml must not be rejected by its own exemption: ${JSON.stringify(rules)}`,
+    ).toEqual([]);
+  });
+
+  it('ALLOWS markup that never reaches a parser, so the rule is not "no strings"', async () => {
+    // `textContent` and `createTextNode` assign text, not markup. If these fired, the first person to hit the rule would
+    // have learned that the ban means "no DOM writes at all" rather than "no markup".
+    const rules = await lint(
+      'export function t(h: HTMLElement, s: string) { h.textContent = s; h.appendChild(document.createTextNode(s)); }',
+    );
+    expect(rules, `text assignment must be allowed, got: ${JSON.stringify(rules)}`).not.toContain(
+      'no-restricted-syntax',
+    );
+  });
+
+  it('ALLOWS the clock conversion the exemption block re-declares, so the exemption is not a loophole', async () => {
+    // The exemption for `TrustedHtml.tsx` replaces the whole `no-restricted-syntax` array, so it has to re-state
+    // `new Date()`. If that re-statement is ever dropped, this is the assertion that notices — and the only way it can
+    // notice is by linting the REAL file rather than a fixture.
+    const real = join(root, 'apps', 'web', 'src', 'features', 'editor', 'TrustedHtml.tsx');
+    const source = readFileSync(real, 'utf8');
+    writeFileSync(join(appSrc, 'exempt-Date.ts'), 'export const t = Date.now();\n', 'utf8');
+    written.push(join(appSrc, 'exempt-Date.ts'));
+    expect(source).toContain('DOMParser');
+    // `Date.now` is `no-restricted-properties`, so it must still fire in a file with no exemption at all.
+    fired(await lint('export const t = Date.now();', appSrc), 'no-restricted-properties');
   });
 });
 

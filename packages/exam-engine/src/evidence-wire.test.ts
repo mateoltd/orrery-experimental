@@ -212,7 +212,9 @@ describe('`ADV-E3`: the signing input decodes to exactly one batch', () => {
     fc.assert(
       fc.property(hostileString, hostileString, fc.nat({ max: 500 }), (attemptId, tabId, seq) => {
         const events: EvidenceRecord[] = [
-          { seq, type: 'TAB_HIDDEN', at: T0, detail: { note: tabId } },
+          // `peerTabId`, not `note`: `detail` keys are closed (`TM-20`) and `note` is not one of the twenty. The
+          // property under test is unchanged by the rename — it is still a hostile client-chosen string in a detail.
+          { seq, type: 'TAB_HIDDEN', at: T0, detail: { peerTabId: tabId } },
           { seq: seq + 2, type: 'TAB_VISIBLE', at: T0 + 1 },
         ];
         const fields = batchSigningInput({ attemptId, tabId, events }).split('\u0000');
