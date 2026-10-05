@@ -68,7 +68,10 @@ export interface AttemptState {
   /** Questions the student marked to return to. Not a hint and not a filter: it changes nothing about grading. */
   readonly flagged: ReadonlySet<string>;
   readonly queued: readonly QueuedWrite[];
-  /** The next unused `seq`. Held in the state so a replay cannot reuse one. */
+  /**
+   * The next unused `seq`. Held in the state so a replay cannot reuse one -- and after a reload it continues from
+   * the outbox rather than from 1, which is `initialAttemptState`'s `unsent`.
+   */
   readonly nextSeq: number;
   /** Where the student is. Meaningful under `ONE_AT_A_TIME`; a cursor under `ALL_AT_ONCE`. */
   readonly cursor: number;
@@ -121,21 +124,57 @@ export const initialAttemptState = (input: {
   readonly policy: ExamPolicy;
   readonly slots: readonly AnswerSlot[];
   readonly deadlineAt: number | null;
-}): AttemptState => ({
-  attemptId: input.attemptId,
-  policy: input.policy,
-  slots: input.slots,
-  answers: {},
-  revisions: {},
-  flagged: new Set<string>(),
-  queued: [],
-  nextSeq: 1,
-  cursor: 0,
-  deadlineAt: input.deadlineAt,
-  status: 'NOT_STARTED',
-  durability: 'CLEAN',
-  reconcile: null,
-});
+  /**
+   * WHAT THE OUTBOX STILL HOLDS -- `await store.all()` -- WHEN THIS IS A RELOAD AND NOT A START. (`ADV-W6`)
+   *
+   * The outbox survives a reload and this state does not. Built without it, the state numbered its first new write
+   * `1`, and in an outbox keyed by `seq` that REPLACED the unsent write already at 1: an answer lost without ever
+   * being offered to the server. `nextSeq` is held in the state precisely so a `seq` cannot be reused, and a
+   * constructor that always said `1` defeated it at the one moment it mattered.
+   *
+   * So the writes are taken back: they are `queued` again, numbering continues after the highest of them, each
+   * question's revision continues after the highest one written, and the student sees the answer they typed.
+   *
+   * Omitted means a paper nobody has written to. It is optional only because every existing caller is one of those;
+   * a reload path that omits it is the defect, and `outbox.ts`'s `admit` is what stops that costing an answer.
+   *
+   * NOT covered: revisions the server has already acknowledged. They are in no outbox, so they have to come from
+   * the server's copy of the attempt, and until they do the first edit to an acknowledged answer after a reload is
+   * sent as revision 1 and comes back a `409` about the student's own save.
+   */
+  readonly unsent?: readonly QueuedWrite[];
+}): AttemptState => {
+  // In `seq` order, whatever order the store returned them in: the last write to a question is the answer.
+  const queued = [...(input.unsent ?? [])].sort((a, b) => a.seq - b.seq);
+  const answers: Record<string, unknown> = {};
+  const revisions: Record<string, number> = {};
+  for (const write of queued) {
+    if (write.answer === undefined) delete answers[write.questionId];
+    else setOwn(answers, write.questionId, write.answer);
+    setOwn(
+      revisions,
+      write.questionId,
+      Math.max(own(revisions, write.questionId) ?? 0, write.revision),
+    );
+  }
+
+  return {
+    attemptId: input.attemptId,
+    policy: input.policy,
+    slots: input.slots,
+    answers,
+    revisions,
+    flagged: new Set<string>(),
+    queued,
+    nextSeq: queued.reduce((highest, write) => Math.max(highest, write.seq), 0) + 1,
+    cursor: 0,
+    deadlineAt: input.deadlineAt,
+    status: queued.length > 0 ? 'IN_PROGRESS' : 'NOT_STARTED',
+    // Never `CLEAN` over a write that has not been sent, and never `OFFLINE` on a guess about the network.
+    durability: queued.length > 0 ? 'PENDING' : 'CLEAN',
+    reconcile: null,
+  };
+};
 
 /**
  * THE VALUE AT `key`, OR `undefined` -- AND NEVER AN INHERITED ONE.
@@ -156,6 +195,16 @@ export const initialAttemptState = (input: {
  */
 const own = <V>(map: Readonly<Record<string, V>>, key: string): V | undefined =>
   Object.hasOwn(map, key) ? map[key] : undefined;
+
+/**
+ * SET `key` AS AN OWN PROPERTY, for the same reason `own` reads only own ones.
+ *
+ * `map[key] = value` with the key `__proto__` invokes the inherited setter instead of adding a key: an object value
+ * replaces the map's prototype and a number is discarded. The `ANSWER` case below says so at length.
+ */
+const setOwn = <V>(map: Record<string, V>, key: string, value: V): void => {
+  Object.defineProperty(map, key, { value, writable: true, enumerable: true, configurable: true });
+};
 
 const indexOf = (state: AttemptState, questionId: string): number =>
   state.slots.findIndex((slot) => slot.questionId === questionId);

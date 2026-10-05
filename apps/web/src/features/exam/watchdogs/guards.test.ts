@@ -21,7 +21,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ClockGuard } from './clockGuard';
 import { FocusGuard } from './focusGuard';
 import { LifecycleGuard } from './lifecycleGuard';
-import { type TabChannel, TabGuard, type TabMessage } from './tabGuard';
+import { parseTabMessage, type TabChannel, TabGuard, type TabMessage } from './tabGuard';
 import type { Evidence } from './watchdog';
 
 const T0 = 1_800_000_000_000;
@@ -29,6 +29,8 @@ const T0 = 1_800_000_000_000;
 class FakeHost {
   readonly listeners = new Map<string, (() => void)[]>();
   visibilityState: 'visible' | 'hidden' = 'visible';
+  /** What `document.hasFocus()` would say: true while focus is inside the document, a frame included. */
+  focusIsInsideTheDocument = false;
   readonly known = new Set<string>([
     'blur',
     'focus',
@@ -47,6 +49,9 @@ class FakeHost {
       type,
       (this.listeners.get(type) ?? []).filter((entry) => entry !== listener),
     );
+  }
+  hasFocus(): boolean {
+    return this.focusIsInsideTheDocument;
   }
   fire(type: string): void {
     for (const listener of this.listeners.get(type) ?? []) listener();
@@ -99,15 +104,109 @@ describe('FocusGuard: one departure is ONE event', () => {
     expect(seen[0]?.detail?.countsAgainstTabHides).toBe(true);
   });
 
-  it('upgrades a blur to a hide when the second signal says so', () => {
-    // `blur` can arrive before `visibilityState` has flipped, so the pair has to be able to correct the first reading.
-    const { host, seen } = setup();
+  it('keeps a blur a BLUR when the hide arrives second, and says on the return that the tab was hidden', () => {
+    /**
+     * `blur` can arrive before `visibilityState` has flipped. This test was named "upgrades a blur to a hide when the
+     * second signal says so" and asserted the opposite -- the first event stays `WINDOW_BLURRED`, zero `TAB_HIDDEN` --
+     * while the guard "upgraded" only the RETURN, to a `TAB_VISIBLE` that closed nothing (`ADV-W2`).
+     *
+     * What is reported cannot be taken back, so it is not: the pair is a blur and its refocus, nothing is charged to
+     * `tabHides`, and the fact that the tab was hidden is carried by the return rather than by a mismatched kind.
+     */
+    const { clock, host, seen } = setup();
     host.fire('blur');
     host.visibilityState = 'hidden';
     host.fire('visibilitychange');
-    expect(seen[0]?.kind).toBe('WINDOW_BLURRED');
-    // One event, and it is the stricter one.
-    expect(seen.filter((e) => e.kind === 'TAB_HIDDEN')).toHaveLength(0);
+    expect(seen).toEqual([
+      { kind: 'WINDOW_BLURRED', at: T0, detail: { countsAgainstTabHides: false } },
+    ]);
+
+    clock.advance(9_000);
+    host.visibilityState = 'visible';
+    host.fire('visibilitychange');
+    host.fire('focus');
+    expect(seen.slice(1)).toEqual([
+      { kind: 'WINDOW_FOCUSED', at: T0 + 9_000, detail: { awayForMs: 9_000, tabWasHidden: true } },
+    ]);
+  });
+
+  it('says `tabWasHidden: false` on the return from a blur that never hid anything', () => {
+    // The converse, or the field above would be a constant.
+    const { clock, host, seen } = setup();
+    host.fire('blur');
+    clock.advance(2_000);
+    host.fire('focus');
+    expect(seen[1]).toEqual({
+      kind: 'WINDOW_FOCUSED',
+      at: T0 + 2_000,
+      detail: { awayForMs: 2_000, tabWasHidden: false },
+    });
+  });
+
+  it('is silent while focus is inside the document, and STILL reports the tab being hidden from there', () => {
+    /**
+     * `ADV-W1`, and the half of it that matters as much: a guard that learned to ignore a `blur` must not have
+     * learned to ignore a departure. A student working in a simulation frame who then switches tab has left, and
+     * the hide is what says so.
+     */
+    const { host, seen } = setup();
+    host.focusIsInsideTheDocument = true;
+    for (let n = 0; n < 30; n += 1) {
+      host.fire('blur');
+      host.fire('focus');
+    }
+    expect(seen).toEqual([]);
+
+    host.visibilityState = 'hidden';
+    host.fire('visibilitychange');
+    expect(seen).toEqual([{ kind: 'TAB_HIDDEN', at: T0, detail: { countsAgainstTabHides: true } }]);
+  });
+
+  it('does not take a `focus` in a hidden tab for a return, so one hide is one charge', () => {
+    // `ADV-W3`, as the exact sequence: the stray `focus` closed the departure and the `blur` after it opened -- and
+    // charged -- a second one for the same hide.
+    const { clock, host, seen, guard } = setup();
+    host.visibilityState = 'hidden';
+    host.fire('visibilitychange');
+    host.fire('focus');
+    expect(guard.isAway).toBe(true);
+    host.fire('blur');
+    clock.advance(500);
+    host.visibilityState = 'visible';
+    host.fire('visibilitychange');
+
+    expect(seen).toEqual([
+      { kind: 'TAB_HIDDEN', at: T0, detail: { countsAgainstTabHides: true } },
+      { kind: 'TAB_VISIBLE', at: T0 + 500, detail: { awayForMs: 500, tabWasHidden: true } },
+    ]);
+    expect(guard.isAway).toBe(false);
+  });
+
+  it('does not charge a hide it did not watch happen', () => {
+    // Attached to a tab that is ALREADY hidden -- a paper opened in a background tab. Nothing was seen to hide, so
+    // the `blur` that follows is not a departure, and coming to the front is not a return from one.
+    const clock = new FrozenClock(T0);
+    const host = new FakeHost();
+    host.visibilityState = 'hidden';
+    const { seen, sink } = sinkFor();
+    const guard = new FocusGuard(clock, sink, host);
+    guard.attach();
+    host.fire('blur');
+    host.visibilityState = 'visible';
+    host.fire('visibilitychange');
+    host.fire('focus');
+    expect(seen).toEqual([]);
+  });
+
+  it('starts again on re-attach, and does not report a return from a departure it stopped watching', () => {
+    const { clock, host, seen, guard } = setup();
+    host.fire('blur');
+    guard.detach();
+    clock.advance(60_000);
+    guard.attach();
+    expect(guard.isAway).toBe(false);
+    host.fire('focus');
+    expect(seen.map((e) => e.kind)).toEqual(['WINDOW_BLURRED']);
   });
 
   it('distinguishes a plain window blur, which is not a tab hide', () => {
@@ -299,6 +398,45 @@ describe('TabGuard: detection is by RESPONSE', () => {
       channel.deliver({ kind: 'PING', tabId: 'tab-b' } satisfies TabMessage);
     }
     expect(seen).toHaveLength(1);
+  });
+
+  it('reads a message into exactly its own fields, or into nothing', () => {
+    // `ADV-W5`. The handler is handed what this returns and has no other way to see the channel.
+    expect(parseTabMessage({ kind: 'PING', tabId: 'tab-b', extra: 'dropped' })).toEqual({
+      kind: 'PING',
+      tabId: 'tab-b',
+    });
+    expect(parseTabMessage({ kind: 'PONG', tabId: 'tab-b', replyingTo: 'tab-a' })).toEqual({
+      kind: 'PONG',
+      tabId: 'tab-b',
+      replyingTo: 'tab-a',
+    });
+    for (const unreadable of [
+      null,
+      undefined,
+      'PING',
+      42,
+      [],
+      {},
+      { kind: 'PING' },
+      { kind: 'PING', tabId: '' },
+      { kind: 'PING', tabId: 7 },
+      { kind: 'PONG', tabId: 'tab-b' },
+      { kind: 'PONG', tabId: 'tab-b', replyingTo: '' },
+      { kind: 'HELLO', tabId: 'tab-b' },
+      { tabId: 'tab-b' },
+    ]) {
+      expect(parseTabMessage(unreadable), JSON.stringify(unreadable)).toBeNull();
+    }
+  });
+
+  it('does not answer a PONG that names no tab it could be replying to', () => {
+    // A `PONG` with a sender and no addressee is not a reply to US, and a reply is the only detection there is.
+    const { channel, seen, guard } = setup();
+    channel.deliver({ kind: 'PONG', tabId: 'tab-b' });
+    expect(seen).toEqual([]);
+    expect(guard.peerCount).toBe(0);
+    expect(channel.sent).toEqual([]);
   });
 
   it('forgets a peer on request, so closing a second tab clears the banner', () => {

@@ -27,6 +27,32 @@ export type TabMessage =
   | { readonly kind: 'PING'; readonly tabId: string }
   | { readonly kind: 'PONG'; readonly tabId: string; readonly replyingTo: string };
 
+const isTabId = (value: unknown): value is string => typeof value === 'string' && value !== '';
+
+/**
+ * READ A MESSAGE OFF THE CHANNEL, OR REFUSE IT. (`ADV-W5`)
+ *
+ * The handler used to CAST `event.data` to `TabMessage` and read `tabId` without checking it was there. So
+ * `{ kind: 'PING' }` had a `tabId` of `undefined`, `undefined !== 'tab-a'` was true, and the guard recorded a peer
+ * called `undefined`, answered it, and emitted `MULTI_TAB_DETECTED` -- a `VIOLATION` that counts as a strike under
+ * every policy.
+ *
+ * The channel is `orrery:attempt:<id>` and any script on the origin can post to it: another page of this app, a
+ * later feature that reuses the name, an extension's content script. None of them is a second exam session. So a
+ * message is evidence only if it NAMES a tab, and the guard below is handed a `TabMessage` or nothing -- there is no
+ * path on which it holds `unknown` and reads a field.
+ *
+ * It returns a fresh object rather than the one received, so nothing the sender attached travels any further.
+ */
+export const parseTabMessage = (data: unknown): TabMessage | null => {
+  if (typeof data !== 'object' || data === null) return null;
+  const { kind, tabId, replyingTo } = data as Readonly<Record<string, unknown>>;
+  if (!isTabId(tabId)) return null;
+  if (kind === 'PING') return { kind, tabId };
+  if (kind === 'PONG' && isTabId(replyingTo)) return { kind, tabId, replyingTo };
+  return null;
+};
+
 export class TabGuard extends Watchdog {
   private readonly channel: TabChannel;
   private readonly tabId: string;
@@ -56,10 +82,11 @@ export class TabGuard extends Watchdog {
   }
 
   private readonly onMessage = (event: { data: unknown }): void => {
-    const message = event.data as TabMessage | null;
-    if (message === null || typeof message !== 'object') return;
+    const message = parseTabMessage(event.data);
+    // Unreadable, or this tab hearing itself: `BroadcastChannel` does not echo, and a polyfill or a relay might.
+    if (message === null || message.tabId === this.tabId) return;
 
-    if (message.kind === 'PING' && message.tabId !== this.tabId) {
+    if (message.kind === 'PING') {
       // A live tab is asking. Answer, and note it as a peer.
       this.peers.add(message.tabId);
       this.channel.postMessage({
@@ -71,11 +98,7 @@ export class TabGuard extends Watchdog {
       return;
     }
 
-    if (
-      message.kind === 'PONG' &&
-      message.replyingTo === this.tabId &&
-      message.tabId !== this.tabId
-    ) {
+    if (message.replyingTo === this.tabId) {
       // A live tab answered US. That is the detection, and it is the only detection.
       this.peers.add(message.tabId);
       this.announce(message.tabId);

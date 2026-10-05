@@ -7,8 +7,9 @@
  *
  * Two tabs on one attempt is a data-loss bug, not a UX papercut. Both tabs hold a revision; both answer question 3;
  * whichever save lands second is a `409` or, worse, a silent overwrite if both were working from the same
- * revision. `plans/09` §4 offers `multiTabPolicy: 'WARN' | 'BLOCK'`, and the difference between them is not how
- * polite the warning is -- it is **whether the second tab may write at all**.
+ * revision. `plans/09` §4 offers `multiTabPolicy: 'WARN' | 'BLOCK'`, and **under neither may the second tab
+ * write**: they differ in what it is told. (This paragraph used to say they differ in "whether the second tab may
+ * write at all", which the code never did -- see `FOLLOWER_MAY`.)
  *
  * So the coordination state here answers one question: may THIS tab write? And the answer is derived, never
  * asserted by a caller, because a caller that decides for itself is how two writers happen.
@@ -129,27 +130,90 @@ export const leaderOf = (state: CoordinationState): TabIdentity | null =>
  * MAY THIS TAB WRITE?
  *
  * The single question this module exists to answer, and it is asked of the CALLER rather than answered by the
- * caller. Three outcomes, and the third is the one `plans/09`'s `BLOCK` exists for:
+ * caller. Three outcomes:
  *
- * - `null` -- this tab leads. Write.
- * - `'ONLY_ONE_TAB'` -- another tab leads and the policy is `BLOCK`, so this tab may read but not write.
- * - `'ANOTHER_TAB_OPEN'` -- another tab leads and the policy is `WARN`, so this tab may write and the student is
- *   told.
+ * - `{ mayWrite: true }` -- this tab leads, or nothing live does. Write.
+ * - `'ONLY_ONE_TAB'` -- another tab leads and the policy is `BLOCK`. This tab may read but not write.
+ * - `'ANOTHER_TAB_OPEN'` -- another tab leads and the policy is `WARN`. This tab may read but not write EITHER;
+ *   the word differs so the student can be told something different.
+ *
+ * This comment used to end "so this tab may write and the student is told", over code that returned
+ * `mayWrite: false`. See `FOLLOWER_MAY`.
  */
 export type WritePermission =
   | { readonly mayWrite: true }
   | { readonly mayWrite: false; readonly because: 'ONLY_ONE_TAB' | 'ANOTHER_TAB_OPEN' };
 
-export const writePermission = (state: CoordinationState, selfTabId: string): WritePermission => {
-  const leader = leaderOf(state);
+/**
+ * WHAT A TAB THAT DOES NOT LEAD MAY DO, PER POLICY -- AND THE ONLY PLACE IN THIS MODULE THAT READS THE POLICY.
+ *
+ * ## THE RULE WAS WRITTEN TWICE, AND THE TWO COPIES DISAGREED (`ADV-W4`)
+ *
+ * `writePermission` refused a follower under both policies. `secondTabWarning` computed `thisTabMayWrite` for
+ * itself, as `policy !== 'BLOCK'` -- so under `WARN` the banner told a student this tab could save, and every save
+ * from it was refused. The student is the one who found out. It is `PF-8`'s defect over again: one rule, two
+ * implementations, and a comment on each claiming the other's behaviour.
+ *
+ * So there is one table and one function that reads it. `Record<TabPolicy, …>` makes a policy value with no row a
+ * compile error, and neither `writePermission` nor `secondTabWarning` is in a position to consult the policy: both
+ * are projections of a `TabStanding`, which does not carry it.
+ *
+ * ## AND `WARN` REFUSES, WHICH IS A DECISION RECORDED HERE RATHER THAN MADE HERE
+ *
+ * One writer per attempt is the invariant this file is named for; a `WARN` row saying `mayWrite: true` would be two
+ * writers with a toast. It does leave the two policies differing only in the word a follower is given, which is the
+ * smell `PF-8` names -- two terms for one behaviour -- and what `WARN` should MEAN is `plans/09` §4's to settle. If
+ * it is settled the other way, it is this row that changes and the banner follows without being touched.
+ */
+const FOLLOWER_MAY: Readonly<Record<TabPolicy, WritePermission>> = {
+  WARN: { mayWrite: false, because: 'ANOTHER_TAB_OPEN' },
+  BLOCK: { mayWrite: false, because: 'ONLY_ONE_TAB' },
+};
+
+/** Where one tab stands among the live ones. Everything said to a student about tabs is read off this. */
+export interface TabStanding {
+  /** True when a live tab OTHER than this one leads. */
+  readonly follows: boolean;
+  /** Live tabs other than this one. */
+  readonly otherTabs: number;
+  readonly permission: WritePermission;
+}
+
+/** THE ONE RULE. `writePermission` and `secondTabWarning` are both this, looked at from two sides. */
+export const tabStanding = (state: CoordinationState, selfTabId: string): TabStanding => {
+  const live = liveTabsInElectionOrder(state);
+  const leader = live[0] ?? null;
+  const otherTabs = live.filter((tab) => tab.tabId !== selfTabId).length;
   // No live tab at all -- which happens when every tab has gone stale, including this one. Writing is allowed,
   // because refusing would lock a student out of their own paper.
-  if (leader === null) return { mayWrite: true };
-  if (leader.tabId === selfTabId) return { mayWrite: true };
-  return state.policy === 'BLOCK'
-    ? { mayWrite: false, because: 'ONLY_ONE_TAB' }
-    : { mayWrite: false, because: 'ANOTHER_TAB_OPEN' };
+  if (leader === null || leader.tabId === selfTabId) {
+    return { follows: false, otherTabs, permission: { mayWrite: true } };
+  }
+  return { follows: true, otherTabs, permission: FOLLOWER_MAY[state.policy] };
 };
+
+const permissionOf = (standing: TabStanding): WritePermission => standing.permission;
+
+/** The banner's shape. `thisTabMayWrite` is `WritePermission`'s own member, not a boolean of the same name. */
+export interface SecondTabWarning {
+  readonly because: 'ANOTHER_TAB_OPEN';
+  readonly otherTabs: number;
+  readonly thisTabMayWrite: WritePermission['mayWrite'];
+}
+
+// Deliberately handed a `TabStanding` and nothing else: with no `CoordinationState` in scope there is no policy to
+// read, so what the banner says about writing can only be what the store will be told.
+const warningOf = (standing: TabStanding): SecondTabWarning | null =>
+  standing.follows
+    ? {
+        because: 'ANOTHER_TAB_OPEN',
+        otherTabs: standing.otherTabs,
+        thisTabMayWrite: permissionOf(standing).mayWrite,
+      }
+    : null;
+
+export const writePermission = (state: CoordinationState, selfTabId: string): WritePermission =>
+  permissionOf(tabStanding(state, selfTabId));
 
 /** THE EVENT, which is one tab telling the others something. Everything the transport carries is one of these. */
 export type CoordinationEvent =
@@ -252,24 +316,10 @@ export const applyCoordinationEvent = (
 /**
  * THE SECOND-TAB WARNING, or `null` when there is nothing to warn about.
  *
- * Only returned for a tab that is a FOLLOWER with a LIVE leader other than itself, and the message differs by
- * policy because the two policies mean different things to a student: `WARN` says "your other tab may overwrite
- * this", `BLOCK` says "this tab cannot save".
+ * Only returned for a tab with a LIVE leader other than itself. What it says about writing is `writePermission`'s
+ * answer and cannot be anything else -- see `warningOf`.
  */
 export const secondTabWarning = (
   state: CoordinationState,
   selfTabId: string,
-): {
-  readonly because: 'ANOTHER_TAB_OPEN';
-  readonly otherTabs: number;
-  readonly thisTabMayWrite: boolean;
-} | null => {
-  const live = liveTabsInElectionOrder(state).filter((tab) => tab.tabId !== selfTabId);
-  if (live.length === 0) return null;
-  if (leaderOf(state)?.tabId === selfTabId) return null;
-  return {
-    because: 'ANOTHER_TAB_OPEN',
-    otherTabs: live.length,
-    thisTabMayWrite: state.policy !== 'BLOCK',
-  };
-};
+): SecondTabWarning | null => warningOf(tabStanding(state, selfTabId));

@@ -184,7 +184,18 @@ describe('a stale tab neither leads nor blocks, and that is the part usually lef
   });
 });
 
-describe('the two policies differ in whether a second tab may WRITE, not in politeness', () => {
+/**
+ * THE TITLE WAS WRONG AND WAS WRONG ABOUT THE CODE.
+ *
+ * It read "the two policies differ in whether a second tab may WRITE, not in politeness". **They never differed in
+ * that**: `writePermission` refused a follower under BOTH policies, which is what the property "exactly one live tab
+ * able to write" requires. The policy changes only the `because` string.
+ *
+ * So this is PF-8 again -- "two names for one behaviour" -- except here the *test* asserted the difference the title
+ * promised while the code contradicted it, and the next test in the file pinned the contradiction as expected
+ * behaviour. Both are corrected here.
+ */
+describe('both policies refuse a second tab from writing, and differ only in the reason given', () => {
   it('lets the leader write under both policies', () => {
     for (const policy of ['WARN', 'BLOCK'] as const) {
       expect(writePermission(state([self('a', AT), self('b', AT + 10)], policy), 'a')).toEqual({
@@ -202,13 +213,25 @@ describe('the two policies differ in whether a second tab may WRITE, not in poli
     });
   });
 
-  it('still refuses the second tab under `WARN`, but says why differently', () => {
+  it('still refuses the second tab under `WARN`, and now the BANNER AGREES (ADV-W4)', () => {
     const s = state([self('a', AT), self('b', AT + 10)], 'WARN');
     expect(writePermission(s, 'b')).toEqual({ mayWrite: false, because: 'ANOTHER_TAB_OPEN' });
+    /**
+     * `thisTabMayWrite: false`, AND IT WAS `true`.
+     *
+     * This test **documented ADV-W4**: the assertion above says the follower may not write, and this one said the
+     * banner tells that same follower it may. `'b'` is self and `'a'` is the other, so `thisTabMayWrite` describes the
+     * FOLLOWER -- and the store refused it. A student on the second tab was shown "you can keep writing" and every
+     * write was refused, which is the same sentence that has to be true and false at once.
+     *
+     * So no implementation could ever have satisfied this file: the two lines are the defect. They are not a test that
+     * was wrong about the intent -- the `it` title already said "still refuses the second tab under WARN", so the
+     * intent was refusal and the assertion contradicted its own title.
+     */
     expect(secondTabWarning(s, 'b')).toEqual({
       because: 'ANOTHER_TAB_OPEN',
       otherTabs: 1,
-      thisTabMayWrite: true,
+      thisTabMayWrite: false,
     });
   });
 
@@ -220,10 +243,12 @@ describe('the two policies differ in whether a second tab may WRITE, not in poli
 
   it('counts the OTHER live tabs, so a third tab gets the right number', () => {
     const s = state([self('a', AT), self('b', AT + 10), self('c', AT + 20)]);
+    // `'a'` is the leader (lowest `openedAt`), so `'c'` is a follower and the banner must say so. Same `true` as
+    // above, same reason.
     expect(secondTabWarning(s, 'c')).toEqual({
       because: 'ANOTHER_TAB_OPEN',
       otherTabs: 2,
-      thisTabMayWrite: true,
+      thisTabMayWrite: false,
     });
   });
 });
