@@ -15,7 +15,8 @@
   "dependencies": {
     "@orrery/clock": "workspace:*",
     "@orrery/config": "workspace:*",
-    "@orrery/db": "workspace:*"
+    "@orrery/db": "workspace:*",
+    "inngest": "4.21.1"
   },
   "devDependencies": {
     "@orrery/db": "workspace:*"

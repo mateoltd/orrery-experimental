@@ -210,3 +210,52 @@ describe('envShape never leaks a secret', () => {
     expect(shape.DATABASE_URL).toContain('postgresql');
   });
 });
+
+/**
+ * The worker's two settings, tested separately from the rest because their DEFAULTS encode two decisions
+ * that are easy to get wrong silently: a port that collides with the Inngest dev server, and a drain grace
+ * longer than the platform's kill deadline.
+ */
+describe('worker settings', () => {
+  it('defaults the Inngest port clear of every port the Inngest dev server binds', () => {
+    const r = parseEnv(good);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.env.WORKER_INNGEST_PORT).toBe(8380);
+    // Measured from `inngest-cli dev`: 8288 is its API, 8289 its second listener, 50052/50053 its gRPC.
+    for (const taken of [8288, 8289, 50_052, 50_053]) {
+      expect(r.env.WORKER_INNGEST_PORT).not.toBe(taken);
+    }
+  });
+
+  it('defaults the shutdown grace below a 30 s platform kill deadline', () => {
+    const r = parseEnv(good);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.env.WORKER_SHUTDOWN_GRACE_MS).toBe(25_000);
+    // A grace longer than the deadline it is supposed to fit inside is indistinguishable from "wait forever".
+    expect(r.env.WORKER_SHUTDOWN_GRACE_MS).toBeLessThan(30_000);
+  });
+
+  it('refuses a port that is not a port', () => {
+    for (const port of ['0', '70000', 'eighty']) {
+      const r = parseEnv({ ...good, WORKER_INNGEST_PORT: port });
+      expect(r.ok, `${port} must be refused`).toBe(false);
+    }
+  });
+
+  it('refuses a zero or negative grace, because "abandon immediately" is not a configuration', () => {
+    for (const grace of ['0', '-1']) {
+      const r = parseEnv({ ...good, WORKER_SHUTDOWN_GRACE_MS: grace });
+      expect(r.ok, `${grace} must be refused`).toBe(false);
+    }
+  });
+
+  it('coerces a numeric string, because an env var is always a string', () => {
+    const r = parseEnv({ ...good, WORKER_INNGEST_PORT: '9001', WORKER_SHUTDOWN_GRACE_MS: '5000' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.env.WORKER_INNGEST_PORT).toBe(9001);
+    expect(r.env.WORKER_SHUTDOWN_GRACE_MS).toBe(5000);
+  });
+});

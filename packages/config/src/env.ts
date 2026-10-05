@@ -86,6 +86,27 @@ const schema = z
     DEFAULT_LOCALE: z.string().min(2).default('en-GB'),
     SUPPORT_EMAIL: z.string().includes('@'),
     TARGET_CONCURRENT_EXAM_TAKERS: z.coerce.number().int().positive().default(150),
+
+    // ── worker ──────────────────────────────────────────────────────────────────
+    /**
+     * The port the worker's Inngest endpoint is served on.
+     *
+     * **8380, AND NOT ANYWHERE NEAR 8288/8289 — BOTH OF THOSE ARE THE INNGEST DEV SERVER'S.** Measured by running
+     * `inngest-cli dev` and listing its listeners: `*:8288` (API and dashboard), `*:8289` (its secondary listener),
+     * `*:50052` and `*:50053` (gRPC). A first draft of this file used 8289 and the worker refused to boot with
+     * `EADDRINUSE` against the dev server it was meant to be talking to — a failure that reads like a misconfiguration of
+     * the wrong process, and that the person debugging it has no reason to connect to the other process's defaults.
+     */
+    WORKER_INNGEST_PORT: z.coerce.number().int().min(1).max(65_535).default(8380),
+    /**
+     * How long the worker may spend finishing in-flight work after `SIGTERM`, before it abandons it deliberately.
+     *
+     * **A GRACE LONGER THAN THE PLATFORM'S KILL DEADLINE IS A LIE.** Kubernetes' default `terminationGracePeriodSeconds`
+     * is 30 s; 25 s leaves five seconds to actually exit. The ceiling exists because a value above the platform's own
+     * deadline is indistinguishable from "wait forever" until a release transaction is killed mid-commit — and a release
+     * transaction killed mid-commit is the failure this whole process exists to prevent.
+     */
+    WORKER_SHUTDOWN_GRACE_MS: z.coerce.number().int().positive().max(120_000).default(25_000),
   })
   .superRefine((v, ctx) => {
     if (v.EMAIL_PROVIDER === 'smtp' && !v.SMTP_URL) {
