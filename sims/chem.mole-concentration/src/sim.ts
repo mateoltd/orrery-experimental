@@ -20,7 +20,15 @@ const SIM_ID = 'chem.mole-concentration';
 const SIM_VERSION = '1.0.0';
 const PANEL = 190;
 
-const CAPABILITIES: SimCapabilities = { grading: true };
+const CAPABILITIES: SimCapabilities = {
+  state: true,
+  grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
+  stepper: false,
+  scenarios: [],
+};
 
 const PARAM_SPECS = {
   buretteCm: num({
@@ -29,6 +37,7 @@ const PARAM_SPECS = {
     unit: 'cm',
     min: 0,
     max: 50,
+    step: 0.1,
     default: 23.4,
   }),
   flaskMl: num({
@@ -37,6 +46,7 @@ const PARAM_SPECS = {
     unit: 'mL',
     min: 1,
     max: 1000,
+    step: 1,
     default: 250,
   }),
 };

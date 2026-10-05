@@ -20,7 +20,15 @@ import { type BalanceParams, describeEquation, GIVEN } from './model.js';
 const SIM_ID = 'chemistry.equation-balancing';
 const SIM_VERSION = '1.0.0';
 
-const CAPABILITIES: SimCapabilities = { grading: true };
+const CAPABILITIES: SimCapabilities = {
+  state: true,
+  grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
+  stepper: false,
+  scenarios: [],
+};
 
 export function startSim(
   document_: Document,

@@ -25,7 +25,15 @@ const SIM_ID = 'computing.binary-search';
 const SIM_VERSION = '1.0.0';
 const PANEL = 220;
 
-const CAPABILITIES: SimCapabilities = { grading: true, stepper: true };
+const CAPABILITIES: SimCapabilities = {
+  state: true,
+  grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
+  stepper: true,
+  scenarios: [],
+};
 
 /**
  * BUILT WITH `num()`, LIKE EVERY OTHER SIMULATION.

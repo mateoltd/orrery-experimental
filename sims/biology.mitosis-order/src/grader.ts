@@ -11,7 +11,7 @@ export default defineSim({
     title: 'Ordering the stages of cell division',
     version: '1.0.0',
     subjects: ['biology'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -47,7 +47,7 @@ export default defineSim({
     if (given === null || given.length === 0) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'UNPARSEABLE',
         feedback: 'Submit the stages in order, starting from the top of the list.',
       };
@@ -59,7 +59,7 @@ export default defineSim({
     const right = correctPositions(given, expected.length);
     return {
       points: judged.points,
-      max: 4,
+      maxPoints: 4,
       code: right === expected.length ? 'CORRECT' : right > 0 ? 'PARTIAL' : 'WRONG',
       feedback:
         right === expected.length

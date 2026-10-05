@@ -6,6 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import sim, { type LineAnswer } from '../src/grader.js';
+import type { LineParams } from '../src/model.js';
 
 // `defineSim` returns `{ grader, browser }`, so the grading half is on `.grader`. Importing the default and
 // calling `grade` on it directly fails with "default.grade is not a function", which is the shape every
@@ -14,7 +15,7 @@ import sim, { type LineAnswer } from '../src/grader.js';
 // The parameters the SIM was given, not a tolerance: `grade(state, params, answer)` has no tolerance
 // argument, because the tolerance belongs to the simulation rather than to the caller. See the note on
 // `TOLERANCE` in the grader.
-const params = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+const params = (over: Partial<LineParams> = {}): LineParams => ({
   m: 2,
   c: -4,
   span: 5,

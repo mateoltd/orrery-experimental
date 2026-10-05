@@ -51,7 +51,15 @@ const SIM_ID = 'maths.coordinate-geometry';
 const SIM_VERSION = '1.0.0';
 const SIZE = 380;
 
-const CAPABILITIES: SimCapabilities = { grading: true, stepper: false, scenarios: [] };
+const CAPABILITIES: SimCapabilities = {
+  state: true,
+  grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
+  stepper: false,
+  scenarios: [],
+};
 
 const PARAM_SPECS = {
   x1: num({ name: 'x1', label: 'first x', unit: '', min: -10, max: 10, default: -6 }),

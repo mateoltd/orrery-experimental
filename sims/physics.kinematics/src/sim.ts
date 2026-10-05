@@ -33,7 +33,11 @@ const PANEL = 200;
 
 /** Declared because it is TRUE: the host chooses the situation, and the answers differ. */
 const CAPABILITIES: SimCapabilities = {
+  state: true,
   grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
   stepper: false,
   scenarios: SCENARIOS.map((scenario) => scenario.name),
 };

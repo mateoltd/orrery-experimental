@@ -11,7 +11,7 @@ export default defineSim({
     title: 'Counting binary search comparisons',
     version: '1.0.0',
     subjects: ['computing'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -48,7 +48,7 @@ export default defineSim({
     if (blank || !Number.isFinite(given) || !Number.isInteger(given)) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'UNPARSEABLE',
         feedback: 'Enter the number of comparisons, as a whole number.',
       };
@@ -64,7 +64,7 @@ export default defineSim({
     });
     return {
       points: judged.points,
-      max: 4,
+      maxPoints: 4,
       code: judged.points === 4 ? 'CORRECT' : 'WRONG',
       feedback:
         judged.points === 4

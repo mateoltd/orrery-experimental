@@ -32,7 +32,15 @@ const SIM_ID = 'chem.ideal-gas-law';
 const SIM_VERSION = '1.0.0';
 const PANEL = 240;
 
-const CAPABILITIES: SimCapabilities = { grading: true, stepper: false, scenarios: [] };
+const CAPABILITIES: SimCapabilities = {
+  state: true,
+  grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
+  stepper: false,
+  scenarios: [],
+};
 
 const PARAM_SPECS = {
   p: num({ name: 'p', label: 'Pressure', unit: 'kPa', min: 50, max: 300, default: 101.3 }),

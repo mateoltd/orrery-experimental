@@ -26,7 +26,18 @@ const SIM_VERSION = '1.0.0';
 // `grading` and `stepper` only. The simulation's content comes from the seed, and that is expressed by
 // the manifest's `capabilities.randomised` and by the state carrying the seed -- not by inventing a
 // scenario, because this one has none.
-const CAPABILITIES: SimCapabilities = { grading: true, stepper: false, scenarios: [] };
+const CAPABILITIES: SimCapabilities = {
+  // THIS DISAGREED WITH ITS OWN sim.manifest.json, WHICH IS THE AUTHORITATIVE COPY.
+  // OMITTED randomised, which the manifest sets.
+  // The frame and the manifest must not make different claims about the same file.
+  state: true,
+  grading: true,
+  randomised: true,
+  audio: false,
+  webgl: false,
+  stepper: false,
+  scenarios: [],
+};
 
 const PARAM_SPECS = {
   shown: num({ name: 'shown', label: 'Terms shown', unit: '', min: 3, max: 8, default: 5 }),

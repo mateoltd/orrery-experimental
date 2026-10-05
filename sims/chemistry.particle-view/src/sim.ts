@@ -61,6 +61,9 @@ const PANEL = 340;
 const CAPABILITIES: SimCapabilities = {
   state: true,
   grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
   stepper: false,
   scenarios: [],
 };
@@ -198,7 +201,7 @@ export function startSim(
   status.setAttribute('role', 'status');
   root.append(task, canvas, counter, alternative, status);
   describeControl(canvas, describeTask(params));
-  focusEntryPoint(document_, canvas);
+  focusEntryPoint(root, canvas);
   draw();
 
   /**
@@ -278,7 +281,7 @@ export function startSim(
         return;
       }
       if (name === 'focus') {
-        focusEntryPoint(document_, canvas);
+        focusEntryPoint(root, canvas);
         return;
       }
       if (name === 'play' || name === 'toggle') {

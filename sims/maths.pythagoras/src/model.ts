@@ -29,9 +29,24 @@ export type SideName = (typeof SIDE_NAMES)[number];
 export const isSideName = (value: unknown): value is SideName =>
   typeof value === 'string' && (SIDE_NAMES as readonly string[]).includes(value);
 
+/**
+ * The VERTEX a right angle sits at, which is `'a' | 'b' | 'c'`.
+ *
+ * **THIS IS NOT `SideName`, AND CONFUSING THE TWO WAS A REAL BUG.** `SideName` is the vocabulary a
+ * STUDENT uses to name a side (`opposite` / `adjacent` / `hypotenuse`), and `rightAngles` returned
+ * `angle: SideName` while pushing `'a'`, `'b'` and `'c'` — the vertex labels. The three pushes were
+ * type errors, and the drawing code that consumed the result tested `entry.angle === 'a'`, which can
+ * never be true of a `SideName`, so the right-angle marker was drawn at the `c` vertex for EVERY
+ * triangle: a 3-4-5 and a triangle right-angled at `a` were drawn identically.
+ *
+ * A vertex and a side name are different things that happen to be spelled differently in the diagram,
+ * so they get different types.
+ */
+export type VertexName = 'a' | 'b' | 'c';
+
 /** Every right angle that this triangle has. A non-triangle has none. */
-export function rightAngles(params: TriangleParams): Array<{ angle: SideName; degrees: number }> {
-  const angles: Array<{ angle: SideName; degrees: number }> = [];
+export function rightAngles(params: TriangleParams): Array<{ angle: VertexName; degrees: number }> {
+  const angles: Array<{ angle: VertexName; degrees: number }> = [];
   if (isRightAngleAt(params, 'a')) angles.push({ angle: 'a', degrees: 90 });
   if (isRightAngleAt(params, 'b')) angles.push({ angle: 'b', degrees: 90 });
   if (isRightAngleAt(params, 'c')) angles.push({ angle: 'c', degrees: 90 });
@@ -115,11 +130,18 @@ export function parseAnswer(answer: unknown): Set<string> {
 
 /** The sides that are longest, longest-but-one, and shortest. A tie shares the places. */
 export function order(params: TriangleParams): { longest: Set<string>; shortest: Set<string> } {
-  const entries: Array<[string, number]> = [
+  // ANNOTATED BEFORE THE SORT, not after it. The `as Array<[string, number]>` used to sit on the RESULT
+  // of `.sort(...)`, so the comparator itself was checked against the un-annotated literal's inferred
+  // element type — `(string | number)[][]` — where `y[1] - x[1]` is an arithmetic operation on
+  // `string | number | undefined`. It happens to work because the numbers really are numbers, which is
+  // exactly the case a cast on the wrong side of the call is unable to notice. Annotating the ARRAY and
+  // then sorting it is what puts the comparator under the tuple type.
+  const sides: Array<[string, number]> = [
     ['a', params.a],
     ['b', params.b],
     ['c', params.c],
-  ].sort((x, y) => y[1] - x[1]) as Array<[string, number]>;
+  ];
+  const entries = sides.sort((x, y) => y[1] - x[1]);
   const longest = new Set<string>();
   const shortest = new Set<string>();
   const top = entries[0]?.[1] ?? 0;

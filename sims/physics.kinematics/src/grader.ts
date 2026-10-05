@@ -21,7 +21,7 @@ export default defineSim({
     title: 'Displacement under acceleration',
     version: '1.0.0',
     subjects: ['physics'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -58,7 +58,7 @@ export default defineSim({
     if (scenario === null) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'UNKNOWN_SCENARIO',
         feedback: `This simulation has no situation called ${JSON.stringify(params.scenario)}.`,
       };
@@ -73,7 +73,7 @@ export default defineSim({
     if (blank || !Number.isFinite(given)) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'UNPARSEABLE',
         feedback: 'Enter how far it has moved, in metres.',
       };
@@ -87,7 +87,7 @@ export default defineSim({
     });
     return {
       points: judged.points,
-      max: 4,
+      maxPoints: 4,
       code: judged.points === 4 ? 'CORRECT' : judged.points > 0 ? 'CLOSE' : 'WRONG',
       feedback:
         judged.points === 4

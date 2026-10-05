@@ -6,10 +6,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import sim from '../src/grader.js';
+import type { NewtonParams } from '../src/model.js';
 
 const grade = (
   answer: unknown,
-  params: Record<string, unknown> = { force: 12, mass: 3, accel: 4 },
+  params: NewtonParams = { force: 12, mass: 3, accel: 4, solveFor: 'acceleration' },
 ) => sim.grader.grade(null, params, answer);
 
 describe('physics.newtons-second-law grading', () => {
@@ -63,7 +64,10 @@ describe('physics.newtons-second-law grading', () => {
   });
 
   it('names the GIVENS in its feedback, so a wrong answer can be worked at', () => {
-    const result = grade({ quantity: 'acceleration', value: 40 }, { force: 12, mass: 3, accel: 4 });
+    const result = grade(
+      { quantity: 'acceleration', value: 40 },
+      { force: 12, mass: 3, accel: 4, solveFor: 'acceleration' },
+    );
     expect(result.feedback).toMatch(/net force of 12 newtons/u);
     expect(result.feedback).toMatch(/mass of 3 kilograms/u);
   });

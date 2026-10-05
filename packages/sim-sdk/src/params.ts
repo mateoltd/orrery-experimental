@@ -32,6 +32,22 @@ export type ParamType = 'number' | 'integer' | 'boolean' | 'string' | 'enum';
  * whose param has no label, because there the label is the thing being checked.
  */
 export interface ParamSpecBase {
+  /**
+   * The parameter's own name, which the record key already says.
+   *
+   * Every simulation writes it — `x1: num({ name: 'x1', … })` — and nothing in the SDK, the registry
+   * or the manifest reads it: `sim-registry/src/index.ts:162` takes the name from the manifest's key,
+   * and `clampParams` iterates `Object.entries(specs)` for the same reason. So this field is
+   * DECLARATION TEXT, in the same family as `description` and `unit`: it is here so the declaration
+   * reads as a complete specification at the point of writing.
+   *
+   * **BECAUSE IT DUPLICATES THE KEY IT IS CHECKED AGAINST IT.** `validateParamSpecs` refuses a `name`
+   * that disagrees with the key it was declared under. A duplicate of a value that is already stored
+   * elsewhere is a drift trap the moment anything starts reading it — and the failure mode is a
+   * parameter editor labelled with one name while the grader reads another — so it is either in step or
+   * it is a load-time error.
+   */
+  readonly name?: string;
   readonly label?: string;
   readonly description?: string;
   readonly unit?: string;
@@ -98,8 +114,25 @@ export const str = (spec: Omit<StringParamSpec, 'type'>): StringParamSpec => ({
   type: 'string',
 });
 
+/**
+ * `choice({ values: [25_000, 50_000, 250_000], default: 50_000 })` — and the numbers are the point.
+ *
+ * ## THIS SIGNATURE WAS `readonly string[]`, WHICH CONTRADICTED THE TYPE IT RETURNS
+ *
+ * `EnumParamSpec.values` has been `readonly (string | number)[]` since a map scale forced the question,
+ * and `clampParams` has a branch built for exactly this case: a manifest can only carry STRING enum
+ * values (`schemas/sim.manifest.schema.json`, `enumValues: {items: {type: "string"}}`), so a host
+ * configuring a numeric enum can only put `'250000'` on the wire, and `clampParams` recognises it as
+ * the number 250000 rather than falling back to the default.
+ *
+ * So the SDK could *handle* numeric enums but `choice()` *declared* that it would not accept one.
+ * `geography.map-scale-distance` — the very simulation the branch was written for — declared
+ * `values: [25_000, 50_000, 250_000]` and did not typecheck, while `EnumParamSpec` claimed it was fine.
+ * A helper's parameter type is a promise about what its callers may write, and this one was lying in
+ * the direction that left the documented feature unreachable from the type system.
+ */
 export const choice = (
-  spec: Omit<EnumParamSpec, 'type' | 'values'> & { readonly values: readonly string[] },
+  spec: Omit<EnumParamSpec, 'type' | 'values'> & { readonly values: readonly (string | number)[] },
 ): EnumParamSpec => ({ ...spec, type: 'enum' });
 
 /** `{ speed: 25, angle: 45 }` — `string | number | boolean` because that is what a JSON value is. */
@@ -127,6 +160,17 @@ export function validateParamSpecs(specs: Record<string, ParamSpec>): ParamProbl
         name,
         code: 'PARAM_INVALID',
         message: 'a parameter with a blank label cannot be rendered',
+      });
+    }
+    // THE DECLARED `name` IS CHECKED AGAINST THE KEY, because a second spelling of a value that is
+    // already stored cannot be left unchecked. `x1: num({ name: 'x2' })` typechecks perfectly and
+    // reads correctly in a diff, so nothing else would ever catch it — and the first thing to read
+    // `spec.name` rather than the key would then disagree with the manifest.
+    if (spec.name !== undefined && spec.name !== name) {
+      out.push({
+        name,
+        code: 'PARAM_INVALID',
+        message: `declared name "${spec.name}" disagrees with the key it is declared under, "${name}"`,
       });
     }
     if (spec.type === 'number' || spec.type === 'integer') {

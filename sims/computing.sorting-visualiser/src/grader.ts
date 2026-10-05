@@ -36,7 +36,7 @@ export default defineSim({
     title: 'How many comparisons?',
     version: '1.0.0',
     subjects: ['computing'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -74,7 +74,7 @@ export default defineSim({
     if (answer === null || answer === undefined || String(answer).trim() === '') {
       return {
         points: 0,
-        max: MAX,
+        maxPoints: MAX,
         code: 'MISSING',
         feedback: `Type how many comparisons the sort makes before it stops. ${task}`,
       };
@@ -84,7 +84,7 @@ export default defineSim({
     if (!Number.isFinite(given)) {
       return {
         points: 0,
-        max: MAX,
+        maxPoints: MAX,
         code: 'UNPARSEABLE',
         feedback: `Type a single whole number — a count of comparisons, not a list. ${task}`,
       };
@@ -103,7 +103,7 @@ export default defineSim({
     if (Math.abs(given - expected) <= SLACK) {
       return {
         points: MAX,
-        max: MAX,
+        maxPoints: MAX,
         code: 'CORRECT',
         feedback:
           `Correct: ${String(expected)} comparisons, over ${String(end.passes)} ` +
@@ -125,7 +125,7 @@ export default defineSim({
     if (Math.abs(given - worst) <= SLACK && expected !== worst) {
       return {
         points: MAX / 2,
-        max: MAX,
+        maxPoints: MAX,
         code: 'WORST_CASE',
         feedback:
           `You used n(n-1)/2 = ${String(worst)}, which is the count for a list in REVERSE order, where ` +
@@ -155,7 +155,7 @@ export default defineSim({
      */
     return {
       points: 0,
-      max: MAX,
+      maxPoints: MAX,
       code: 'WRONG',
       feedback:
         `You said ${format(given)}. ${describeList(params)} It takes ${String(expected)} comparisons, ` +

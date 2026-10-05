@@ -27,11 +27,32 @@ import {
   simulate,
 } from './model.js';
 
+/**
+ * THE PARAMETER DECLARATION, and there is exactly one of it.
+ *
+ * It used to be written twice -- inline in the `params` field and again as a module-level `PARAMS` at the
+ * bottom of this file -- which is two answers to one question. Worse, the second sat BELOW the
+ * `defineSim(...)` call, so any reference to it from the declaration would have been a temporal dead zone
+ * error at module evaluation rather than something an author would see while typing.
+ */
+const PARAMS = { value: num({ min: 0, max: 100, default: 10, unit: 'm' }) };
+
 export default defineSim({
-  meta: { id: 'SUBJECT.slug', title: 'SUBJECT Title', version: '0.1.0', subjects: ['maths'] },
-  params: { value: num({ min: 0, max: 100, default: 10, unit: 'm' }) },
+  meta: {
+    id: 'SUBJECT.slug',
+    title: 'SUBJECT Title',
+    version: '0.1.0',
+    subjects: ['maths'],
+    licence: 'CC-BY-4.0',
+    provenance: 'ORIGINAL',
+    protocol: 1,
+  },
+  params: PARAMS,
   controls: { stepper: false, scenarios: [], maxTime: MAX_TIME },
   accessibility: {
+    keyboard: true,
+    screenReaderSummary: 'REPLACE: what a screen reader says when this simulation loads.',
+    reducedMotion: true,
     textAlternative:
       'REPLACE: the numbers this sentence quotes, which must match what the sim displays.',
     summary: 'REPLACE: one or two sentences for the catalogue and for a screen reader.',
@@ -49,12 +70,12 @@ export default defineSim({
     });
   },
 
-  render: (ctx: RenderContext<ModelState>) => {
-    const root = document.querySelector('.orrery-sim');
+  render: (ctx: RenderContext<ModelParams, ModelState>) => {
+    const root = document.querySelector<HTMLElement>('.orrery-sim');
     if (root === null) return;
     // Params arrive from the host and are attacker-controlled in the same way any request body is.
     // `clampParams` is the only place they are trusted.
-    const { values, coerced } = clampParams(PARAMS, ctx.params as ParamValues);
+    const { values, coerced } = clampParams(PARAMS, ctx.params as unknown as Partial<ParamValues>);
     const params = values as unknown as ModelParams;
     const point = simulate(params, initialState(), ctx.t);
 
@@ -76,8 +97,8 @@ export default defineSim({
     void coerced;
   },
 
-  mount: (ctx: RenderContext<ModelState>) => {
-    const root = document.querySelector('.orrery-sim');
+  mount: (ctx: RenderContext<ModelParams, ModelState>) => {
+    const root = document.querySelector<HTMLElement>('.orrery-sim');
     if (root === null) return;
     const canvas = root.querySelector<HTMLCanvasElement>('canvas');
     if (canvas !== null) {
@@ -86,15 +107,13 @@ export default defineSim({
       canvas.setAttribute('data-sim-entry', '');
       canvas.setAttribute('role', 'img');
       canvas.setAttribute('aria-label', 'A graph of value against time');
-      draw(canvas, ctx.params as ParamValues);
+      draw(canvas, ctx.params as unknown as Partial<ParamValues>);
     }
     focusEntryPoint(root);
   },
 });
 
-const PARAMS = { value: num({ min: 0, max: 100, default: 10, unit: 'm' }) };
-
-const draw = (canvas: HTMLCanvasElement, raw: ParamValues): void => {
+const draw = (canvas: HTMLCanvasElement, raw: Partial<ParamValues>): void => {
   const context = canvas.getContext('2d');
   if (context === null) return;
   const { values } = clampParams(PARAMS, raw);

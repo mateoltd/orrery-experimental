@@ -69,7 +69,7 @@ export default defineSim({
     title: 'Roots of a quadratic',
     version: '1.0.0',
     subjects: ['maths'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -98,14 +98,14 @@ export default defineSim({
       if (answer === null || answer === undefined) {
         return {
           points: 4,
-          max: 4,
+          maxPoints: 4,
           code: 'CORRECT_NO_ROOTS',
           feedback: `Correct. ${describeQuadratic(params)}`,
         };
       }
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'SHOULD_BE_NULL',
         feedback: `There are no real roots here, so leave both boxes empty. ${describeQuadratic(params)}`,
       };
@@ -115,7 +115,7 @@ export default defineSim({
     if (given === 'INVALID') {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'UNPARSEABLE',
         feedback: 'Enter one number per box, or leave both empty if there are no real roots.',
       };
@@ -123,7 +123,7 @@ export default defineSim({
     if (given === null) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'MISSING',
         feedback: `This one has real roots: ${expected.map((r) => format(r)).join(' and ')}.`,
       };
@@ -153,7 +153,7 @@ export default defineSim({
     );
     return {
       points,
-      max: 4,
+      maxPoints: 4,
       code: points === 4 ? 'CORRECT' : points > 0 ? 'PARTIAL' : 'WRONG',
       feedback:
         points === 4

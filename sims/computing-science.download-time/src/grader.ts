@@ -20,7 +20,7 @@ export default defineSim({
     title: 'How long does the download take?',
     version: '1.0.0',
     subjects: ['computing-science'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -64,7 +64,12 @@ export default defineSim({
       (typeof answer === 'string' && answer.trim() === '');
     const given = Number(answer);
     if (blank || !Number.isFinite(given)) {
-      return { points: 0, max: 4, code: 'UNPARSEABLE', feedback: 'Enter the time in seconds.' };
+      return {
+        points: 0,
+        maxPoints: 4,
+        code: 'UNPARSEABLE',
+        feedback: 'Enter the time in seconds.',
+      };
     }
     const exact = seconds(Number(params.sizeMb), Number(params.speedMbps));
     const expected = secondsRounded(Number(params.sizeMb), Number(params.speedMbps));
@@ -86,7 +91,7 @@ export default defineSim({
     const dividedBitsFromBytes = Math.round(exact / BITS_PER_BYTE);
     return {
       points: judged.points,
-      max: 4,
+      maxPoints: 4,
       code: judged.points === 4 ? 'CORRECT' : judged.points > 0 ? 'CLOSE' : 'WRONG',
       feedback:
         judged.points === 4

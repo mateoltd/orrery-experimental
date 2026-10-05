@@ -53,7 +53,7 @@ export default defineSim({
     title: 'Ideal gas law',
     version: '1.0.0',
     subjects: ['chemistry'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -80,7 +80,7 @@ export default defineSim({
     if (parsed === null) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'UNPARSEABLE',
         feedback: 'Enter a temperature in kelvin.',
       };
@@ -113,7 +113,7 @@ export default defineSim({
     if (kelvinJudged.points === 4) {
       return {
         points: 4,
-        max: 4,
+        maxPoints: 4,
         code: 'CORRECT',
         feedback: `Correct: ${describeGas(resolved)}`,
       };
@@ -121,7 +121,7 @@ export default defineSim({
     if (celsiusJudged.points > kelvinJudged.points) {
       return {
         points: celsiusJudged.points,
-        max: 4,
+        maxPoints: 4,
         code: 'CELSIUS',
         feedback:
           `You entered a Celsius reading. ${format(parsed.kelvin)} °C is ${format(asCelsius)} K, and the ` +
@@ -130,7 +130,7 @@ export default defineSim({
     }
     return {
       points: kelvinJudged.points,
-      max: 4,
+      maxPoints: 4,
       code: kelvinJudged.points > 0 ? 'CLOSE' : 'WRONG',
       feedback:
         `You said ${format(parsed.kelvin)} K. ${describeGas(resolved)} ` +

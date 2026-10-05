@@ -67,7 +67,7 @@ export default defineSim({
     title: 'Linear functions',
     version: '1.0.0',
     subjects: ['maths'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -95,7 +95,7 @@ export default defineSim({
     if (parsedAnswer === null) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'UNPARSEABLE',
         feedback: 'Enter a number for the x-intercept.',
       };
@@ -113,14 +113,14 @@ export default defineSim({
       if (parsedAnswer.xIntercept === null) {
         return {
           points: 4,
-          max: 4,
+          maxPoints: 4,
           code: 'CORRECT',
           feedback: `Correct: with a gradient of ${format(resolved.m)} the line is flat, so it never crosses the x-axis.`,
         };
       }
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'SHOULD_BE_NULL',
         feedback: `This line is flat (gradient ${format(resolved.m)}), so it never crosses the x-axis. Leave the answer empty.`,
       };
@@ -128,7 +128,7 @@ export default defineSim({
     if (parsedAnswer.xIntercept === null) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'MISSING',
         feedback: `This line does cross the x-axis, at x = ${format(expected)}.`,
       };
@@ -156,7 +156,7 @@ export default defineSim({
     });
     return {
       points: judged.points,
-      max: 4,
+      maxPoints: 4,
       code: judged.points === 4 ? 'CORRECT' : judged.points > 0 ? 'CLOSE' : 'WRONG',
       feedback:
         judged.points === 4

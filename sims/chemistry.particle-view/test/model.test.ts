@@ -46,6 +46,20 @@ import {
   WINDOW_STEPS,
 } from '../src/model.js';
 
+/**
+ * `validateState` is OPTIONAL on the grader half -- twenty-three of the twenty-four simulations declare
+ * one and a hypothetical twenty-fifth might not -- so calling it directly is a type error, not a hint.
+ *
+ * Resolving it through here makes the test say what it means: these cases are the EVIDENCE that this
+ * simulation supplies a validator, so a missing one has to fail the test rather than be asserted away with
+ * `!` at eighteen call sites.
+ */
+function validateState(state: unknown): string | null {
+  const validator = sim.grader.validateState;
+  if (validator === undefined) throw new Error('this simulation declares no validateState');
+  return validator(state);
+}
+
 const P: GasParams = { kelvin: 300, box: DEFAULT_BOX, particles: PARTICLES };
 const grade = (answer: unknown, params: GasParams = P) => sim.grader.grade(null, params, answer);
 
@@ -302,7 +316,7 @@ describe('clamping', () => {
 describe('the grader', () => {
   it('awards full marks for the rate the simulation reaches', () => {
     const result = grade(expectedRate(P));
-    expect(result.points).toBe(result.max);
+    expect(result.points).toBe(result.maxPoints);
   });
 
   it('takes the key from the model, so the question and the key cannot drift apart', () => {
@@ -325,8 +339,8 @@ describe('the grader', () => {
 
   it('gives full marks anywhere inside the band and nothing outside it', () => {
     const expected = expectedRate(P);
-    expect(grade(expected * (1 - BAND * 0.9)).points).toBe(grade(expected).max);
-    expect(grade(expected * (1 + BAND * 0.9)).points).toBe(grade(expected).max);
+    expect(grade(expected * (1 - BAND * 0.9)).points).toBe(grade(expected).maxPoints);
+    expect(grade(expected * (1 + BAND * 0.9)).points).toBe(grade(expected).maxPoints);
     expect(grade(expected * 3).points).toBe(0);
   });
 
@@ -353,7 +367,7 @@ describe('the grader', () => {
   it('grades the same answer correctly whatever seed the student was given', () => {
     const key = expectedRate(P);
     for (const seed of PROBE_SEEDS) {
-      expect(grade(settledRate(P, seed)).points).toBe(grade(key).max);
+      expect(grade(settledRate(P, seed)).points).toBe(grade(key).maxPoints);
     }
   });
 
@@ -368,22 +382,20 @@ describe('state validation', () => {
   it('accepts the states this simulation actually produces', () => {
     for (const step of [0, 1, WARMUP_STEPS, WARMUP_STEPS + WINDOW_STEPS]) {
       const state = runTo(P, KEY_SEED, step);
-      expect(
-        sim.grader.validateState({ step: state.step, collisions: state.collisions }),
-      ).toBeNull();
+      expect(validateState({ step: state.step, collisions: state.collisions })).toBeNull();
     }
   });
 
   it('rejects a fractional step, because a frame cannot be half-run', () => {
-    expect(sim.grader.validateState({ step: 1.5, collisions: 10 })).toMatch(/fractional/u);
+    expect(validateState({ step: 1.5, collisions: 10 })).toMatch(/fractional/u);
   });
 
   it('rejects a negative count, because collisions cannot be un-counted', () => {
-    expect(sim.grader.validateState({ step: 0, collisions: -1 })).toMatch(/negative/u);
+    expect(validateState({ step: 0, collisions: -1 })).toMatch(/negative/u);
   });
 
   it('rejects a state that is not an object at all', () => {
-    expect(sim.grader.validateState(null)).toMatch(/not an object/u);
-    expect(sim.grader.validateState('state')).toMatch(/not an object/u);
+    expect(validateState(null)).toMatch(/not an object/u);
+    expect(validateState('state')).toMatch(/not an object/u);
   });
 });

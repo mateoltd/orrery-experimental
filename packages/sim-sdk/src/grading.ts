@@ -2,11 +2,24 @@
  * Grading helpers. Pure, DOM-free, deterministic — and the reason a simulation can be an exam
  * question graded by a server.  (P6-T3)
  *
- * ## A GRADE IS POINTS AND A RATIONALE, NEVER A BOOLEAN
+ * ## A GRADE IS POINTS AND A REASON, NEVER JUST A BOOLEAN
  *
  * `boolean correct` throws away the partial credit that most real marks have, and the one thing a
  * teacher needs to explain a mark is the reason for it. So `correct` exists but is derived, and every
- * helper produces a `because` a teacher can put in a comment.
+ * helper produces a `feedback` a teacher can put in a comment.
+ *
+ * ## `code` AND `feedback` ARE THE TWO HALVES OF WHAT THE PRODUCT ACTUALLY READS
+ *
+ * `packages/contracts/src/grading/simulation.ts:229` (`readAward`) is the ONLY place the product
+ * builds a mark from a simulation's own return value, and it reads exactly three fields: `points`,
+ * `maxPoints` and `code`. `code` is the machine-readable half, because the host has to `switch` on it
+ * exhaustively; `feedback` is the prose half, because a student who lost a mark has to be told which
+ * part of their working was wrong.
+ *
+ * **This interface was missing `code`, so `readAward`'s `code` read was dead on arrival** -- it fell
+ * through to `typeof code === 'string' ? code : 'CORRECT'` (`simulation.ts:241`) and every simulation
+ * item reported `CORRECT` regardless of what the grader said. The field was added here because the
+ * consumer is in the repository and named it, not because a type was widened to make a check pass.
  *
  * ## EVERY COMPARISON IS SYMMETRIC, AND THAT IS THE POINT
  *
@@ -18,15 +31,69 @@
 
 export type GradingStrategy = 'EXACT' | 'TOLERANCE' | 'SET' | 'ORDER' | 'NUMERIC' | 'RUBRIC';
 
+/**
+ * THE CODES THE SDK ITSELF EMITS, which are the codes the product already knows.
+ *
+ * `packages/contracts/src/grading/index.ts:76-81` (`RATIONALE_CODES`) is the host's closed set, and
+ * every name here is one of its members -- so a grade produced by `tolerance` or `exact` needs no
+ * translation to be switched on by the host, and the fallback at `simulation.ts:241` is never reached.
+ *
+ * A SIM MAY DECLARE ITS OWN beyond these, and several do: `G_TEN` (used g=10 where the item wants
+ * 9.8), `CELSIUS`, `STEPS_NOT_SECONDS`. Those are per-item diagnoses that belong to the simulation's
+ * subject matter, so they are not collected here -- a central list of thirty domain diagnoses is a list
+ * nobody maintains. `code` is therefore `string`, and `readAward` is the place that decides what an
+ * unknown code means.
+ */
+export const GRADE_CODES = ['CORRECT', 'INCORRECT', 'PARTIAL', 'UNPARSEABLE', 'BLANK'] as const;
+export type GradeCode = (typeof GRADE_CODES)[number];
+
 export interface Grade {
   /** Points awarded, within `maxPoints`. Never negative, never above the maximum. */
   readonly points: number;
+  /**
+   * The ceiling. Named `maxPoints` and not `max` because that is what the product READS.
+   *
+   * `readAward` destructures `maxPoints` (`packages/contracts/src/grading/simulation.ts:229`) and
+   * refuses the whole return value when it is absent -- `unreadable("the grader returned
+   * maxPoints=undefined, so there is no range to read points=4 against")`. Every simulation grader
+   * emitted `max`, so **every simulation question was reaching that refusal and going to `NEEDS_HUMAN`**:
+   * not one wrong mark, but no mark computed at all. A field name is a wire format, and this one was
+   * on the wrong side of it.
+   */
   readonly maxPoints: number;
-  readonly correct: boolean;
-  /** What a teacher can paste into a comment. */
-  readonly rationale: string;
-  /** Which dimension decided it, for the item-analysis tools. */
-  readonly strategy: GradingStrategy;
+  /** The machine-readable diagnosis. The host switches on this; `feedback` is what it shows. */
+  /**
+   * **NOT `GradeCode`. DELIBERATELY, AND THIS IS THE WHOLE FINDING.**
+   *
+   * `GRADE_CODES` below reads like a closed taxonomy and is not one. Counting the literals the tree actually emits:
+   *
+   *     UNPARSEABLE 33 · INTERNAL 24 · CORRECT 24 · MISSING 9 · STATE_INVALID 7 · HANDSHAKE_FAILED 5 ·
+   *     WRONG 4 · PARAM_DEFAULT_INVALID 4 · … and ~18 single-use per-sim labels such as `G_TEN`,
+   *     `CELSIUS`, `HALF_SWING`, `MIDPOINT_INCOMPLETE`, `NOT_A_TRIANGLE`.
+   *
+   * **32 distinct strings, of which `GRADE_CODES` names five and the helpers emit none.** Narrowing this field to
+   * `GradeCode` was tried and **fails to compile at 41 sites** -- the sims emit `INTERNAL` and `MISSING`, which the union
+   * does not contain. So the union is a fiction, and `code: string` is the honest type even though it enforces nothing.
+   *
+   * **THE CONSEQUENCE, STATED SO IT IS NOT DISCOVERED BY `P11`:** nothing guarantees `code` is a closed set, so item
+   * analysis **cannot group by it as a classification**. What is missing is a split between a general classification and
+   * a simulation's own feedback label -- `G_TEN` is a label for one mark, not a category -- and deciding that is a
+   * change to the simulation contract, which `P6`/`P12` own. Recorded here rather than guessed at.
+   */
+  readonly code: string;
+  /** The sentence a student or a marker can act on. Written for them, not about the type system. */
+  readonly feedback: string;
+  /**
+   * DERIVED, so a hand-written grade is not asked to state it.
+   *
+   * It is `points >= maxPoints` (`grading.ts`'s own comment on `finish` calls it an equality on the
+   * CLAMPED points, so `4/4` and `4.0000001/4` agree). The SDK's helpers fill it; a grader that writes
+   * its own return value does not have to, and could get it wrong by restating a rule that already
+   * exists in one place. Nothing outside this package reads it.
+   */
+  readonly correct?: boolean;
+  /** Which helper decided it. Filled by the helpers; absent on a hand-written grade, whose `code` says. */
+  readonly strategy?: GradingStrategy;
 }
 
 export interface ToleranceSpec {
@@ -40,11 +107,27 @@ export interface ToleranceSpec {
   readonly partialCreditBand?: number;
 }
 
+/** The `code` for an outcome, from the points and the ceiling. The one place `correct` is decided. */
+const codeFor = (points: number, maxPoints: number): GradeCode =>
+  points >= maxPoints ? 'CORRECT' : points > 0 ? 'PARTIAL' : 'INCORRECT';
+
+/**
+ * `code` IS DERIVED HERE UNLESS A CALLER KNOWS SOMETHING THE POINTS CANNOT SAY.
+ *
+ * `codeFor` reads only `(points, maxPoints)`, so it cannot distinguish "the student got it wrong" from "the student's
+ * answer never parsed". Those are **different facts about a distractor**, and `P11`'s item analysis reads this field --
+ * a blank folded into `INCORRECT` makes an item nobody could answer look like an item they mis-conceived, which is the
+ * distortion `GRADE_CODES` exists to prevent.
+ *
+ * So `finish` accepts an override for the branches that already know. **A derived value that cannot be wrong is better
+ * than one nobody can override**, because the branches that need the distinction are precisely the ones holding it.
+ */
 const finish = (
   points: number,
   maxPoints: number,
   strategy: GradingStrategy,
-  rationale: string,
+  feedback: string,
+  code?: GradeCode,
 ): Grade => {
   // Clamped at ONE place. A helper that computes -0.1 or 1.0000001 must not be able to ship it, and
   // the alternative — trusting five helpers to each be careful — is how the bug happens.
@@ -53,9 +136,12 @@ const finish = (
   return {
     points: rounded,
     maxPoints,
-    // Full credit is an equality on the clamped points, so `4/4` and `4.0000001/4` agree.
     correct: rounded >= maxPoints,
-    rationale,
+    // The code is derived from the same clamped pair as `correct`, so a grade cannot claim to be
+    // `CORRECT` while its own arithmetic says otherwise — which is the disagreement `readAward` would
+    // hand to a marker with no way to resolve it.
+    code: code ?? codeFor(rounded, maxPoints),
+    feedback,
     strategy,
   };
 };
@@ -117,6 +203,26 @@ export function tolerance(given: unknown, expected: unknown, spec: ToleranceSpec
       spec.maxPoints,
       'TOLERANCE',
       `expected the number ${String(expected)}, received ${JSON.stringify(given) ?? 'nothing'}`,
+      'UNPARSEABLE',
+      /**
+       * `UNPARSEABLE`, NOT `INCORRECT` -- AND THE DISTINCTION IS `P11`'s, NOT COSMETIC.
+       *
+       * The comparison could not parse, so no number was ever compared with another. That is not a wrong answer, and
+       * item analysis has to be able to say so: **an item every student leaves blank is a different intervention from
+       * an item everyone mis-conceives**, and reporting `INCORRECT` makes the two indistinguishable in exactly the
+       * report meant to tell them apart.
+       *
+       * **BOTH `a === null` AND `b === null` LAND HERE, DELIBERATELY, AND THE COMMENT SAYS SO RATHER THAN PRETENDING
+       * OTHERWISE.** A null `expected` is *our* bug rather than the student's, and "student wrote nonsense" is the
+       * wrong label for it. Telling those two apart is a real requirement and it is **NOT met here**: it needs a
+       * separate axis (whose failure it was), not a second meaning for one code, and inventing one now would put a
+       * lie in a field `P11` reads. It is recorded rather than papered over.
+       *
+       * `BLANK` IS LIKEWISE UNREACHED: a blank answer arrives as `null`/`''` and so becomes `UNPARSEABLE`. **`GRADE_CODES`
+       * therefore advertises five codes and the helpers reach four.** Declaring a code nothing produces is how an
+       * enumeration quietly becomes decoration, so the honest options are to emit it or to stop advertising it; emitting
+       * it needs the same axis and is `P11`'s to define.
+       */
     );
   }
   if (withinTolerance(a, b, spec)) {

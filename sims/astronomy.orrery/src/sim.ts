@@ -56,6 +56,8 @@ const SPAN = 10;
 const CAPABILITIES: SimCapabilities = {
   state: true,
   grading: true,
+  randomised: false,
+  audio: false,
   webgl: true,
   stepper: true,
   scenarios: [],
@@ -245,7 +247,11 @@ export function startSim(
 
     context.fillStyle = '#cbd5e0';
     context.font = '13px system-ui, sans-serif';
-    context.fillText(`day ${format(round(t))} of ${String(MAX_TIME)}`, 10, 18);
+    // `t` IS A FUNCTION in this scope -- line 240 calls `positionAt(next, t())` -- so `round(t)` handed
+    // `round` the function object itself. `Math.round(fn * 1e4)` is `NaN`, `Object.is(NaN, -0)` is false,
+    // and `format` maps a non-finite value to the string `'undefined'`: the day counter read
+    // "day undefined of 4000" on every frame. Calling it is the whole fix.
+    context.fillText(`day ${format(round(t()))} of ${String(MAX_TIME)}`, 10, 18);
     context.fillText(`orbit ${format(next.a)} AU · ${format(next.period)} days`, 10, 36);
   };
 

@@ -36,7 +36,7 @@ describe('physics.free-body-diagram grading', () => {
   it('SAYS IN ITS OWN REASON THAT A PERSON DECIDES', () => {
     // A zero with no explanation is a mark a student cannot appeal, and the SDK refuses those. The reason
     // must carry the band structure or a marker has nothing to apply.
-    const reason = grade(THREE).rationale;
+    const reason = grade(THREE).feedback;
     expect(reason).toMatch(/does not mark its own work/u);
     expect(reason).toMatch(/await a teacher/u);
     expect(reason).toMatch(/4 for all three forces/u);
@@ -45,14 +45,14 @@ describe('physics.free-body-diagram grading', () => {
   it('REPORTS THE CLAIMS VERBATIM, in the order the student made them', () => {
     // The work is what gets marked. A summary that reordered or paraphrased it would be marking something
     // the student did not write.
-    const reason = grade(THREE).rationale;
+    const reason = grade(THREE).feedback;
     expect(reason.indexOf('weight of 19.62')).toBeLessThan(reason.indexOf('normal force'));
     expect(reason.indexOf('normal force')).toBeLessThan(reason.indexOf('friction of 3'));
   });
 
   it('GIVES THE MARKER COUNTS AND NOT A SCORE', () => {
-    expect(grade(THREE).rationale).toMatch(/3 claim\(s\) await a teacher/u);
-    expect(grade(THREE).rationale).toMatch(/3 of 3 named/u);
+    expect(grade(THREE).feedback).toMatch(/3 claim\(s\) await a teacher/u);
+    expect(grade(THREE).feedback).toMatch(/3 of 3 named/u);
   });
 
   it('NAMES A FORCE THAT DOES NOT ACT, rather than quietly ignoring it', () => {
@@ -61,14 +61,14 @@ describe('physics.free-body-diagram grading', () => {
     const withExtra = {
       claims: [...THREE.claims, { claim: 'tension of 4 N pointing right', evidence: '4' }],
     };
-    expect(grade(withExtra).rationale).toMatch(/not acting in this scenario: tension/u);
+    expect(grade(withExtra).feedback).toMatch(/not acting in this scenario: tension/u);
   });
 
   it('DISTINGUISHES "NOTHING SUBMITTED" from "SUBMITTED AND AWAITING A MARKER"', () => {
     // Two different facts about the release, and conflating them loses the one a data report needs.
-    expect(grade(null).rationale).toMatch(/No free-body diagram was submitted/u);
-    expect(grade({ claims: [] }).rationale).toMatch(/No free-body diagram was submitted/u);
-    expect(grade(THREE).rationale).toMatch(/does not mark its own work/u);
+    expect(grade(null).feedback).toMatch(/No free-body diagram was submitted/u);
+    expect(grade({ claims: [] }).feedback).toMatch(/No free-body diagram was submitted/u);
+    expect(grade(THREE).feedback).toMatch(/does not mark its own work/u);
   });
 
   it('NEVER ASSERTS A CLAIM IS CORRECT', () => {
@@ -97,7 +97,7 @@ describe('physics.free-body-diagram grading', () => {
     expect(claimsFrom({ claims: 'friction' })).toEqual([]);
     expect(claimsFrom('nonsense')).toEqual([]);
     expect(claimsFrom(7)).toEqual([]);
-    expect(grade({ claims: 7 }).rationale).toMatch(/No free-body diagram was submitted/u);
+    expect(grade({ claims: 7 }).feedback).toMatch(/No free-body diagram was submitted/u);
   });
 
   it('PUBLISHES ITS BANDS to the student', () => {

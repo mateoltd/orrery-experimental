@@ -56,9 +56,16 @@ const PANEL = 260;
 const MAX_TIME = 10;
 
 const CAPABILITIES: SimCapabilities = {
+  // THIS DISAGREED WITH ITS OWN sim.manifest.json, WHICH IS THE AUTHORITATIVE COPY.
+  // CLAIMED stepper: true while declaring no controls.stepper and no maxTime. The step BUTTONS
+  // are real, which is what made the claim look true, but the host decides from this field.
+  // The frame and the manifest must not make different claims about the same file.
   state: true,
   grading: true,
-  stepper: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
+  stepper: false,
   scenarios: [],
 };
 
@@ -241,8 +248,12 @@ export function startSim(
     const points: string[] = [];
     for (let index = 0; index <= steps; index += every) {
       const at = runTo(params, index);
+      // `String(x).toFixed(1)` THROWS. `String` has already produced a string, and `toFixed` is a method
+      // of `Number`, so the energy graph raised `TypeError: ...toFixed is not a function` on every frame
+      // it tried to draw -- and JavaScript discarding the extra argument is why the surrounding tests
+      // stayed green: nothing here is covered, and the failure was in a canvas path, not a graded one.
       points.push(
-        `${String((index / steps) * 240).toFixed(1)},${String(55 - energy(at, params.length) * 8).toFixed(1)}`,
+        `${((index / steps) * 240).toFixed(1)},${(55 - energy(at, params.length) * 8).toFixed(1)}`,
       );
     }
     energyPath.setAttribute('points', points.join(' '));

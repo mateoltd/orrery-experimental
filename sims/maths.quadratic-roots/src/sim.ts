@@ -31,7 +31,15 @@ const SIM_ID = 'maths.quadratic-roots';
 const SIM_VERSION = '1.0.0';
 const PANEL = 240;
 
-const CAPABILITIES: SimCapabilities = { grading: true, stepper: false, scenarios: [] };
+const CAPABILITIES: SimCapabilities = {
+  state: true,
+  grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
+  stepper: false,
+  scenarios: [],
+};
 
 const PARAM_SPECS = {
   a: num({ name: 'a', label: 'x² coefficient', unit: '', min: -5, max: 5, default: 1 }),

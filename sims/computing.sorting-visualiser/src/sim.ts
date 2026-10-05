@@ -48,9 +48,17 @@ const SIM_ID = 'computing.sorting-visualiser';
 const SIM_VERSION = '1.0.0';
 
 const CAPABILITIES: SimCapabilities = {
+  // THIS DISAGREED WITH ITS OWN sim.manifest.json, WHICH IS THE AUTHORITATIVE COPY.
+  // CLAIMED stepper: true while declaring no controls.stepper and no maxTime, so the host
+  // would offer a stepper with no range; defineSim refuses exactly that combination. It also handled a
+  // hand-rolled step command, which is the failure this capability exists to rule out.
+  // The frame and the manifest must not make different claims about the same file.
   state: true,
   grading: true,
-  stepper: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
+  stepper: false,
   scenarios: [],
 };
 
@@ -136,7 +144,7 @@ export function startSim(
     slider.value = String(passes);
     refresh();
     announce(
-      window_,
+      status,
       `Pass ${String(passes)}, ${String(stateAt(passes).comparisons.length)} comparisons so far.`,
     );
   };
@@ -203,7 +211,7 @@ export function startSim(
   counter.id = 'sim-counter';
   list.id = 'sim-list';
   root.append(task, list, counter, controls, alternative, status);
-  focusEntryPoint(document_, stepButton);
+  focusEntryPoint(root, stepButton);
   refresh();
 
   /**
@@ -241,7 +249,7 @@ export function startSim(
         return;
       }
       if (name === 'focus') {
-        focusEntryPoint(document_, stepButton);
+        focusEntryPoint(root, stepButton);
         return;
       }
       if (name === 'step') {
@@ -263,7 +271,7 @@ export function startSim(
          * play button does nothing here.
          */
         announce(
-          window_,
+          status,
           'Use the pass buttons or the arrow keys — this sort does not play on its own.',
         );
       }

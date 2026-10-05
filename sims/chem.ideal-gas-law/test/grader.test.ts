@@ -7,8 +7,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import sim from '../src/grader.js';
+import type { GasParams } from '../src/model.js';
 
-const grade = (answer: unknown, params: Record<string, unknown> = { p: 101.3, v: 22.4, n: 1 }) =>
+const grade = (answer: unknown, params: GasParams = { p: 101.3, v: 22.4, n: 1 }) =>
   // `grade(state, params, answer)` -- the SDK's real signature, and the one `gradeStoredState` calls.
   sim.grader.grade(null, params, answer);
 

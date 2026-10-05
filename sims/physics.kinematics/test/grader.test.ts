@@ -1,11 +1,11 @@
 import { clampParams } from '@orrery/sim-sdk';
 import { describe, expect, it } from 'vitest';
 import sim from '../src/grader.js';
-import { displacement, findScenario, SCENARIOS } from '../src/model.js';
+import { displacement, findScenario, type KinematicsParams, SCENARIOS } from '../src/model.js';
 import { scenarioParam, simpleParams } from './param-fixture.js';
 
-const grade = (answer: unknown, params: Record<string, unknown> = { scenario: 'dropped', t: 2 }) =>
-  sim.grader.grade(null, params, answer) as { points: number; max: number; code: string };
+const grade = (answer: unknown, params: KinematicsParams = { scenario: 'dropped', t: 2 }) =>
+  sim.grader.grade(null, params, answer);
 
 describe('physics.kinematics', () => {
   it('scores a dropped stone correctly at 2 s', () => {
@@ -95,7 +95,7 @@ describe('physics.kinematics', () => {
   });
 
   it('gives a feedback message that shows the working, not just the verdict', () => {
-    const result = grade(-5, { scenario: 'thrown', t: 2 }) as { feedback: string };
+    const result = grade(-5, { scenario: 'thrown', t: 2 });
     expect(result.feedback).toContain('s = ut');
   });
 });

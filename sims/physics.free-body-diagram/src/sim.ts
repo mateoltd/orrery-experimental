@@ -31,10 +31,18 @@ const PANEL = 200;
 /** Arrow length. Fixed, and deliberately NOT scaled by any magnitude. */
 const ARM = 58;
 
-const CAPABILITIES: SimCapabilities = { grading: true, stepper: false, scenarios: [] };
+const CAPABILITIES: SimCapabilities = {
+  state: true,
+  grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
+  stepper: false,
+  scenarios: [],
+};
 
 const PARAM_SPECS = {
-  mass: num({ name: 'mass', label: 'mass', unit: 'kg', min: 0.5, max: 20, default: 2 }),
+  mass: num({ name: 'mass', label: 'crate mass', unit: 'kg', min: 0.5, max: 20, default: 2 }),
   friction: num({ name: 'friction', label: 'friction', unit: 'N', min: 0, max: 20, default: 3 }),
 };
 

@@ -27,7 +27,15 @@ const SIM_ID = 'computing-science.download-time';
 const SIM_VERSION = '1.0.0';
 const PANEL = 150;
 
-const CAPABILITIES: SimCapabilities = { grading: true };
+const CAPABILITIES: SimCapabilities = {
+  state: true,
+  grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
+  stepper: false,
+  scenarios: [],
+};
 
 const PARAM_SPECS = {
   sizeMb: num({
@@ -35,7 +43,8 @@ const PARAM_SPECS = {
     label: 'File size',
     unit: 'MB',
     min: 0.1,
-    max: 10_000,
+    max: 10000,
+    step: 0.1,
     default: 100,
   }),
   speedMbps: num({
@@ -43,7 +52,8 @@ const PARAM_SPECS = {
     label: 'Connection speed',
     unit: 'Mbit/s',
     min: 0.1,
-    max: 10_000,
+    max: 10000,
+    step: 0.1,
     default: 100,
   }),
 };

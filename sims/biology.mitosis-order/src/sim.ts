@@ -22,7 +22,15 @@ import { describeOrder, move, type OrderParams, STAGES, shuffled } from './model
 const SIM_ID = 'biology.mitosis-order';
 const SIM_VERSION = '1.0.0';
 
-const CAPABILITIES: SimCapabilities = { grading: true };
+const CAPABILITIES: SimCapabilities = {
+  state: true,
+  grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
+  stepper: false,
+  scenarios: [],
+};
 
 const PARAM_SPECS = {
   count: num({ name: 'count', label: 'Stages', unit: '', min: 2, max: 6, default: 6 }),

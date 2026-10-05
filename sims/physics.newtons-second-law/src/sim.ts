@@ -9,6 +9,7 @@
 import {
   announce,
   type BridgeHandlers,
+  bool,
   choice,
   clampParams,
   connectSim,
@@ -33,24 +34,27 @@ const SIM_ID = 'physics.newtons-second-law';
 const SIM_VERSION = '1.0.0';
 const PANEL = 200;
 
-const CAPABILITIES: SimCapabilities = { grading: true, stepper: false, scenarios: [] };
+const CAPABILITIES: SimCapabilities = {
+  state: true,
+  grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
+  stepper: false,
+  scenarios: [],
+};
 
 const PARAM_SPECS = {
   force: num({ name: 'force', label: 'Net force', unit: 'N', min: 0, max: 60, default: 12 }),
   mass: num({ name: 'mass', label: 'Mass', unit: 'kg', min: 0.5, max: 20, default: 3 }),
-  accel: num({ name: 'accel', label: 'Acceleration', unit: 'm/s²', min: 0.5, max: 20, default: 4 }),
   solveFor: choice({
     name: 'solveFor',
     label: 'Find the',
     values: ['acceleration', 'force', 'mass'],
     default: 'acceleration',
   }),
-  showArrow: {
-    name: 'showArrow',
-    type: 'boolean' as const,
-    label: 'Show the force arrow',
-    default: true,
-  },
+  showArrow: bool({ name: 'showArrow', label: 'Show the force arrow', default: true }),
+  accel: num({ name: 'accel', label: 'Acceleration', unit: 'm/s²', min: 0.5, max: 20, default: 4 }),
 };
 
 const paramsFrom = (

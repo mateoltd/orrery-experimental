@@ -2,8 +2,15 @@
  * The grader half. Node, no DOM, deterministic.  (P6-T11, gold sim 13)
  */
 
-import { choice, defineSim, num, tolerance } from '@orrery/sim-sdk/grader';
-import { describeParallax, format, lightYears, type ParallaxParams, parsecs } from './model.js';
+import { bool, defineSim, num, tolerance } from '@orrery/sim-sdk/grader';
+import {
+  describeParallax,
+  format,
+  lightYears,
+  type ParallaxParams,
+  parallaxOf,
+  parsecs,
+} from './model.js';
 
 export default defineSim({
   meta: {
@@ -11,7 +18,7 @@ export default defineSim({
     title: 'Distance from annual parallax',
     version: '1.0.0',
     subjects: ['astronomy'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -24,10 +31,11 @@ export default defineSim({
       max: 2,
       default: 0.1,
     }),
-    inLightYears: choice({
+    // A BOOLEAN, NOT A TWO-VALUED ENUM. See the note on the same parameter in `sim.ts`: `choice({ values:
+    // [false, true] })` made `clampParams` coerce every supplied value back to the default.
+    inLightYears: bool({
       name: 'inLightYears',
       label: 'Answer in light years',
-      values: [false, true],
       default: false,
     }),
   },
@@ -54,7 +62,7 @@ export default defineSim({
     if (blank || !Number.isFinite(given)) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'UNPARSEABLE',
         feedback: 'Enter the distance as a number.',
       };
@@ -76,7 +84,7 @@ export default defineSim({
     });
     return {
       points: judged.points,
-      max: 4,
+      maxPoints: 4,
       code: judged.points === 4 ? 'CORRECT' : judged.points > 0 ? 'CLOSE' : 'WRONG',
       feedback:
         judged.points === 4
@@ -94,4 +102,4 @@ export default defineSim({
   },
 });
 
-export { lightYears, type parallaxOf, parsecs };
+export { lightYears, parallaxOf, parsecs };

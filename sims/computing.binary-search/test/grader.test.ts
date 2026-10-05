@@ -6,9 +6,15 @@
  */
 import { describe, expect, it } from 'vitest';
 import sim from '../src/grader.js';
-import { comparisonCount, describeSearch, haystack, trace } from '../src/model.js';
+import {
+  comparisonCount,
+  describeSearch,
+  haystack,
+  type SearchParams,
+  trace,
+} from '../src/model.js';
 
-const grade = (answer: unknown, params: Record<string, unknown> = { target: 8, length: 8 }) =>
+const grade = (answer: unknown, params: SearchParams = { target: 8, length: 8 }) =>
   sim.grader.grade(null, params, answer);
 
 describe('computing.binary-search', () => {

@@ -33,10 +33,11 @@ export interface ParallaxParams {
 }
 
 export const clamp = (params: ParallaxParams): ParallaxParams => ({
-  parallax: Math.min(
-    2,
-    Math.max(0.05, Number.isFinite(params.parallax) ? Number.isFinite(params.parallax) : 0.5),
-  ),
+  // THE TRUE BRANCH WAS THE PREDICATE, NOT THE VALUE: `Number.isFinite(params.parallax) ?
+  // Number.isFinite(params.parallax) : 0.5` returns a BOOLEAN for every well-formed input, and
+  // `Math.max(0.05, true)` is `Math.max(0.05, 1)` -- so `clamp` replaced the student's chosen parallax
+  // with 1 arcsec whatever it was. The guard asked a question and answered with the question.
+  parallax: Math.min(2, Math.max(0.05, Number.isFinite(params.parallax) ? params.parallax : 0.5)),
   inLightYears: Boolean(params.inLightYears),
 });
 

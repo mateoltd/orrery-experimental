@@ -423,9 +423,18 @@ export function runTo(params: GasParams, seed: number, n: number): GasState {
 export const collisionRate = (state: GasState): number =>
   state.step === 0 ? 0 : (state.collisions / state.step) * STEPS_PER_SECOND;
 
-export const format = (value: number): string => {
+/**
+ * `places` IS HONOURED, and it defaults to 1 so every existing call keeps the text it had.
+ *
+ * It used to take one argument, and nine call sites passed a second one anyway: JavaScript ignores
+ * surplus arguments, so `format(rate, 0)` silently rendered one decimal place where the author had asked
+ * for none. A collision count is an integer, so "about 264.5 collisions a second" was the message a
+ * student was given in place of "about 265" -- and nothing reported it, because a discarded argument is
+ * not an error in any language this runs in.
+ */
+export const format = (value: number, places = 1): string => {
   if (!Number.isFinite(value)) return 'undefined';
-  return value.toFixed(1);
+  return value.toFixed(places);
 };
 
 export const round = (value: number): number => {

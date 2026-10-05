@@ -10,16 +10,15 @@ import {
   BITS_PER_BYTE,
   bitsPerSecond,
   bytes,
+  type DownloadParams,
   describeDownload,
   seconds,
   secondsRounded,
   withoutTheByteConversion,
 } from '../src/model.js';
 
-const grade = (
-  answer: unknown,
-  params: Record<string, unknown> = { sizeMb: 100, speedMbps: 100 },
-) => sim.grader.grade(null, params, answer);
+const grade = (answer: unknown, params: DownloadParams = { sizeMb: 100, speedMbps: 100 }) =>
+  sim.grader.grade(null, params, answer);
 
 describe('computing-science.download-time', () => {
   it('converts BYTES to BITS before dividing, because a speed is in bits per second', () => {

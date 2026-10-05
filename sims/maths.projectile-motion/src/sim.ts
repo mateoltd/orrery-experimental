@@ -46,11 +46,17 @@ const SIM_VERSION = '1.0.0';
 const GRAPH_HEIGHT = 260;
 
 const CAPABILITIES: SimCapabilities = {
-  // Stated, not probed. A host that grants these and gets nothing is a broken host; a sim that claims
-  // them and cannot deliver is a broken sim. Conformance checks the promise both ways.
+  // THIS DISAGREED WITH ITS OWN sim.manifest.json, WHICH IS THE AUTHORITATIVE COPY.
+  // DECLARED no scenarios while the manifest lists one, so the air-resistance case was
+  // unreachable from the host even though the grader accepted the parameter.
+  // The frame and the manifest must not make different claims about the same file.
+  state: true,
   grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
   stepper: true,
-  scenarios: [],
+  scenarios: ['no-air'],
 };
 
 /**
@@ -81,12 +87,22 @@ const PARAM_SPECS = {
   }),
 };
 
-const paramsFrom = (raw: Readonly<Record<string, unknown>>): SimParams => {
+// `raw` IS `unknown` AND SAYS SO. `args.params` comes off a `Record<string, unknown>`, so it is
+// `unknown`; the previous signature demanded an index signature from it, and the `?? {}` fallback could
+// not supply one. The cast belongs here, at the boundary that already exists, rather than in a type that
+// pretends the host's values are well shaped.
+const paramsFrom = (raw: unknown): SimParams => {
   const { values } = clampParams(PARAM_SPECS, raw as Partial<ParamValues>);
   return {
     speed: Number(values.speed),
     angle: Number(values.angle),
     showTrail: values.showTrail === true,
+    // GRAVITY IS NOT A PARAMETER, and `PARAM_SPECS` deliberately has no `gravity` entry: the module
+    // comment on `GRAVITY` says a simulation about projectiles that lets a teacher set `g` is a different
+    // simulation. It is still part of `SimParams` because `trajectory` needs it, so it is filled from the
+    // constant here. `restart` sets it again from the same constant for state restored from storage; this
+    // line is what makes `paramsFrom`'s return actually the `SimParams` it declares.
+    gravity: GRAVITY,
   };
 };
 
@@ -181,10 +197,13 @@ export function startSim(document_: Document, window_: Window, parent: Window | 
     const toX = (x: number): number => x * scaleX;
     const toY = (y: number): number => GRAPH_HEIGHT - y * scaleX;
     context.beginPath();
-    for (const point of trajectory(physics)) {
+    // THE INDEX, NOT A FIELD. `ProjectilePoint` is `{x, y, vy}` -- the state at a time, not the time --
+    // so `point.t` was always `undefined` and `undefined === 0` is false: every point took the `lineTo`
+    // branch, and `moveTo` was never called, so the trail began with an implicit move to the origin.
+    for (const [index, point] of trajectory(physics).entries()) {
       const x = toX(point.x);
       const y = toY(point.y);
-      if (point.t === 0) context.moveTo(x, y);
+      if (index === 0) context.moveTo(x, y);
       else context.lineTo(x, y);
     }
     context.stroke();

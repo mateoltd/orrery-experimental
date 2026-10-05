@@ -23,6 +23,20 @@ import {
   step,
 } from '../src/model.js';
 
+/**
+ * `validateState` is OPTIONAL on the grader half -- twenty-three of the twenty-four simulations declare
+ * one and a hypothetical twenty-fifth might not -- so calling it directly is a type error, not a hint.
+ *
+ * Resolving it through here makes the test say what it means: these cases are the EVIDENCE that this
+ * simulation supplies a validator, so a missing one has to fail the test rather than be asserted away with
+ * `!` at eighteen call sites.
+ */
+function validateState(state: unknown): string | null {
+  const validator = sim.grader.validateState;
+  if (validator === undefined) throw new Error('this simulation declares no validateState');
+  return validator(state);
+}
+
 const PARAMS = clamp({ a: 1, e: 0.017, period: 365.25 });
 
 const grade = (answer: unknown, params: OrreryParams = PARAMS) =>
@@ -153,8 +167,8 @@ describe('the period grading', () => {
   });
 
   it('REFUSES A STATE WITH NEGATIVE TIME, because time does not run backwards', () => {
-    expect(sim.grader.validateState({ a: 1, period: 365.25, t: -1 })).toMatch(/negative time/u);
-    expect(sim.grader.validateState({ a: 1, period: 365.25, t: 400 })).toBeNull();
+    expect(validateState({ a: 1, period: 365.25, t: -1 })).toMatch(/negative time/u);
+    expect(validateState({ a: 1, period: 365.25, t: 400 })).toBeNull();
   });
 });
 

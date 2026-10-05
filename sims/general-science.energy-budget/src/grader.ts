@@ -3,7 +3,7 @@
  */
 
 import { defineSim, num, tolerance } from '@orrery/sim-sdk/grader';
-import { budget, describeEnergy, type EnergyParams, format } from './model.js';
+import { budget, describeEnergy, type EnergyParams, format, isConserved } from './model.js';
 
 export default defineSim({
   meta: {
@@ -11,7 +11,7 @@ export default defineSim({
     title: 'Where the energy goes',
     version: '1.0.0',
     subjects: ['general-science'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -55,7 +55,7 @@ export default defineSim({
     if (blank || !Number.isFinite(given)) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'UNPARSEABLE',
         feedback: 'Enter the useful energy in joules.',
       };
@@ -72,7 +72,7 @@ export default defineSim({
     });
     return {
       points: judged.points,
-      max: 4,
+      maxPoints: 4,
       code: judged.points === 4 ? 'CORRECT' : judged.points > 0 ? 'CLOSE' : 'WRONG',
       feedback:
         judged.points === 4
@@ -96,4 +96,4 @@ export default defineSim({
   },
 });
 
-export { budget, type isConserved };
+export { budget, isConserved };

@@ -41,7 +41,7 @@ export default defineSim({
     title: 'An orrery',
     version: '1.0.0',
     subjects: ['astronomy'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -98,7 +98,7 @@ export default defineSim({
     if (submitted === null || submitted === undefined || String(submitted).trim() === '') {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'MISSING',
         feedback: `Enter a number of days. ${question}`,
       };
@@ -108,7 +108,7 @@ export default defineSim({
     if (!Number.isFinite(given)) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'UNPARSEABLE',
         feedback: `Enter a number of days, with no units. ${question}`,
       };
@@ -129,7 +129,7 @@ export default defineSim({
     if (result.points === 4) {
       return {
         points: 4,
-        max: 4,
+        maxPoints: 4,
         code: 'CORRECT',
         feedback: `Correct: ${format(expected)} days, at ${format(radiusAt(params))} AU. ${question}`,
       };
@@ -144,7 +144,7 @@ export default defineSim({
      */
     return {
       points: result.points,
-      max: 4,
+      maxPoints: 4,
       code: result.points > 0 ? 'PARTIAL' : 'WRONG',
       feedback:
         `You said ${format(given)} days; the orbit takes ${format(expected)}. The planet is ` +

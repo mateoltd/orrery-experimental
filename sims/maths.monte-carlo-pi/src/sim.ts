@@ -42,20 +42,25 @@ const SIM_ID = 'maths.monte-carlo-pi';
 const SIM_VERSION = '1.0.0';
 const SIZE = 340;
 
-const CAPABILITIES: SimCapabilities = { grading: true, stepper: false, scenarios: [] };
+const CAPABILITIES: SimCapabilities = {
+  // THIS DISAGREED WITH ITS OWN sim.manifest.json, WHICH IS THE AUTHORITATIVE COPY.
+  // OMITTED randomised, which the manifest sets: the sampling is seeded and its seed is the
+  // student-visible one, so a host had no way to know not to re-seed it.
+  // The frame and the manifest must not make different claims about the same file.
+  state: true,
+  grading: true,
+  randomised: true,
+  audio: false,
+  webgl: false,
+  stepper: false,
+  scenarios: [],
+};
 
 const PARAM_SPECS = {
-  samples: num({
-    name: 'samples',
-    label: 'points to throw',
-    unit: '',
-    min: 100,
-    max: 20000,
-    default: 2000,
-  }),
+  samples: num({ name: 'samples', label: 'points', unit: '', min: 100, max: 20000, default: 2000 }),
   dropped: num({
     name: 'dropped',
-    label: 'points thrown so far',
+    label: 'points drawn',
     unit: '',
     min: 0,
     max: 20000,

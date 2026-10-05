@@ -7,8 +7,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import sim from '../src/grader.js';
+import type { TriangleParams } from '../src/model.js';
 
-const grade = (answer: unknown, params: Record<string, unknown> = { a: 3, b: 4, c: 5 }) =>
+const grade = (answer: unknown, params: TriangleParams = { a: 3, b: 4, c: 5, giveLengths: true }) =>
   sim.grader.grade(null, params, answer);
 
 describe('maths.pythagoras grading', () => {
@@ -28,7 +29,7 @@ describe('maths.pythagoras grading', () => {
     // The first version of this test used 5, 5, 7.07 — an isosceles RIGHT triangle, where the hypotenuse
     // is longest on its own and the "tie" does not exist. The test passed for the wrong reason on the
     // cases that did not check the tie, and failed on the one that did.
-    const params = { a: 6, b: 6, c: 5 };
+    const params = { a: 6, b: 6, c: 5, giveLengths: true };
     expect(grade('a', params).points).toBe(4);
     expect(grade('b', params).points).toBe(4);
     expect(grade(['a', 'b'], params).points).toBe(4);
@@ -38,9 +39,9 @@ describe('maths.pythagoras grading', () => {
   it('takes a LIST of answers, comma or space separated', () => {
     // Order must not matter, and it must not matter through a wrapper object either — the sim sends
     // `{name}` when the student typed more than one thing.
-    expect(grade(['a', 'b'], { a: 6, b: 6, c: 5 }).points).toBe(4);
-    expect(grade(['b', 'a'], { a: 6, b: 6, c: 5 }).points).toBe(4);
-    expect(grade({ name: ['a', 'b'] }, { a: 6, b: 6, c: 5 }).points).toBe(4);
+    expect(grade(['a', 'b'], { a: 6, b: 6, c: 5, giveLengths: true }).points).toBe(4);
+    expect(grade(['b', 'a'], { a: 6, b: 6, c: 5, giveLengths: true }).points).toBe(4);
+    expect(grade({ name: ['a', 'b'] }, { a: 6, b: 6, c: 5, giveLengths: true }).points).toBe(4);
   });
 
   it('marks naming a NON-longest side wrong, and says why', () => {
@@ -57,7 +58,7 @@ describe('maths.pythagoras grading', () => {
   });
 
   it('refuses lengths that cannot form a triangle, before grading anything', () => {
-    const result = grade('c', { a: 1, b: 1, c: 5 });
+    const result = grade('c', { a: 1, b: 1, c: 5, giveLengths: true });
     expect(result.points).toBe(0);
     expect(result.feedback).toMatch(/cannot be the sides of a triangle/u);
   });

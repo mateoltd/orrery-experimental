@@ -105,7 +105,7 @@ export default defineSim({
     title: 'Forces on a crate',
     version: '1.0.0',
     subjects: ['physics'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },

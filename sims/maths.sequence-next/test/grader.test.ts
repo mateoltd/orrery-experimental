@@ -10,7 +10,7 @@ import sim from '../src/grader.js';
 import { describeSequence, nextTerm, paramsFromSeed, terms } from '../src/model.js';
 
 const grade = (answer: unknown, seed: number, shown = 5) =>
-  sim.grader.grade({ seed, shown }, null, answer);
+  sim.grader.grade({ seed, shown }, {}, answer);
 
 describe('maths.sequence-next grading', () => {
   it('awards full marks for the next term', () => {
@@ -42,10 +42,13 @@ describe('maths.sequence-next grading', () => {
   });
 
   it('refuses a grade with no SEED, rather than grading a sequence it cannot rebuild', () => {
-    const result = sim.grader.grade({ shown: 5 }, null, 30);
+    // THE STATE IS THE POINT: this simulation rebuilds the sequence from the seed, so a submission whose
+    // state carries no seed cannot be graded at all. `{}` for the params is honest rather than a
+    // convenience -- the grader's second argument is `_params` and it is never read.
+    const result = sim.grader.grade({ shown: 5 }, {}, 30);
     expect(result.points).toBe(0);
     expect(result.feedback).toMatch(/without the sequence/u);
-    expect(sim.grader.grade(null, null, 30).points).toBe(0);
+    expect(sim.grader.grade(null, {}, 30).points).toBe(0);
   });
 
   it('marks an empty answer zero rather than reading it as the term 0', () => {

@@ -29,6 +29,9 @@ export default defineSim({
     title: 'Projectile motion',
     version: '1.0.0',
     subjects: ['maths'],
+    licence: 'CC-BY-4.0',
+    provenance: 'ORIGINAL',
+    protocol: 1,
   },
   params: {
     speed: num({ min: 5, max: 60, default: 25, unit: 'm/s' }),
@@ -37,6 +40,10 @@ export default defineSim({
   },
   controls: { stepper: true, stepSize: 1 / 60, scenarios: ['no-air'], maxTime: 30 },
   accessibility: {
+    keyboard: true,
+    screenReaderSummary:
+      'A thrown ball in side view, a slider for the launch speed and angle, and a box for the range.',
+    reducedMotion: true,
     textAlternative:
       'At 25 m/s and 45 degrees the ball lands about 64 m away after 3.6 seconds, peaking at 32 m.',
     summary: 'A side view of a thrown ball, with the ground, its arc and a range marker.',
@@ -51,11 +58,23 @@ export default defineSim({
   grade: (_state: ProjectileState, params: ProjectileParams, answer: unknown) => {
     const parsed = parseAnswer(answer);
     if (parsed === null) {
-      return tolerance(0, 0, {
-        abs: 0,
+      // NO ANSWER IS NOT A NUMERIC COMPARISON. This called `tolerance(0, 0, { abs: 0 })`, which asks
+      // "is 0 within zero of 0" -- and the answer is yes, so `withinTolerance` returned true and a BLANK
+      // SUBMISSION SCORED THE FULL 4. `abs: 0` is a real tolerance of zero, and 0 really is inside it; the
+      // mistake was routing "nothing was submitted" through a comparator that needs two numbers.
+      //
+      // A `ToleranceSpec.rationale` was also passed here and silently DISCARDED, because no such field
+      // existed -- the grade came back saying "0 is within tolerance of 0". So the intended sentence was
+      // never shown and the mark was wrong. Returning the grade directly is what the other twenty-three
+      // simulations do, and it puts `UNPARSEABLE` in the `code` the host reads
+      // (`packages/contracts/src/grading/simulation.ts:241`).
+      return {
+        points: 0,
         maxPoints: 4,
-        rationale: 'no range was submitted, so there is nothing to score',
-      });
+        code: 'UNPARSEABLE',
+        feedback:
+          'No range was submitted, so there is nothing to score. Enter the distance in metres.',
+      };
     }
     // The RANGE is the graded answer; it is what the manifest declares and what the rationale template
     // quotes. Partial credit, so a student 2% out is not the same as a student who guessed.

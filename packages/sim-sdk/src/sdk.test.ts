@@ -272,7 +272,7 @@ describe('grading', () => {
       partialCredit: true,
     });
     expect(grade.points).toBeCloseTo(2, 6);
-    expect(grade.rationale).toMatch(/Jaccard/);
+    expect(grade.feedback).toMatch(/Jaccard/);
   });
 
   it('a SELECTION SUBSET with nothing extra earns FULL marks', () => {
@@ -328,7 +328,7 @@ describe('grading', () => {
   //
   // `relativeError` can be smaller than the tolerance unit while `withinTolerance` still says no -- when an
   // absolute tolerance is the one in force the two disagree -- and `1 - past` then exceeded 1. A grade is
-  // capped downstream by `finish`, so the student never saw 4.2 of 4, but the rationale said so.
+  // capped downstream by `finish`, so the student never saw 4.2 of 4, but the feedback said so.
   it('never awards more than the maximum, whatever the tolerance', () => {
     for (const spec of [
       { abs: 0.5, maxPoints: 4, partialCredit: true },
@@ -358,7 +358,7 @@ describe('grading', () => {
     ).toBe(4);
   });
 
-  it('every grade carries a rationale a TEACHER can paste into a comment', () => {
+  it('every grade carries FEEDBACK a TEACHER can paste into a comment', () => {
     for (const grade of [
       tolerance(5, 5, { abs: 0.1, maxPoints: 4 }),
       tolerance('nope', 5, { abs: 0.1, maxPoints: 4 }),
@@ -367,7 +367,7 @@ describe('grading', () => {
       setMatch(['x'], ['y'], { maxPoints: 4 }),
       rubric({ points: 2, maxPoints: 4, reason: 'two criteria met' }),
     ]) {
-      expect(grade.rationale.length).toBeGreaterThan(15);
+      expect(grade.feedback.length).toBeGreaterThan(15);
       expect(grade.strategy).toBeTruthy();
     }
   });
@@ -375,7 +375,7 @@ describe('grading', () => {
   it('a rubric mark with NO REASON earns nothing, because it cannot be appealed', () => {
     const grade = rubric({ points: 4, maxPoints: 4, reason: '   ' });
     expect(grade.points).toBe(0);
-    expect(grade.rationale).toMatch(/cannot be explained or appealed/);
+    expect(grade.feedback).toMatch(/cannot be explained or appealed/);
   });
 
   it('exact compares objects regardless of KEY ORDER', () => {
@@ -707,7 +707,7 @@ describe('gradeStoredState', () => {
       answer: null,
     });
     expect(grade.correct).toBe(true);
-    expect(grade.rationale).toMatch(/120 is exactly 120/);
+    expect(grade.feedback).toMatch(/120 is exactly 120/);
     // And the clamp is real: the same state at the declared default of 25 expects 50, so it scores 0.
     expect(
       gradeStoredState(module.grader, { state: { answer: 120 }, params: {}, answer: null }).points,
@@ -851,7 +851,7 @@ describe('orderMatch', () => {
       partialCredit: true,
     });
     expect(grade.points).toBeLessThan(4);
-    expect(grade.rationale).toMatch(/past the end/);
+    expect(grade.feedback).toMatch(/past the end/);
   });
 
   it('treats an empty or non-list answer as no answer rather than throwing', () => {
@@ -869,7 +869,7 @@ describe('orderMatch', () => {
   it('scores nothing at all when nothing was expected, rather than dividing by zero', () => {
     const grade = orderMatch(expected, [], { ...spec, partialCredit: true });
     expect(grade.points).toBe(0);
-    expect(grade.rationale).toMatch(/nothing was expected/);
+    expect(grade.feedback).toMatch(/nothing was expected/);
   });
 });
 describe('a numeric enum sent as a STRING', () => {

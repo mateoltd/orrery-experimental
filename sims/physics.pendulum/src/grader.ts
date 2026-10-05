@@ -26,6 +26,7 @@ import {
   MAX_START_DEG,
   measuredPeriod,
   type PendulumParams,
+  radToDeg,
   round,
   smallAnglePeriod,
 } from './model.js';
@@ -71,7 +72,7 @@ export default defineSim({
     title: 'How long is one swing?',
     version: '1.0.0',
     subjects: ['physics'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -133,7 +134,7 @@ export default defineSim({
     if (!Number.isFinite(measured)) {
       return {
         points: 0,
-        max: MAX,
+        maxPoints: MAX,
         code: 'NO_PERIOD',
         feedback:
           `This pendulum's period could not be measured from its own trajectory, so there is nothing to mark ` +
@@ -144,7 +145,7 @@ export default defineSim({
     if (answer === null || answer === undefined || String(answer).trim() === '') {
       return {
         points: 0,
-        max: MAX,
+        maxPoints: MAX,
         code: 'MISSING',
         feedback: `Type the number of seconds one full swing takes. ${describeTask(params)}`,
       };
@@ -154,7 +155,7 @@ export default defineSim({
     if (!Number.isFinite(given)) {
       return {
         points: 0,
-        max: MAX,
+        maxPoints: MAX,
         code: 'UNPARSEABLE',
         feedback: `Type a single number, in seconds and with no units. ${describeTask(params)}`,
       };
@@ -177,7 +178,7 @@ export default defineSim({
     if (exact.points === MAX) {
       return {
         points: MAX,
-        max: MAX,
+        maxPoints: MAX,
         code: 'CORRECT',
         feedback:
           `Correct: one swing of a ${format(params.length)} m pendulum takes ` +
@@ -204,7 +205,7 @@ export default defineSim({
     if (withG10.points === MAX) {
       return {
         points: MAX / 2,
-        max: MAX,
+        maxPoints: MAX,
         code: 'G_TEN',
         feedback:
           `You used g = 10, which many schools round to. Using the accurate 9.81 gives ` +
@@ -223,7 +224,7 @@ export default defineSim({
     if (Math.abs(given - measured / 2) <= band) {
       return {
         points: MAX / 2,
-        max: MAX,
+        maxPoints: MAX,
         code: 'HALF_SWING',
         feedback:
           `That is half a swing. A full swing is there and back, so it is twice this: ` +
@@ -234,7 +235,7 @@ export default defineSim({
 
     return {
       points: exact.points,
-      max: MAX,
+      maxPoints: MAX,
       code: exact.points > 0 ? 'PARTIAL' : 'WRONG',
       feedback:
         `You said ${format(given)} s; one swing takes ${format(measured)} s. The period is ` +
@@ -255,4 +256,4 @@ export default defineSim({
   },
 });
 
-export { degToRad, G, type radToDeg, round, smallAnglePeriod };
+export { degToRad, G, radToDeg, round, smallAnglePeriod };

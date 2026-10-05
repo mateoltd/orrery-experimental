@@ -38,6 +38,9 @@ export default defineSim({
     title: 'Projectile motion',
     version: '1.0.0',
     subjects: ['maths'],
+    licence: 'CC-BY-4.0',
+    provenance: 'ORIGINAL',
+    protocol: 1,
   },
   params: {
     speed: num({ min: 5, max: 60, default: 25, unit: 'm/s' }),
@@ -46,6 +49,10 @@ export default defineSim({
   },
   controls: { stepper: true, stepSize: 1 / 60, scenarios: ['no-air'], maxTime: 30 },
   accessibility: {
+    keyboard: true,
+    screenReaderSummary:
+      'A thrown ball in side view, a slider for the launch speed and angle, and a box for the range.',
+    reducedMotion: true,
     textAlternative:
       'At 25 m/s and 45 degrees the ball lands about 64 m away after 3.6 seconds, peaking at 32 m.',
     summary: 'A side view of a thrown ball, with the ground, its arc and a range marker.',
@@ -58,7 +65,14 @@ export default defineSim({
   grade: (_state: { t: number }, params: ProjectileParams, answer: unknown) => {
     const submitted = answer as Answer | null;
     if (submitted === null || typeof submitted !== 'object' || !Number.isFinite(submitted.range)) {
-      return tolerance(0, 0, { abs: 0, maxPoints: 4, rationale: 'no range was submitted' });
+      // See the note on the same branch in `grader.ts`: `tolerance(0, 0, { abs: 0 })` awarded the full 4
+      // marks for a blank submission, because 0 IS within a tolerance of zero of 0.
+      return {
+        points: 0,
+        maxPoints: 4,
+        code: 'UNPARSEABLE',
+        feedback: 'No range was submitted. Enter the distance in metres.',
+      };
     }
     return tolerance(submitted.range, range(params), {
       abs: 0.5,
@@ -68,14 +82,17 @@ export default defineSim({
     });
   },
 
-  render: (ctx: RenderContext<{ t: number }>) => {
+  render: (ctx: RenderContext<ProjectileParams, { t: number }>) => {
     const root = document.querySelector('.orrery-sim');
     if (root === null) return;
     const canvas = root.querySelector('canvas');
     const readout = root.querySelector<HTMLElement>('.orrery-sim__readout');
     const text = root.querySelector<HTMLElement>('.orrery-sim__text');
 
-    const { values } = clampParams({ ...PARAMS }, ctx.params as ParamValues);
+    // `ctx.params` is `ProjectileParams`, an INTERFACE, so it has no implicit index signature and cannot
+    // be passed where `Partial<ParamValues>` is expected. That is the SDK's boundary doing its job: the
+    // declared specs, not the incoming object, are what decides the shape of what comes back.
+    const { values } = clampParams({ ...PARAMS }, ctx.params as unknown as Partial<ParamValues>);
     const params = values as unknown as ProjectileParams;
     const flying = simulate(params, { t: ctx.t }, ctx.t);
     const total = flightTime(params);
@@ -105,7 +122,7 @@ const PARAMS = {
   gravity: num({ min: 1.6, max: 24.8, default: 9.81, unit: 'm/s2' }),
 };
 
-const announceRegion = (ctx: RenderContext<{ t: number }>): void => {
+const announceRegion = (ctx: RenderContext<ProjectileParams, { t: number }>): void => {
   const region = document.querySelector<HTMLElement>('.orrery-sim__live');
   if (region === null) return;
   // Announced only on whole seconds. A `requestAnimationFrame` loop announcing at 60 Hz is the

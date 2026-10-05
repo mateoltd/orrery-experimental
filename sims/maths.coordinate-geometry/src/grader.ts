@@ -79,7 +79,7 @@ export default defineSim({
     title: 'Where does the line cross the y-axis?',
     version: '1.0.0',
     subjects: ['maths'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -120,7 +120,7 @@ export default defineSim({
     if (isVertical(params) || expected === null) {
       return {
         points: 0,
-        max: MAX,
+        maxPoints: MAX,
         code: 'NO_INTERCEPT',
         feedback:
           'This line is vertical, so it crosses the y-axis at every point on it and there is no single ' +
@@ -131,7 +131,7 @@ export default defineSim({
     if (answer === null || answer === undefined || String(answer).trim() === '') {
       return {
         points: 0,
-        max: MAX,
+        maxPoints: MAX,
         code: 'MISSING',
         feedback: `Drag the marker to where the line meets the vertical axis, then type that y-coordinate. ${describeTask(params)}`,
       };
@@ -141,7 +141,7 @@ export default defineSim({
     if (!Number.isFinite(typed)) {
       return {
         points: 0,
-        max: MAX,
+        maxPoints: MAX,
         code: 'UNPARSEABLE',
         feedback: `Type one number, with no brackets or units. ${describeTask(params)}`,
       };
@@ -152,7 +152,7 @@ export default defineSim({
     if (points === MAX) {
       return {
         points,
-        max: MAX,
+        maxPoints: MAX,
         code: 'CORRECT',
         feedback: `Correct: the line crosses the vertical axis at y = ${format(expected)}.`,
       };
@@ -166,7 +166,7 @@ export default defineSim({
      */
     return {
       points,
-      max: MAX,
+      maxPoints: MAX,
       code: points > 0 ? 'PARTIAL' : 'WRONG',
       feedback:
         `You read ${format(typed)}; the line crosses the vertical axis at ${format(expected)}. From ` +

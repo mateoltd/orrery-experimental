@@ -1,6 +1,6 @@
 {
   "generatedFrom": "1970-01-01",
-  "digest": "66bf4c8833e9f9de1e1581ad4786219518e1ed0256b037da27214792f1ef7966",
+  "digest": "7a462e939db5f0df7804464ec94e36bc614cc5d4989bc0e4691f17f2403fdd4e",
   "entries": [
     {
       "id": "astronomy.orrery",
@@ -9,15 +9,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.5a2b1f7b0159.html",
-        "browser": "./browser.beb39b5d35b2.js",
-        "grader": "./grader.13fc889d03de.js",
+        "page": "./sim.79cfef6bc1f8.html",
+        "browser": "./browser.d84d64792cc9.js",
+        "grader": "./grader.485653f10b00.js",
         "style": "./style.75a5f5513d82.css"
       },
       "bytes": {
-        "browser": 16430,
-        "grader": 7295,
-        "total": 24591
+        "browser": 16494,
+        "grader": 7608,
+        "total": 24968
       },
       "defaultHeight": 420,
       "minHeight": 320,
@@ -61,15 +61,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.c0bf4f73c16a.html",
-        "browser": "./browser.c257e5534ed3.js",
-        "grader": "./grader.d00a0f993bcf.js",
+        "page": "./sim.7154de5e7c26.html",
+        "browser": "./browser.c3dcea694633.js",
+        "grader": "./grader.4718bda0231f.js",
         "style": "./style.b44267f09d47.css"
       },
       "bytes": {
-        "browser": 12024,
-        "grader": 7142,
-        "total": 19944
+        "browser": 12135,
+        "grader": 7475,
+        "total": 20388
       },
       "defaultHeight": 330,
       "minHeight": 240,
@@ -86,13 +86,13 @@
         },
         {
           "name": "inLightYears",
-          "type": "enum",
+          "type": "boolean",
           "label": "Answer in light years",
           "unit": null,
           "minimum": null,
           "maximum": null,
           "step": null,
-          "default": "false"
+          "default": false
         }
       ]
     },
@@ -103,15 +103,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.b9fd378bc148.html",
-        "browser": "./browser.a6fbc0d76e22.js",
-        "grader": "./grader.9478f61bb559.js",
+        "page": "./sim.4a87b02bf409.html",
+        "browser": "./browser.f485b71412e6.js",
+        "grader": "./grader.0c8e85f17f2d.js",
         "style": "./style.f206050a0042.css"
       },
       "bytes": {
-        "browser": 11652,
-        "grader": 6965,
-        "total": 19516
+        "browser": 11756,
+        "grader": 7252,
+        "total": 19907
       },
       "defaultHeight": 420,
       "minHeight": 300,
@@ -135,15 +135,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.1dac7efb5a13.html",
-        "browser": "./browser.0c2fb7c40d05.js",
-        "grader": "./grader.25c9ec1b0b9f.js",
+        "page": "./sim.106b205893d2.html",
+        "browser": "./browser.3321836c17ee.js",
+        "grader": "./grader.bea61988c3b8.js",
         "style": "./style.eac67ab7c953.css"
       },
       "bytes": {
-        "browser": 11709,
-        "grader": 7079,
-        "total": 19614
+        "browser": 11789,
+        "grader": 7392,
+        "total": 20007
       },
       "defaultHeight": 340,
       "minHeight": 240,
@@ -197,15 +197,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.11c233d278ea.html",
-        "browser": "./browser.6abb3c8feabf.js",
-        "grader": "./grader.8fdea32dbfed.js",
+        "page": "./sim.c0f467bbdfd3.html",
+        "browser": "./browser.fa939e1ce8c0.js",
+        "grader": "./grader.650800c98389.js",
         "style": "./style.062ac6ea3584.css"
       },
       "bytes": {
-        "browser": 11764,
-        "grader": 7123,
-        "total": 19677
+        "browser": 11883,
+        "grader": 7424,
+        "total": 20097
       },
       "defaultHeight": 330,
       "minHeight": 240,
@@ -239,15 +239,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.3e57e14ab21d.html",
-        "browser": "./browser.920bc5c8ed6d.js",
-        "grader": "./grader.63c9b2cc9678.js",
+        "page": "./sim.5e60eb5affc9.html",
+        "browser": "./browser.16a1b0969c65.js",
+        "grader": "./grader.9ed553fc117b.js",
         "style": "./style.3335c02223c8.css"
       },
       "bytes": {
-        "browser": 8079,
-        "grader": 6077,
-        "total": 15004
+        "browser": 8183,
+        "grader": 6306,
+        "total": 15337
       },
       "defaultHeight": 300,
       "minHeight": 220,
@@ -260,15 +260,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.9b8baa1605ee.html",
-        "browser": "./browser.8349e5abfeb9.js",
-        "grader": "./grader.2bd608edadb2.js",
+        "page": "./sim.9aa66d60e356.html",
+        "browser": "./browser.3ecf0260f120.js",
+        "grader": "./grader.4d72d623f7b4.js",
         "style": "./style.13aa5dcedc33.css"
       },
       "bytes": {
-        "browser": 14959,
-        "grader": 9814,
-        "total": 27198
+        "browser": 15036,
+        "grader": 10065,
+        "total": 27526
       },
       "defaultHeight": 420,
       "minHeight": 320,
@@ -312,15 +312,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.e07b29dc619f.html",
-        "browser": "./browser.2282c4b5faf4.js",
-        "grader": "./grader.8d5697ee9581.js",
+        "page": "./sim.a14d21d73916.html",
+        "browser": "./browser.2f247b8b078b.js",
+        "grader": "./grader.14d0ebf5bcee.js",
         "style": "./style.a4425805387d.css"
       },
       "bytes": {
-        "browser": 11592,
-        "grader": 7353,
-        "total": 19733
+        "browser": 11712,
+        "grader": 7654,
+        "total": 20154
       },
       "defaultHeight": 300,
       "minHeight": 220,
@@ -354,15 +354,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.af040b5d7809.html",
-        "browser": "./browser.3830238a7c83.js",
-        "grader": "./grader.77d6a4baec3c.js",
+        "page": "./sim.feb6d85f9b6b.html",
+        "browser": "./browser.fb6cc1eed515.js",
+        "grader": "./grader.cbb692aa1ec2.js",
         "style": "./style.cd7f3f6bbbc7.css"
       },
       "bytes": {
-        "browser": 14747,
-        "grader": 7331,
-        "total": 22883
+        "browser": 14840,
+        "grader": 7632,
+        "total": 23277
       },
       "defaultHeight": 360,
       "minHeight": 240,
@@ -396,15 +396,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.7a6e09350d34.html",
-        "browser": "./browser.de47a449a9b4.js",
-        "grader": "./grader.bfd3a2b565ad.js",
+        "page": "./sim.c7362092141e.html",
+        "browser": "./browser.7875f650fdd8.js",
+        "grader": "./grader.8afc6953d67a.js",
         "style": "./style.49f248bb988a.css"
       },
       "bytes": {
-        "browser": 13313,
-        "grader": 7599,
-        "total": 24068
+        "browser": 13384,
+        "grader": 7838,
+        "total": 24378
       },
       "defaultHeight": 420,
       "minHeight": 320,
@@ -438,15 +438,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.331ac0c50c4c.html",
-        "browser": "./browser.e3c8ec588de6.js",
-        "grader": "./grader.5510bf89398a.js",
+        "page": "./sim.9a84882c7876.html",
+        "browser": "./browser.bbe3fcb765b5.js",
+        "grader": "./grader.b3a0e8f82401.js",
         "style": "./style.96ca3d2aa506.css"
       },
       "bytes": {
-        "browser": 12116,
-        "grader": 7359,
-        "total": 20257
+        "browser": 12233,
+        "grader": 7788,
+        "total": 20803
       },
       "defaultHeight": 320,
       "minHeight": 240,
@@ -480,15 +480,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.46f261e2d83c.html",
-        "browser": "./browser.bca92636a191.js",
-        "grader": "./grader.872c381e89a2.js",
+        "page": "./sim.0c4f58047868.html",
+        "browser": "./browser.7d0d5e9399cc.js",
+        "grader": "./grader.7a244136b85e.js",
         "style": "./style.42054a81bf3c.css"
       },
       "bytes": {
-        "browser": 12223,
-        "grader": 7066,
-        "total": 20069
+        "browser": 12314,
+        "grader": 7367,
+        "total": 20461
       },
       "defaultHeight": 330,
       "minHeight": 240,
@@ -522,15 +522,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.ca1b04bcd78b.html",
-        "browser": "./browser.2bac31cf4b04.js",
-        "grader": "./grader.5ba7cdb9bf82.js",
+        "page": "./sim.d5d0b70e0053.html",
+        "browser": "./browser.69ff3ccf749b.js",
+        "grader": "./grader.10407d9d2840.js",
         "style": "./style.13aa5dcedc33.css"
       },
       "bytes": {
-        "browser": 15698,
-        "grader": 6459,
-        "total": 24591
+        "browser": 15778,
+        "grader": 6698,
+        "total": 24910
       },
       "defaultHeight": 520,
       "minHeight": 420,
@@ -584,15 +584,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.8c778375d8b7.html",
-        "browser": "./browser.59adb798b5ac.js",
-        "grader": "./grader.eecc153fc684.js",
+        "page": "./sim.a882b90a165d.html",
+        "browser": "./browser.f5973f30f9e5.js",
+        "grader": "./grader.7a4964141a0a.js",
         "style": "./style.296173ec044e.css"
       },
       "bytes": {
-        "browser": 12241,
-        "grader": 7100,
-        "total": 20173
+        "browser": 12321,
+        "grader": 7419,
+        "total": 20572
       },
       "defaultHeight": 360,
       "minHeight": 240,
@@ -646,15 +646,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.831e03345962.html",
-        "browser": "./browser.e2ac1df998a9.js",
-        "grader": "./grader.62a11bf02eb1.js",
+        "page": "./sim.69563ee6ddef.html",
+        "browser": "./browser.034c2269fe1e.js",
+        "grader": "./grader.d83246c56898.js",
         "style": "./style.b77ad90f4026.css"
       },
       "bytes": {
-        "browser": 11998,
-        "grader": 9034,
-        "total": 21811
+        "browser": 12086,
+        "grader": 9371,
+        "total": 22236
       },
       "defaultHeight": 360,
       "minHeight": 240,
@@ -708,15 +708,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.c66966a0ef6c.html",
-        "browser": "./browser.3cbe36549bf1.js",
-        "grader": "./grader.525ea63d2246.js",
+        "page": "./sim.fd8decdedddc.html",
+        "browser": "./browser.9a0c48732aaf.js",
+        "grader": "./grader.927e8850038a.js",
         "style": "./style.13aa5dcedc33.css"
       },
       "bytes": {
-        "browser": 14271,
-        "grader": 7928,
-        "total": 24628
+        "browser": 14334,
+        "grader": 8167,
+        "total": 24930
       },
       "defaultHeight": 480,
       "minHeight": 380,
@@ -760,15 +760,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.f64287ce40d6.html",
-        "browser": "./browser.70fa033b1b6d.js",
-        "grader": "./grader.f330b5e00ca6.js",
+        "page": "./sim.ced495d34aaf.html",
+        "browser": "./browser.d5eea4298fb8.js",
+        "grader": "./grader.6e55afb69513.js",
         "style": "./style.dec5ddce6f96.css"
       },
       "bytes": {
-        "browser": 22438,
-        "grader": 6674,
-        "total": 30130
+        "browser": 23084,
+        "grader": 7206,
+        "total": 31308
       },
       "defaultHeight": 420,
       "minHeight": 240,
@@ -812,15 +812,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.3a5906b1a3d7.html",
-        "browser": "./browser.afd073ec69d7.js",
-        "grader": "./grader.52c2df9b7bda.js",
+        "page": "./sim.11aa8b24da27.html",
+        "browser": "./browser.7537c2a89fdf.js",
+        "grader": "./grader.63a28aa31366.js",
         "style": "./style.ee228b1a9329.css"
       },
       "bytes": {
-        "browser": 12838,
-        "grader": 8221,
-        "total": 21822
+        "browser": 13024,
+        "grader": 8520,
+        "total": 22307
       },
       "defaultHeight": 320,
       "minHeight": 240,
@@ -874,15 +874,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.2b38cdce1a10.html",
-        "browser": "./browser.e26c26e69c0c.js",
-        "grader": "./grader.37f5fbd5d7cf.js",
+        "page": "./sim.533905220cbd.html",
+        "browser": "./browser.a9162504a875.js",
+        "grader": "./grader.182d19323218.js",
         "style": "./style.62c29a1b922b.css"
       },
       "bytes": {
-        "browser": 12060,
-        "grader": 8106,
-        "total": 20935
+        "browser": 12140,
+        "grader": 8425,
+        "total": 21334
       },
       "defaultHeight": 360,
       "minHeight": 240,
@@ -926,15 +926,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.eccccbb601a2.html",
-        "browser": "./browser.95182842e096.js",
-        "grader": "./grader.aa697849caf1.js",
+        "page": "./sim.a34250823bba.html",
+        "browser": "./browser.1295c9509a02.js",
+        "grader": "./grader.df70cce0b821.js",
         "style": "./style.50e3936ad9ed.css"
       },
       "bytes": {
-        "browser": 10888,
-        "grader": 5669,
-        "total": 17351
+        "browser": 10967,
+        "grader": 5962,
+        "total": 17723
       },
       "defaultHeight": 260,
       "minHeight": 240,
@@ -958,15 +958,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.84acb08d1576.html",
-        "browser": "./browser.58179000fafd.js",
-        "grader": "./grader.a7e846554bb9.js",
+        "page": "./sim.28bef8a79dff.html",
+        "browser": "./browser.cfe9be8daba1.js",
+        "grader": "./grader.42412aa4bd8b.js",
         "style": "./style.75a5f5513d82.css"
       },
       "bytes": {
-        "browser": 13416,
-        "grader": 7352,
-        "total": 21653
+        "browser": 13502,
+        "grader": 7627,
+        "total": 22014
       },
       "defaultHeight": 400,
       "minHeight": 300,
@@ -1000,15 +1000,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.f664dca20483.html",
-        "browser": "./browser.98b5e22633d0.js",
-        "grader": "./grader.6931ec808103.js",
+        "page": "./sim.4a5e073539ac.html",
+        "browser": "./browser.03ac1b26265b.js",
+        "grader": "./grader.324ae7aa4f0b.js",
         "style": "./style.ab847adcb43f.css"
       },
       "bytes": {
-        "browser": 12418,
-        "grader": 7349,
-        "total": 20543
+        "browser": 12498,
+        "grader": 7656,
+        "total": 20930
       },
       "defaultHeight": 340,
       "minHeight": 240,
@@ -1042,15 +1042,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.68aca4cfbde0.html",
-        "browser": "./browser.67b50121936b.js",
-        "grader": "./grader.d883df13d62e.js",
+        "page": "./sim.d18047db52a1.html",
+        "browser": "./browser.f18955f24821.js",
+        "grader": "./grader.70daaa351eac.js",
         "style": "./style.676c2ce82855.css"
       },
       "bytes": {
-        "browser": 13274,
-        "grader": 8480,
-        "total": 22557
+        "browser": 13375,
+        "grader": 8805,
+        "total": 22983
       },
       "defaultHeight": 320,
       "minHeight": 240,
@@ -1114,15 +1114,15 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.ae9a7c2633fb.html",
-        "browser": "./browser.4e1063db38ef.js",
-        "grader": "./grader.47c1d3f28720.js",
+        "page": "./sim.4968bf531832.html",
+        "browser": "./browser.a4885c0cde80.js",
+        "grader": "./grader.73720359adf4.js",
         "style": "./style.13aa5dcedc33.css"
       },
       "bytes": {
-        "browser": 13799,
-        "grader": 9016,
-        "total": 25248
+        "browser": 13858,
+        "grader": 9361,
+        "total": 25652
       },
       "defaultHeight": 440,
       "minHeight": 340,

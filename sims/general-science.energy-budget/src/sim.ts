@@ -30,7 +30,15 @@ const SIM_ID = 'general-science.energy-budget';
 const SIM_VERSION = '1.0.0';
 const PANEL = 150;
 
-const CAPABILITIES: SimCapabilities = { grading: true };
+const CAPABILITIES: SimCapabilities = {
+  state: true,
+  grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
+  stepper: false,
+  scenarios: [],
+};
 
 const PARAM_SPECS = {
   inputJ: num({
@@ -38,7 +46,8 @@ const PARAM_SPECS = {
     label: 'Energy supplied',
     unit: 'J',
     min: 1,
-    max: 1_000_000,
+    max: 1000000,
+    step: 1,
     default: 1000,
   }),
   efficiency: num({
@@ -47,6 +56,7 @@ const PARAM_SPECS = {
     unit: '%',
     min: 5,
     max: 100,
+    step: 1,
     default: 25,
   }),
 };

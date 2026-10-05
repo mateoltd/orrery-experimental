@@ -33,7 +33,15 @@ const SIM_ID = 'maths.midpoint-of-segment';
 const SIM_VERSION = '1.0.0';
 const PANEL = 260;
 
-const CAPABILITIES: SimCapabilities = { grading: true, stepper: false, scenarios: [] };
+const CAPABILITIES: SimCapabilities = {
+  state: true,
+  grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
+  stepper: false,
+  scenarios: [],
+};
 
 const PARAM_SPECS = {
   x1: num({ name: 'x1', label: 'first x', unit: '', min: -20, max: 20, default: -4 }),
@@ -88,8 +96,11 @@ export function startSim(
     // because every previous one grew its answer outward from the origin.
     const xs = [params.x1, params.x2];
     const ys = [params.y1, params.y2];
-    const halfX = Math.max(Math.abs(...xs), 4) * 1.35;
-    const halfY = Math.max(Math.abs(...ys), 4) * 1.35;
+    // THE SPREAD IS LAST, deliberately. `Math.max(...xs, 4)` puts a spread before a positional argument,
+    // which is not a legal call -- a rest parameter has to end the argument list -- so this is one of the
+    // few places where reordering the arguments is the whole fix rather than a preference.
+    const halfX = Math.max(4, ...xs.map(Math.abs)) * 1.35;
+    const halfY = Math.max(4, ...ys.map(Math.abs)) * 1.35;
     const toX = (x: number): number => width / 2 + (x / halfX) * (width / 2);
     const toY = (y: number): number => PANEL / 2 - (y / halfY) * (PANEL / 2);
 

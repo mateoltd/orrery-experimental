@@ -160,7 +160,7 @@ export default defineSim({
     title: 'Midpoint of a line segment',
     version: '1.0.0',
     subjects: ['maths'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -191,7 +191,7 @@ export default defineSim({
     if (parsed.kind === 'INVALID') {
       return {
         points: 0,
-        max: MAX,
+        maxPoints: MAX,
         code: 'UNPARSEABLE',
         feedback: `Enter two numbers — the x first, then the y. The midpoint of this segment is ${pair}.`,
       };
@@ -199,7 +199,7 @@ export default defineSim({
     if (parsed.kind === 'INCOMPLETE') {
       return {
         points: 0,
-        max: MAX,
+        maxPoints: MAX,
         code: 'MIDPOINT_INCOMPLETE',
         feedback: `A coordinate needs both numbers. The midpoint of this segment is ${pair}.`,
       };
@@ -221,7 +221,7 @@ export default defineSim({
         const missing = xRight ? 'y' : 'x';
         return {
           points,
-          max: MAX,
+          maxPoints: MAX,
           code: 'PARTIAL',
           feedback:
             `Half right — your ${xRight ? 'x' : 'y'}-coordinate is correct, but the ${missing}-coordinate ` +
@@ -232,7 +232,7 @@ export default defineSim({
       // award, and the honest message is that the answer was not finished.
       return {
         points: 0,
-        max: MAX,
+        maxPoints: MAX,
         code: 'MIDPOINT_INCOMPLETE',
         feedback: `You left a coordinate empty. The midpoint of this segment is ${pair}.`,
       };
@@ -250,7 +250,7 @@ export default defineSim({
     const missing = given[0] === undefined ? 'x' : given[1] === undefined ? 'y' : null;
 
     if (points === MAX) {
-      return { points, max: MAX, code: 'CORRECT', feedback: `Correct: ${pair}.` };
+      return { points, maxPoints: MAX, code: 'CORRECT', feedback: `Correct: ${pair}.` };
     }
 
     // "You left a box empty" and "you typed a wrong number" are different mistakes, and telling a student
@@ -262,7 +262,7 @@ export default defineSim({
         : `the ${done}-coordinate is not right either`;
       return {
         points,
-        max: MAX,
+        maxPoints: MAX,
         code: 'MIDPOINT_INCOMPLETE',
         feedback:
           `You left the ${missing}-coordinate empty: ${right}. The midpoint of this segment is ${pair}. ` +
@@ -282,7 +282,7 @@ export default defineSim({
       // which is false and actively discourages them from rechecking. So the branch is split on `points`.
       return {
         points,
-        max: MAX,
+        maxPoints: MAX,
         code: 'WRONG',
         feedback: `Neither coordinate is right: ${wrong} The midpoint is ${pair}. ${describeSegment(params)}`,
       };
@@ -290,7 +290,7 @@ export default defineSim({
     const other = hit.x ? 'x' : 'y';
     return {
       points,
-      max: MAX,
+      maxPoints: MAX,
       code: 'PARTIAL',
       feedback: `Half right — the ${other}-coordinate is correct. ${wrong} The midpoint is ${pair}. ${describeSegment(params)}`,
     };

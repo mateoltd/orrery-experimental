@@ -7,9 +7,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import sim, { countMatched } from '../src/grader.js';
-import { describeQuadratic, discriminant, roots } from '../src/model.js';
+import { describeQuadratic, discriminant, type QuadraticParams, roots } from '../src/model.js';
 
-const grade = (answer: unknown, params: Record<string, unknown> = { a: 1, b: -4, c: 3 }) =>
+const grade = (answer: unknown, params: QuadraticParams = { a: 1, b: -4, c: 3 }) =>
   sim.grader.grade(null, params, answer);
 
 describe('maths.quadratic-roots grading', () => {

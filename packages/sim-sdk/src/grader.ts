@@ -19,6 +19,8 @@
 export type {
   BrowserHalf,
   GraderHalf,
+  Licence,
+  Provenance,
   RenderContext,
   SimAccessibility,
   SimControls,
@@ -26,7 +28,7 @@ export type {
   SimMeta,
   SimModule,
 } from './define.js';
-export { createRng, defineSim, gradeStoredState } from './define.js';
+export { createRng, defineSim, gradeStoredState, LICENCES, type Rng } from './define.js';
 export * from './grading.js';
 export * from './params.js';
 export * from './protocol.js';

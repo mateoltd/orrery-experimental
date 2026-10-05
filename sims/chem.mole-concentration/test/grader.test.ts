@@ -5,12 +5,15 @@
  */
 import { describe, expect, it } from 'vitest';
 import sim from '../src/grader.js';
-import { concentration, describeConcentration, toMillilitres } from '../src/model.js';
+import {
+  type ConcentrationParams,
+  concentration,
+  describeConcentration,
+  toMillilitres,
+} from '../src/model.js';
 
-const grade = (
-  answer: unknown,
-  params: Record<string, unknown> = { buretteCm: 23.4, flaskMl: 250 },
-) => sim.grader.grade(null, params, answer);
+const grade = (answer: unknown, params: ConcentrationParams = { buretteCm: 23.4, flaskMl: 250 }) =>
+  sim.grader.grade(null, params, answer);
 
 describe('chem.mole-concentration', () => {
   it('converts centimetres of burette to MILLILITRES, not to millilitres-with-a-decimal-point', () => {

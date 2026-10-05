@@ -38,7 +38,7 @@ export default defineSim({
     title: 'Pythagoras and triangle facts',
     version: '1.0.0',
     subjects: ['maths'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -67,7 +67,7 @@ export default defineSim({
     if (!isTriangle(params)) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'NOT_A_TRIANGLE',
         feedback: `${format(params.a)}, ${format(params.b)} and ${format(params.c)} cannot be the sides of a triangle.`,
       };
@@ -77,7 +77,7 @@ export default defineSim({
     if (given.size === 0) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'UNPARSEABLE',
         feedback: 'Name a side: a, b, c, or opposite, adjacent, hypotenuse.',
       };
@@ -102,7 +102,7 @@ export default defineSim({
     if (notLongest.length > 0) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: named.length > longest.length ? 'TOO_MANY' : 'WRONG',
         feedback:
           named.length > longest.length
@@ -115,7 +115,7 @@ export default defineSim({
     const judged = setMatch(named, named, { maxPoints: 4, caseSensitive: false });
     return {
       points: judged.points,
-      max: 4,
+      maxPoints: 4,
       code: 'CORRECT',
       feedback: `Correct. ${describeTriangle(params)}`,
     };

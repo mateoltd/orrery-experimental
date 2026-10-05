@@ -20,6 +20,20 @@ import {
   toleranceFor,
 } from '../src/model.js';
 
+/**
+ * `validateState` is OPTIONAL on the grader half -- twenty-three of the twenty-four simulations declare
+ * one and a hypothetical twenty-fifth might not -- so calling it directly is a type error, not a hint.
+ *
+ * Resolving it through here makes the test say what it means: these cases are the EVIDENCE that this
+ * simulation supplies a validator, so a missing one has to fail the test rather than be asserted away with
+ * `!` at eighteen call sites.
+ */
+function validateState(state: unknown): string | null {
+  const validator = sim.grader.validateState;
+  if (validator === undefined) throw new Error('this simulation declares no validateState');
+  return validator(state);
+}
+
 const SEED = '4242';
 const P = clamp({ samples: 2000, dropped: 2000, seed: SEED });
 const grade = (answer: unknown, params = P) => sim.grader.grade(null, params, answer);
@@ -57,9 +71,9 @@ describe('the SEED reproduces, which is the entire point', () => {
   });
 
   it('REFUSES A STATE WITH NO SEED, because a checkpoint that cannot regenerate its sample is nothing', () => {
-    expect(sim.grader.validateState({ dropped: 2000, seed: SEED })).toBeNull();
-    expect(sim.grader.validateState({ dropped: 2000 })).toMatch(/no seed/u);
-    expect(sim.grader.validateState({ dropped: -1, seed: SEED })).toMatch(/negative/u);
+    expect(validateState({ dropped: 2000, seed: SEED })).toBeNull();
+    expect(validateState({ dropped: 2000 })).toMatch(/no seed/u);
+    expect(validateState({ dropped: -1, seed: SEED })).toMatch(/negative/u);
   });
 });
 

@@ -9,6 +9,7 @@
 import {
   announce,
   type BridgeHandlers,
+  bool,
   clampParams,
   connectSim,
   describeControl,
@@ -31,12 +32,21 @@ const SIM_ID = 'maths.pythagoras';
 const SIM_VERSION = '1.0.0';
 const PANEL = 240;
 
-const CAPABILITIES: SimCapabilities = { grading: true, stepper: false, scenarios: [] };
+const CAPABILITIES: SimCapabilities = {
+  state: true,
+  grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
+  stepper: false,
+  scenarios: [],
+};
 
 const PARAM_SPECS = {
   a: num({ name: 'a', label: 'Side a', unit: '', min: 1, max: 20, default: 3 }),
   b: num({ name: 'b', label: 'Side b', unit: '', min: 1, max: 20, default: 4 }),
   c: num({ name: 'c', label: 'Side c', unit: '', min: 1, max: 30, default: 5 }),
+  giveLengths: bool({ name: 'giveLengths', label: 'Give the lengths', default: true }),
 };
 
 const paramsFrom = (raw: Readonly<Record<string, unknown>>): TriangleParams => {

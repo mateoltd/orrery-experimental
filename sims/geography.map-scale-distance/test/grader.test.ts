@@ -6,9 +6,16 @@
  */
 import { describe, expect, it } from 'vitest';
 import sim from '../src/grader.js';
-import { describeScale, format, realDistanceKm, SCALES, scaleByName } from '../src/model.js';
+import {
+  describeScale,
+  format,
+  realDistanceKm,
+  SCALES,
+  type ScaleParams,
+  scaleByName,
+} from '../src/model.js';
 
-const grade = (answer: unknown, params: Record<string, unknown> = { mapCm: 4, ratio: 50_000 }) =>
+const grade = (answer: unknown, params: ScaleParams = { mapCm: 4, ratio: 50_000 }) =>
   sim.grader.grade(null, params, answer);
 
 describe('geography.map-scale-distance', () => {
@@ -64,7 +71,10 @@ describe('geography.map-scale-distance', () => {
   // `expect.grade was 4, the grader awarded 0` with `params {"mapCm":4,"ratio":"250000"}`, which is what
   // made it findable.
   it('is configurable from the STRING a manifest can declare', () => {
-    const numeric = { mapCm: 4, ratio: '250000' };
+    // DELIBERATELY NOT A `ScaleParams`. `sim.manifest.schema.json` types `enumValues` as strings, so
+    // `'250000'` is what a host can actually send, and this case is the evidence that the grader copes
+    // with the wire shape rather than only with the type it was written against.
+    const numeric = { mapCm: 4, ratio: '250000' } as unknown as ScaleParams;
     expect(grade(10, numeric)).toMatchObject({ points: 4, code: 'CORRECT' });
     // And the number, for a host that has one.
     expect(grade(10, { mapCm: 4, ratio: 250_000 })).toMatchObject({ points: 4 });

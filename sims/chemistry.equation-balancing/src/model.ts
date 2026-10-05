@@ -70,8 +70,20 @@ export function parseSide(side: string): Term[] {
     const term = raw.trim();
     if (term === '') continue;
     const coefficientMatch = /^(\d*(?:\.\d+)?)/u.exec(term);
-    const coefficient = Number(coefficientMatch?.[1] || '1');
-    const elementPart = term.slice(coefficientMatch?.[1].length ?? 0).trim();
+    // THE GROUP IS READ ONCE, AND THE TWO USES OF IT ARE NOT THE SAME QUESTION.
+    //
+    // `coefficientMatch?.[1].length` indexed an optional chain and then took `.length` of the result, so
+    // the digit string's length was typed `number | undefined`. Reading it once fixes the type -- and
+    // reveals that the coefficient and the slice need DIFFERENT fallbacks.
+    //
+    // An unmatched or empty capture is `''`, and an empty capture means "no coefficient was written",
+    // which is 1. That is `||`, not `??`: `??` keeps `''`, `Number('')` is 0, and every term in an
+    // equation written the ordinary way (`H2 + O2`) silently became coefficient zero. The slice wants
+    // `'' ?? 0` = `''`, so it takes the length of what was actually written. Collapsing both to one
+    // `digits` variable is what broke it.
+    const written = coefficientMatch?.[1] ?? '';
+    const coefficient = Number(written || '1');
+    const elementPart = term.slice(written.length).trim();
     const matches = [...elementPart.matchAll(ELEMENT_PATTERN)];
     if (matches.length === 0) {
       throw new Error(`TERM: ${JSON.stringify(term)} is not an element`);

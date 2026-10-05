@@ -54,7 +54,7 @@ export default defineSim({
     title: 'Estimating pi by throwing points',
     version: '1.0.0',
     subjects: ['maths'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -107,7 +107,7 @@ export default defineSim({
     if (params.dropped === 0) {
       return {
         points: 0,
-        max: MAX,
+        maxPoints: MAX,
         code: 'NOTHING_DRAWN',
         feedback: `Draw some points into the square before estimating from them. ${describeTask(params)}`,
       };
@@ -116,7 +116,7 @@ export default defineSim({
     if (answer === null || answer === undefined || String(answer).trim() === '') {
       return {
         points: 0,
-        max: MAX,
+        maxPoints: MAX,
         code: 'MISSING',
         feedback: `Type your estimate for pi. ${describeTask(params)}`,
       };
@@ -126,7 +126,7 @@ export default defineSim({
     if (!Number.isFinite(given)) {
       return {
         points: 0,
-        max: MAX,
+        maxPoints: MAX,
         code: 'UNPARSEABLE',
         feedback: `Type a single number, with no units. ${describeTask(params)}`,
       };
@@ -146,7 +146,7 @@ export default defineSim({
     if (points === MAX) {
       return {
         points,
-        max: MAX,
+        maxPoints: MAX,
         code: 'CORRECT',
         feedback:
           `${format(given)} is within the uncertainty of ${String(params.dropped)} points, which is about ` +
@@ -165,7 +165,7 @@ export default defineSim({
     const proportion = params.dropped === 0 ? 0 : inside / params.dropped;
     return {
       points,
-      max: MAX,
+      maxPoints: MAX,
       code: points > 0 ? 'PARTIAL' : 'WRONG',
       feedback:
         `You estimated ${format(given)}. ${String(inside)} of ${String(params.dropped)} points landed inside ` +

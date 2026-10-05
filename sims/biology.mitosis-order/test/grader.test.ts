@@ -5,10 +5,32 @@
  */
 import { describe, expect, it } from 'vitest';
 import sim from '../src/grader.js';
-import { correctPositions, describeOrder, move, NAMES, STAGES, shuffled } from '../src/model.js';
+import {
+  correctPositions,
+  describeOrder,
+  move,
+  NAMES,
+  type OrderParams,
+  STAGES,
+  shuffled,
+} from '../src/model.js';
 
 const ORDER = [...NAMES];
-const grade = (answer: unknown, params: Record<string, unknown> = { count: 6 }) =>
+
+/**
+ * The stage at `index`, as a NAME.
+ *
+ * `ORDER[i]` is `string | undefined` under `noUncheckedIndexedAccess`, so building a swapped order out of
+ * literals produces `(string | undefined)[]` — and a `correctPositions` call handed that array would
+ * count an absent entry as merely misplaced rather than report the mistake. Resolving the index once, and
+ * refusing an out-of-range one, keeps the test counting POSITIONS rather than counting holes.
+ */
+const stageAt = (index: number): string => {
+  const name = ORDER[index];
+  if (name === undefined) throw new Error(`no stage at index ${String(index)}`);
+  return name;
+};
+const grade = (answer: unknown, params: OrderParams = { count: 6 }) =>
   sim.grader.grade(null, params, answer);
 
 describe('biology.mitosis-order', () => {
@@ -31,7 +53,7 @@ describe('biology.mitosis-order', () => {
 
   it('credits by POSITION rather than by which items are present', () => {
     // Two adjacent stages swapped: all six items present, four of six positions right.
-    const swapped = [ORDER[0], ORDER[2], ORDER[1], ...ORDER.slice(3)];
+    const swapped = [stageAt(0), stageAt(2), stageAt(1), ...ORDER.slice(3)];
     const result = grade(swapped);
     expect(result.points).toBeCloseTo((4 / 6) * 4, 6);
     expect(result.points).toBeLessThan(4);

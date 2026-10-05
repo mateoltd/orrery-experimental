@@ -25,7 +25,12 @@ const SIM_VERSION = '1.0.0';
 const PANEL = 170;
 
 const CAPABILITIES: SimCapabilities = {
+  state: true,
   grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
+  stepper: false,
   scenarios: ['25k', '50k', '250k'],
 };
 

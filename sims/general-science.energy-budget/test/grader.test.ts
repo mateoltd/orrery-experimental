@@ -6,12 +6,10 @@
  */
 import { describe, expect, it } from 'vitest';
 import sim from '../src/grader.js';
-import { budget, describeEnergy, format, isConserved } from '../src/model.js';
+import { budget, describeEnergy, type EnergyParams, format, isConserved } from '../src/model.js';
 
-const grade = (
-  answer: unknown,
-  params: Record<string, unknown> = { inputJ: 1000, efficiency: 25 },
-) => sim.grader.grade(null, params, answer);
+const grade = (answer: unknown, params: EnergyParams = { inputJ: 1000, efficiency: 25 }) =>
+  sim.grader.grade(null, params, answer);
 
 describe('general-science.energy-budget', () => {
   it('splits the input into useful work and heat', () => {

@@ -11,14 +11,13 @@ import {
   format,
   lightYears,
   PARSEC_IN_LIGHT_YEARS,
+  type ParallaxParams,
   parallaxOf,
   parsecs,
 } from '../src/model.js';
 
-const grade = (
-  answer: unknown,
-  params: Record<string, unknown> = { parallax: 0.1, inLightYears: false },
-) => sim.grader.grade(null, params, answer);
+const grade = (answer: unknown, params: ParallaxParams = { parallax: 0.1, inLightYears: false }) =>
+  sim.grader.grade(null, params, answer);
 
 describe('astronomy.parallax-distance', () => {
   it('answers in PARSECS, which is the reciprocal with no arithmetic in the unit', () => {

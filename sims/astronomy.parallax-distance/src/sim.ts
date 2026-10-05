@@ -5,7 +5,7 @@
 import {
   announce,
   type BridgeHandlers,
-  choice,
+  bool,
   clampParams,
   connectSim,
   describeControl,
@@ -21,7 +21,15 @@ const SIM_ID = 'astronomy.parallax-distance';
 const SIM_VERSION = '1.0.0';
 const PANEL = 190;
 
-const CAPABILITIES: SimCapabilities = { grading: true };
+const CAPABILITIES: SimCapabilities = {
+  state: true,
+  grading: true,
+  randomised: false,
+  audio: false,
+  webgl: false,
+  stepper: false,
+  scenarios: [],
+};
 
 const PARAM_SPECS = {
   parallax: num({
@@ -30,14 +38,15 @@ const PARAM_SPECS = {
     unit: 'arcsec',
     min: 0.05,
     max: 2,
+    step: 0.01,
     default: 0.1,
   }),
-  inLightYears: choice({
-    name: 'inLightYears',
-    label: 'Answer in light years',
-    values: [false, true],
-    default: false,
-  }),
+  // A BOOLEAN, NOT A TWO-VALUED ENUM. `choice({ values: [false, true] })` typechecked as nothing and, worse,
+  // behaved as nothing: `clampParams`'s enum branch matches a supplied value with `values.includes(raw)`
+  // after a numeric coercion, so a boolean `true` matched neither `'true'` nor `1` and was coerced back to the
+  // declared default. The unit selector below therefore could never switch to light years -- `applyParams`
+  // sent a boolean, `clampParams` discarded it, and the log line said so on every keystroke.
+  inLightYears: bool({ name: 'inLightYears', label: 'Answer in light years', default: false }),
 };
 
 export function startSim(
@@ -123,10 +132,14 @@ export function startSim(
   const units = document_.createElement('select');
   units.id = 'sim-units';
   units.setAttribute('aria-label', 'the unit to answer in');
-  for (const [value, label] of [
+  // TYPED AS TUPLES. A bare `string[][]` destructures to `string | undefined` under
+  // `noUncheckedIndexedAccess`, which is a complaint about the ARRAY'S SHAPE, not about the values --
+  // and `option.value = undefined` is the kind of thing that silently renders an option with no value.
+  const unitOptions: ReadonlyArray<readonly [string, string]> = [
     ['pc', 'parsecs'],
     ['ly', 'light years'],
-  ]) {
+  ];
+  for (const [value, label] of unitOptions) {
     const option = document_.createElement('option');
     option.value = value;
     option.textContent = label;

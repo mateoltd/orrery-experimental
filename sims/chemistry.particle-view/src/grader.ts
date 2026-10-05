@@ -140,7 +140,7 @@ export default defineSim({
     title: 'How often do the atoms meet?',
     version: '1.0.0',
     subjects: ['chemistry'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -190,7 +190,7 @@ export default defineSim({
     if (answer === null || answer === undefined || String(answer).trim() === '') {
       return {
         points: 0,
-        max: MAX,
+        maxPoints: MAX,
         code: 'MISSING',
         feedback: `Type how many collisions the atoms make each second. ${task}`,
       };
@@ -208,7 +208,7 @@ export default defineSim({
     if (!Number.isFinite(given)) {
       return {
         points: 0,
-        max: MAX,
+        maxPoints: MAX,
         code: 'UNPARSEABLE',
         feedback: `Type a single number — a count of collisions per second, not a list or a time. ${task}`,
       };
@@ -225,7 +225,7 @@ export default defineSim({
     if (relative <= BAND) {
       return {
         points: MAX,
-        max: MAX,
+        maxPoints: MAX,
         code: 'CORRECT',
         feedback:
           `Correct: about ${format(expected, 0)} collisions a second. Twice the temperature does not ` +
@@ -246,7 +246,7 @@ export default defineSim({
     if (overBySteps > 100 && overBySteps < 140) {
       return {
         points: pointsFor(relative),
-        max: MAX,
+        maxPoints: MAX,
         code: 'STEPS_NOT_SECONDS',
         feedback:
           `You are about 120 times too high, which is exactly the number of steps in a second. The counter ` +
@@ -261,7 +261,7 @@ export default defineSim({
     if (given < lowest * 0.5) {
       return {
         points: 0,
-        max: MAX,
+        maxPoints: MAX,
         code: 'TOO_FEW',
         feedback:
           `You said ${format(given, 0)}, well below the ${format(lowest, 0)}-${format(highest, 0)} a second ` +
@@ -272,7 +272,7 @@ export default defineSim({
 
     return {
       points: pointsFor(relative),
-      max: MAX,
+      maxPoints: MAX,
       code: 'OUT_OF_BAND',
       feedback:
         `You said ${format(given, 0)}; this gas makes about ${format(expected, 0)} collisions a second ` +

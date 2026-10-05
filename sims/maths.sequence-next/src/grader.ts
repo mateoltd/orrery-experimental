@@ -30,7 +30,7 @@ export default defineSim({
     title: 'Next in the sequence',
     version: '1.0.0',
     subjects: ['maths'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -54,7 +54,7 @@ export default defineSim({
     if (!Number.isFinite(seed)) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'NO_STATE',
         feedback: 'This answer cannot be graded without the sequence it belongs to.',
       };
@@ -70,14 +70,14 @@ export default defineSim({
     if (judged.points === 4) {
       return {
         points: 4,
-        max: 4,
+        maxPoints: 4,
         code: 'CORRECT',
         feedback: `Correct. ${describeSequence(params)}`,
       };
     }
     return {
       points: judged.points,
-      max: 4,
+      maxPoints: 4,
       code: 'WRONG',
       feedback: `Not quite. ${describeSequence(params)}`,
     };

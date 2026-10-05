@@ -63,7 +63,7 @@ export default defineSim({
     title: "Newton's second law",
     version: '1.0.0',
     subjects: ['physics'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -102,7 +102,7 @@ export default defineSim({
     if (parsed === null) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'UNPARSEABLE',
         feedback: 'Enter a number for the quantity you were asked for.',
       };
@@ -119,7 +119,7 @@ export default defineSim({
     if (parsed.quantity !== '' && parsed.quantity !== resolved.solveFor) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'WRONG_QUANTITY',
         feedback: `You were asked for the ${wanted.name.toLowerCase()}, not the ${parsed.quantity}. ${describeNewton(resolved)}`,
       };
@@ -131,13 +131,13 @@ export default defineSim({
       return parsed.value === null
         ? {
             points: 4,
-            max: 4,
+            maxPoints: 4,
             code: 'CORRECT_NO_VALUE',
             feedback: `Correct: there is no ${wanted.name.toLowerCase()} to report here.`,
           }
         : {
             points: 0,
-            max: 4,
+            maxPoints: 4,
             code: 'SHOULD_BE_NULL',
             feedback: `There is no ${wanted.name.toLowerCase()} to report here, so leave the answer empty.`,
           };
@@ -145,7 +145,7 @@ export default defineSim({
     if (parsed.value === null) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'MISSING',
         feedback: `The ${wanted.name.toLowerCase()} is ${format(wanted.value)} ${wanted.unit}.`,
       };
@@ -159,7 +159,7 @@ export default defineSim({
     });
     return {
       points: judged.points,
-      max: 4,
+      maxPoints: 4,
       code: judged.points === 4 ? 'CORRECT' : judged.points > 0 ? 'CLOSE' : 'WRONG',
       feedback:
         judged.points === 4

@@ -18,7 +18,7 @@ export default defineSim({
     title: 'Balancing a chemical equation',
     version: '1.0.0',
     subjects: ['chemistry'],
-    license: 'CC-BY-4.0',
+    licence: 'CC-BY-4.0',
     provenance: 'ORIGINAL',
     protocol: 1,
   },
@@ -44,7 +44,7 @@ export default defineSim({
     if (blank) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'UNPARSEABLE',
         feedback: 'Write the balanced equation on one line.',
       };
@@ -54,7 +54,7 @@ export default defineSim({
     if (left === undefined || right === undefined || right.trim() === '') {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'NO_ARROW',
         feedback:
           'An equation needs both sides. Write it with an arrow between them, for example ' +
@@ -70,7 +70,7 @@ export default defineSim({
     } catch (error) {
       return {
         points: 0,
-        max: 4,
+        maxPoints: 4,
         code: 'UNPARSABLE',
         feedback: `That could not be read as an equation: ${
           error instanceof Error ? error.message : 'unknown'
@@ -80,7 +80,7 @@ export default defineSim({
 
     return {
       points: correct ? 4 : 0,
-      max: 4,
+      maxPoints: 4,
       code: correct ? 'CORRECT' : 'WRONG',
       feedback: correct
         ? 'Balanced.'

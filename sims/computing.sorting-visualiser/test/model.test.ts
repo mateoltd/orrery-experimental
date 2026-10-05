@@ -23,6 +23,20 @@ import {
   valuesOf,
 } from '../src/model.js';
 
+/**
+ * `validateState` is OPTIONAL on the grader half -- twenty-three of the twenty-four simulations declare
+ * one and a hypothetical twenty-fifth might not -- so calling it directly is a type error, not a hint.
+ *
+ * Resolving it through here makes the test say what it means: these cases are the EVIDENCE that this
+ * simulation supplies a validator, so a missing one has to fail the test rather than be asserted away with
+ * `!` at eighteen call sites.
+ */
+function validateState(state: unknown): string | null {
+  const validator = sim.grader.validateState;
+  if (validator === undefined) throw new Error('this simulation declares no validateState');
+  return validator(state);
+}
+
 const PARAMS = { size: 9, seed: 7 };
 const OTHER = { size: 9, seed: 8 };
 
@@ -231,13 +245,13 @@ describe('the grader', () => {
 
   it('awards full marks for the count the simulation reaches', () => {
     const result = answer(PARAMS, totalComparisons(PARAMS));
-    expect(result.points).toBe(result.max);
+    expect(result.points).toBe(result.maxPoints);
   });
 
   it('awards full marks one comparison either side, because the answer is an integer count', () => {
     const expected = totalComparisons(PARAMS);
-    expect(answer(PARAMS, expected - 1).points).toBe(answer(PARAMS, expected).max);
-    expect(answer(PARAMS, expected + 1).points).toBe(answer(PARAMS, expected).max);
+    expect(answer(PARAMS, expected - 1).points).toBe(answer(PARAMS, expected).maxPoints);
+    expect(answer(PARAMS, expected + 1).points).toBe(answer(PARAMS, expected).maxPoints);
   });
 
   it('awards nothing two comparisons out, so the band is not doing the grading', () => {
@@ -256,7 +270,7 @@ describe('the grader', () => {
     if (expected === worst) return; // A reverse-ordered list makes the two indistinguishable.
     const result = answer(WIDE, worst);
     expect(result.points).toBeGreaterThan(0);
-    expect(result.points).toBeLessThan(result.max);
+    expect(result.points).toBeLessThan(result.maxPoints);
     expect(result.feedback).toContain(String(expected));
     expect(result.feedback).toContain(String(worst));
   });
@@ -269,7 +283,7 @@ describe('the grader', () => {
     const expected = totalComparisons(PARAMS);
     const worst = maxComparisons(PARAMS.size);
     if (expected !== worst - 1) return; // Only meaningful for a seed this close to the ceiling.
-    expect(answer(PARAMS, worst).points).toBe(answer(PARAMS, expected).max);
+    expect(answer(PARAMS, worst).points).toBe(answer(PARAMS, expected).maxPoints);
   });
 
   it('does NOT give half marks for the worst case when it happens to be right', () => {
@@ -330,28 +344,28 @@ describe('state validation', () => {
   it('rejects a fractional pass count', () => {
     // The state indexes a trace, so a half-pass addresses a comparison that never happened. `Number.isFinite`
     // accepts 2.5, which is why this check exists separately.
-    expect(sim.grader.validateState({ passes: 1.5, comparisons: 10 })).toMatch(/fractional/);
+    expect(validateState({ passes: 1.5, comparisons: 10 })).toMatch(/fractional/);
   });
 
   it('rejects a negative count, because comparisons cannot be un-made', () => {
-    expect(sim.grader.validateState({ passes: 0, comparisons: -1 })).toMatch(/negative/);
+    expect(validateState({ passes: 0, comparisons: -1 })).toMatch(/negative/);
   });
 
   it('rejects a fractional comparison count', () => {
-    expect(sim.grader.validateState({ passes: 1, comparisons: 8.5 })).toMatch(/whole-number/);
+    expect(validateState({ passes: 1, comparisons: 8.5 })).toMatch(/whole-number/);
   });
 
   it('accepts the states this simulation actually produces', () => {
     for (const passes of [0, 1, 4, 9]) {
       const state = runTo(PARAMS, passes);
       expect(
-        sim.grader.validateState({ passes: state.passes, comparisons: state.comparisons.length }),
+        validateState({ passes: state.passes, comparisons: state.comparisons.length }),
       ).toBeNull();
     }
   });
 
   it('rejects a state that is not an object at all', () => {
-    expect(sim.grader.validateState(null)).toMatch(/not an object/);
-    expect(sim.grader.validateState('state')).toMatch(/not an object/);
+    expect(validateState(null)).toMatch(/not an object/);
+    expect(validateState('state')).toMatch(/not an object/);
   });
 });
