@@ -40,6 +40,7 @@
     "gate:migrate": "node scripts/migration-corpus-gate.mjs",
     "gate:subjects": "node scripts/subject-tree-gate.mjs",
     "test:grader": "node scripts/test-grader.mjs",
+    "test:load": "pnpm --filter @orrery/load-profile build && node scripts/load-run.mjs",
     "verify-receipt": "node scripts/verify-receipt.mjs",
     "gate:tracker": "node scripts/check-tracker.mjs",
     "gate:routes": "node scripts/audit-routes.mjs",
