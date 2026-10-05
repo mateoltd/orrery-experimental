@@ -294,6 +294,7 @@ See `10-SIMULATIONS.md` for the protocol and `§10` for the 24 sims.
 | P12-T5 | Catalogue polish: subject browsing, auto-captured screenshots, search, "used in N resources" | P6-T8 | M |
 | P12-T6 | Bundle budget enforcement; prove the app bundle is unchanged from the 24-sim baseline | P12-T4 | M |
 | P12-T7 | Content QA sweep: all 220 load, grade, and pass accessibility; any regression blocks merge | P12-T3 | M |
+| P12-T8 | Make `sims/` typecheck: 24 graders, 286 errors, and no gate can currently see them | P12-T1 | M |
 
 **Exit:** registry ≥ 200, conformance 100% green, screenshots present, bundle budget held, app bundle independent of registry size.
 

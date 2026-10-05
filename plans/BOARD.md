@@ -69,7 +69,7 @@ Lanes available: **6**. P0 is mostly sequential; P0-T1, T2, T3 and T6 can run in
 | P15 Reliability & performance | pending | 0 / 8 | M10 |
 | P16 Interoperability | pending | 0 / 9 | M9 |
 | P17 Pilot & GA | pending | 0 / 7 | M10 |
-| | | **0 / 202** | |
+| | | **0 / 203** | |
 
 ---
 
