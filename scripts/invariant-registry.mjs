@@ -19,9 +19,14 @@
  *   • the file that implements that mechanism.
  *
  * And this script fails when an invariant has no mechanism, when its mechanism is a
- * comment rather than something runnable, or when the named file does not exist. A new
- * invariant cannot be added without saying what enforces it. Deleting an enforcing file
- * breaks the build.
+ * comment rather than something runnable, or when **an ACTIVE** invariant's named file does not exist. A new
+ * invariant cannot be added without saying what enforces it. Deleting an enforcing file breaks the build.
+ *
+ * **`ACTIVE` IS THE WORD THAT DOES THE WORK IN THAT SENTENCE.** The existence check covers the enforced set only,
+ * because a `staged` invariant is a promise about work not yet done and a missing file is its expected state.
+ * Section 2b therefore *reports* stale names among the staged set rather than failing on them -- eleven had rotted
+ * that way, which is precisely the failure a registry exists to prevent, and it was invisible until something
+ * checked. A gate that could only run once the whole backlog landed would be a gate nobody ran.
  *
  * Adding an invariant requires `GATE-CHANGE:` — an invariant is a claim about correctness,
  * so adding one is a real change and removing enforcement for one certainly is (D-35).
@@ -127,6 +132,57 @@ for (const inv of registry.invariants) {
 
   if (problems.length === 0) ok(`${inv.id} — ACTIVE — ${inv.summary}`);
   else bad(`${inv.id}: ${problems.join('; ')}`);
+}
+
+// ── 2b. a STAGED promise that names a file which does not exist ────────────────────
+/**
+ * THE `active` SET IS CHECKED ABOVE AND IS CLEAN. This is about the other 21.
+ *
+ * `status: 'staged'` honestly means "not enforced yet", and the gate does not pretend otherwise. But a staged
+ * invariant still names a file that is supposed to arrive, and **nothing was ever verifying that name** -- so when
+ * `INV-POLICY-1`'s mechanism moved from `packages/exam-engine/src/policy.ts` to
+ * `packages/contracts/src/policy/index.ts`, the registry kept promising a path that no longer existed. Eleven of
+ * them had rotted that way, naming `packages/grading/` (a package that was never created), an `audit:payloads`
+ * script that does not exist, and a rate limiter that was never written.
+ *
+ * **THIS IS NOT A FAILURE, AND MAKING IT ONE WOULD BE WRONG.** A staged invariant is a promise about work not yet
+ * done, so a missing file is the expected state. Failing here would mean the gate cannot be run until the entire
+ * backlog lands, which is a gate nobody runs.
+ *
+ * The cost of that leniency is a silent one, which is what this section removes: **a promise whose named mechanism
+ * has moved should be corrected while the reader is here**, not discovered later by someone who trusted it. It
+ * prints, it names the invariant, and it does not pass judgement -- whether the file moved, is unbuilt, or was
+ * renamed is a decision for whoever owns that row.
+ *
+ * Reported as a count as well as a list, because a single stale name in a wall of text is the same failure the
+ * invariant registry was built to end.
+ */
+const stalePromises = [];
+for (const inv of registry.invariants) {
+  if (inv.status === 'active') continue; // already hard-checked above
+  for (const f of inv.files ?? []) {
+    if (f.includes('*')) {
+      const dir = join(root, f.slice(0, f.indexOf('*')).replace(/\/$/, ''));
+      if (!existsSync(dir)) stalePromises.push(`${inv.id} → \`${f}\` (no directory)`);
+    } else if (!existsSync(join(root, f))) {
+      stalePromises.push(`${inv.id} → \`${f}\``);
+    }
+  }
+  for (const g of inv.gates ?? []) {
+    const name = g.replace(/^pnpm\s+(run\s+)?/, '').split(' ')[0];
+    if (!(name in scripts)) stalePromises.push(`${inv.id} → gate \`${g}\` (no such script)`);
+  }
+}
+console.log('\n2b. staged promises naming a mechanism that is not there yet');
+if (stalePromises.length === 0) {
+  ok(`all ${staged.length} staged invariants name a mechanism that exists or is a script`);
+} else {
+  soft(
+    `${stalePromises.length} STAGED invariant reference(s) name a file or gate that does not exist. ` +
+      `Not a failure — staged means "not enforced yet" — but each one is a promise that has either moved or ` +
+      `rotted, and should be corrected or the row should say so:`,
+  );
+  for (const s of stalePromises) console.log(`      \x1b[33m·\x1b[0m ${s}`);
 }
 
 // ── 3. no invariant may be enforced by prose alone ────────────────────────────────
