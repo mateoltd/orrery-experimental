@@ -22,6 +22,10 @@
       "types": "./dist/csp.d.ts",
       "default": "./dist/csp.js"
     },
+    "./outbound": {
+      "types": "./dist/outbound.d.ts",
+      "default": "./dist/outbound.js"
+    },
     "./digest": {
       "types": "./dist/digest.d.ts",
       "default": "./dist/digest.js"

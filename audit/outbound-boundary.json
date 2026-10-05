@@ -1,0 +1,22 @@
+{
+  "$comment": "The authority for P10-T10's only-path audit. scripts/audit-outbound.mjs fails on any file outside this list that names an LTI or xAPI score field, on any listed file that no longer names one, on a chokepoint that does not export prepareOutbound, and on @orrery/interop gaining a dependency.",
+  "$why_a_list_rather_than_a_heuristic": "The same reasoning as audit/student-routes.json and audit/score-projections.json: adding a score to an outbound payload must be a DELIBERATE act with a human decision attached, because a list computed from the filesystem is not a list, it is a description. The failure mode is not hypothetical -- SCORE_BEARING_KEYS did not contain scoreGiven, scoreMaximum, resultScore, success, completion or scaled, so assertNoScoreLeak({ scoreGiven: 87, scoreMaximum: 100 }) returned clean on the exact payload plans/16 §4.1 describes. outbound.test.ts asserts that hole exists so it cannot be closed silently.",
+  "$what_this_does_not_claim": "It cannot see a payload assembled by string concatenation or a computed key, and it cannot see a mark under a name neither standard uses. It also cannot tell whether prepareOutbound was CALLED -- only that the vocabulary appears in exactly one file. The call-side guarantee is prepareOutbound's own: it is the only export in the package that produces an OutboundBody, the package has no transport and no dependency, and outbound.test.ts pins that export list.",
+  "$scanned_field_names": [
+    "scoreGiven",
+    "scoreMaximum",
+    "resultScore",
+    "resultMaximum",
+    "activityProgress",
+    "http://adlnet.gov/expapi/verbs/scored",
+    "http://adlnet.gov/expapi/verbs/passed",
+    "http://adlnet.gov/expapi/verbs/failed"
+  ],
+  "$why_the_scanned_list_is_narrower_than_the_watched_list": "prepareOutbound WATCHES success, completion, scaled and raw as well as the five AGS names, and this scanner does not search for them -- because they are not evidence of an interop payload. `{ success: true }` is a contrast ratio passing in packages/contracts/src/a11y/contrast.ts and a library request succeeding in apps/web; `{ completion: false }` is a lifecycle flag. The first version of scripts/audit-outbound.mjs derived its list from the whole union and reported 90 files, every one of them noise. A gate that fires on the whole repository is a gate that gets deleted, and it would have been deleted for being noisy rather than for being wrong. The verb IRIs are scanned as bare substrings because they are names a statement CARRIES rather than keys a guard scans for, and a URL is unmistakable in a way that `success` is not.",
+  "files": [
+    {
+      "file": "packages/interop/src/outbound.ts",
+      "why": "THE CHOKEPOINT, and the only file in the repository permitted to name these fields. It widens SCORE_BEARING_KEYS by UNION with the two standards' own names (LTI_AGS_SCORE_KEYS, XAPI_SCORE_KEYS) rather than replacing it, so P10-T4's sealed results view keeps its coverage. The sealed arm has NO score field at all -- not nullable, absent -- so a handler that reads one does not compile (outbound.assert.types.ts, seven @ts-expect-error directives, all used). The runtime scan covers what the type cannot: the `envelope`, which is Record<string, unknown> from a codec nobody has audited, and which is where a nested mark would be smuggled. It also drops AttemptReceipt.answers, because plans/16 §3 forbids answer content in an xAPI payload and an answer set is a fingerprint -- no key-based guard would ever have caught that."
+    }
+  ]
+}
