@@ -30,6 +30,7 @@
     "audit:payloads": "node scripts/audit-payloads.mjs",
     "gate:sim-registry": "node scripts/audit-sim-registry.mjs",
     "gate:telemetry": "node scripts/audit-telemetry-leak.mjs",
+    "a11y": "node scripts/audit-a11y.mjs",
     "sim:validate": "node scripts/sim-validate.mjs --all",
     "sim:new": "node scripts/sim-new.mjs",
     "sim:build": "node scripts/sim-build.mjs --all",

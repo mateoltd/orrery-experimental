@@ -272,14 +272,19 @@ jobs:
       # blocked by a vulnerability in the entire life of this workflow. **A vulnerability gate that never executes is
       # worse than no gate: it is a claim that scans happen.**
       #
-      # `a11y` is `P13-T1` and `i18n:check` is `P13-T7`; neither is built. **The steps are commented out rather than
-      # deleted, because a deleted CI step is indistinguishable from a control that was deliberately removed** -- and
-      # the comment is what stops the next reader believing CI is checking accessibility or catalogue completeness.
+      # `i18n:check` is `P13-T7` and is STILL not built; that step stays commented out rather than deleted, because a
+      # deleted CI step is indistinguishable from a control that was deliberately removed. `a11y` (`P13-T1`) has since been
+      # built and its step is live below -- **so this paragraph now describes only one of the two, and saying otherwise
+      # would be a comment that has gone stale in the same file it is correcting.**
       #
       # The dependency audit is promoted ABOVE them now, so it cannot be starved by work that does not exist yet.
       #
-      # - name: accessibility (WCAG 2.2 AA)      # P13-T1 -- no script exists yet
-      #   run: pnpm a11y
+      # `P13-T1` LANDED THIS STEP: `scripts/audit-a11y.mjs` exists and `pnpm a11y` runs. It is UNCOMMENTED rather than left
+      # commented, and it says its own scope on every run -- component-level axe only, with focus order, live regions,
+      # sticky-element overlap and keyboard traps explicitly OUT OF SCOPE, and `P13-T9` named as the manual audit that
+      # covers them. **A green tick from a floor-level check is still a claim, and it has to be labelled as one.**
+      - name: accessibility (component-level axe; P13-T9 is the manual WCAG 2.2 AA audit)
+        run: pnpm a11y
       # - name: i18n completeness                # P13-T7 -- no script exists yet
       #   run: pnpm i18n:check
       # ── THE DEPENDENCY SCAN, WHICH HAS NEVER RUN ONCE. `P14-T15` (`TM-14`, `TM-15`). ─────────────────────
