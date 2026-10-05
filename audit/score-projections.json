@@ -3,7 +3,17 @@
   "$why_it_exists": "On 2026-10-05 `roster-page.ts` gated a SEALED GRADE on `assignment: { releaseBatches: { some: { status: 'RELEASED' } } }` -- 'does this assignment own SOME released batch' -- when release is per MEMBERSHIP. Two batches on one assignment leaked a sibling batch member's finalScore/maxScore/percentage into a teacher's roster. The route audit passed throughout, because the route was correct and the QUERY was not: audit-routes.mjs reads the route table and cannot see a projection. Every existing test put the withheld attempt on a DIFFERENT assignment, the one shape where the bug is indistinguishable from correct behaviour.",
   "$rule": "An entry is a CLAIM TO BE CHECKED, not a permission slip. If you add a `select:` naming a score-bearing key, you are asserting that this query is gated on release correctly -- and a reviewer should read the predicate, not just the entry. Listing a file without reading its predicate is how the roster bug would be re-landed.",
   "$three_claims_i_wrote_and_the_gate_removed": "The first version of this file listed `release.ts`, `release-batch.ts` and `receipt-issue.ts`, on the grounds that those modules compute or fold scores. The gate failed all three as STALE: none of them has a `select:` naming a score-bearing key. `release.ts` has `finalScore` and `percentage` as TYPE FIELDS on an interface and receives them as input; `planRelease` computes a plan rather than loading stored marks. I had written the entries from what the modules DO rather than from what they SELECT, which is precisely the confusion the gate exists to catch -- and it caught me on the first run, which is the only evidence that it works.",
+  "$manual_sql_projections": [
+    {
+      "file": "packages/db/src/report-item-analysis.ts",
+      "why": "Manual claim: audit-projections.mjs cannot inspect raw SQL. readItemAnalysis first requires an ACTIVE OWNER/TEACHER enrollment and the shared permit decision in the requested classroom. SQL scopes ExamAttempt by classroomId, assignmentId and GRADED purpose, excludes VOIDED/EXCUSED and older retakes, and requires EXISTS ReleaseBatchMember JOIN ReleaseBatch on THIS attempt with status RELEASED. Scores are aggregated inside Postgres; only pFull/pCredit and actual N leave the query, with CASE suppression below N=5 and a second guard at the pure export boundary. The query excludes omitted, not-reached, excused and needs-human responses. report-reporting.integration.test.ts verifies a sealed sibling batch contributes no observations and both the N=4/N=5 boundary and manual-over-auto arithmetic. This entry is review evidence, not a machine-checked SQL claim."
+    }
+  ],
   "projections": [
+    {
+      "file": "packages/db/src/report-queries.ts",
+      "why": "Teacher reporting and export only: requireReportTeacher combines permit(read, classroomId) with an ACTIVE OWNER/TEACHER enrollment in that classroom; a global teacher enrolled as STUDENT is denied. The score-bearing projection is loaded only for latest GRADED-purpose attempt IDs in the requested classroom/student scope whose OWN releaseMembers.some.batch.status is RELEASED. Metadata and released response reads share a RepeatableRead transaction. The metadata read selects no marks. report-reporting.integration.test.ts proves that a RELEASED sibling batch never exposes a DRAFT member's score or submissions, and captures the report SQL separately from setup queries. readSubmissions applies the same per-attempt membership predicate and classroom scope in its response-keyset query. Reporting export tests prove denial before a successful download response is created."
+    },
     {
       "file": "packages/db/src/roster-page.ts",
       "why": "A TEACHER-facing roster, so this is not the INV-RELEASE-2 student path at all; a teacher may see a grade for their own class whenever they like. The predicate was corrected in this session to the per-membership form: `releaseMembers: { some: { batch: { status: 'RELEASED' } } }`, and `roster-page.integration.test.ts` now carries the two-batches-on-one-assignment regression test that fails against the old assignment-scoped version. Recorded here because the `select:` still names score-bearing keys, and a future reader deserves to know this one was already wrong once."
@@ -15,6 +25,18 @@
     {
       "file": "packages/db/src/version-snapshot.ts",
       "why": "Resource-version content snapshots for the AUTHORING side. A snapshot is a pinned copy of a resource version, which by `INV-ASSIGN-1` includes the assessment content and therefore the answer keys inside it; `INV-ASSIGN-1` also makes the snapshot the thing a student's assessment surface derives from, which is why it is worth a claim rather than an assumption. The student boundary is again `publicQuestionSpec`, asserted by P7-T1's leak test. UNVERIFIED BY ME: I did not trace this file's callers to confirm no student-facing path reads a snapshot directly, so this entry records the reasoning rather than a checked fact."
+    },
+    {
+      "file": "packages/db/src/student-results.ts",
+      "why": "Student grade read predicates on id, studentId, GRADED purpose, status != VOIDED and releaseMembers.some.batch.status = RELEASED. The first read selects only the student's own receipt and answers. Sibling-batch, other-owner and voided-after-release regression tests in p10-results.integration.test.ts ensure a release elsewhere on the assignment, another student, or a voided attempt cannot expose marks. Correct answers additionally require the frozen policy showCorrectAnswersAfterRelease === true."
+    },
+    {
+      "file": "packages/db/src/grading-write.ts",
+      "why": "Teacher grading only. Attempt reads predicate on id in the explicit selection and classroom.ownerId = actorId OR an ACTIVE OWNER/TEACHER enrollment for actorId. Response reads use attempt.classroom with the same predicate, then require response.attemptId = the selected attemptId. Stored marks are used for the version conflict comparison and GradeChange history; none is a student projection. grading.integration.test.ts proves another classroom refuses the entire selection and two teachers cannot overwrite one version."
+    },
+    {
+      "file": "packages/db/src/grading-regrade.ts",
+      "why": "Teacher dry run and worker apply only. The assignment read predicates on assignmentId and classroom.ownerId = actorId OR an ACTIVE OWNER/TEACHER enrollment. Attempt marks are read only for that authorized assignmentId, GRADED purpose and reviewable statuses. Released membership is read for that same assignmentId, every released member must be included, and apply requires an unchanged preview token under batch and attempt locks. The only student output here is an in-app notice containing attemptId and the recorded reason, with no score fields; grade values remain in teacher preview and GradeChange rows. Integration regressions cover stale previews, sibling visibility, notice-failure rollback and 500 released members."
     }
   ]
 }

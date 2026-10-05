@@ -985,6 +985,7 @@ model Assignment {
   maxAttempts    Int              @default(1)
   weight         Decimal          @default(100) @db.Decimal(9, 2)
   latePenaltyPercent Decimal       @default(0) @db.Decimal(5, 2)
+  missingExcludedFromGradebook Boolean @default(true)
   policyOverride Json?
   // T-1: the product promise is ATOMIC RELEASE, not 100% individual marking. A batch may
   // be moderated-and-sampled; sample size and moderation rule live here.
@@ -1102,6 +1103,7 @@ enum AttemptStatus {
   GRADED
   RELEASED
   EXCUSED
+  MISSING
   VOIDED
 }
 
@@ -1177,6 +1179,8 @@ model ExamAttempt {
   latePenaltyApplied Decimal? @db.Decimal(5, 2)
 
   accommodationId String?
+  // Disclosure is the student's choice; a relaxation never explains a mark.
+  showAccommodationOnResults Boolean @default(false)
 
   // B11: a single Int cannot represent five independent thresholds, and it silently
   // let a fullscreen-exit count trip the tab-hide threshold. See AttemptStrikeCounter.
@@ -1261,6 +1265,8 @@ enum AttemptEventType {
   FROZEN
   VOIDED
   EXCUSED
+  MISSING
+  LATE_MARKED
   DEADLINE_EXTENDED
   PAUSED
   RESUMED_FROM_PAUSE
@@ -1559,6 +1565,9 @@ model ReleaseBatch {
   createdAt    DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
 
+  // A released batch stays discoverable until all release notices are durably queued.
+  notificationsCompletedAt DateTime? @db.Timestamptz(3)
+
   // B16: `membership Json` was a 190 KB TOASTed array of up to 5,000 UUIDs, rewritten on
   // every change and unqueryable in Prisma without raw SQL. It is now real rows, and it
   // is the whole mechanism: student visibility is EXISTS(... batch status = 'RELEASED').
@@ -1568,6 +1577,7 @@ model ReleaseBatch {
   @@index([classroomId, status])
   @@index([tenantId, status])
   @@index([status, minHoldUntil])
+  @@index([status, notificationsCompletedAt])
   @@index([overrideById])
 }
 

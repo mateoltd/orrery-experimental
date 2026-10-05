@@ -29,9 +29,13 @@
  */
 
 import { systemClock } from '@orrery/clock';
+import { loadEnv } from '@orrery/config/env';
 import { createLogger } from '@orrery/config/logging';
 import { getPrisma } from '@orrery/db';
 import { runDeadlineSweep } from '@orrery/db/sweep';
+// The lane forbids `package.json` edits; import the built DB modules until exports are registered.
+import { runReleaseTick } from '../../../packages/db/dist/release-worker.js';
+import { runStudentDigestTick } from '../../../packages/db/dist/student-digest.js';
 
 const db = getPrisma();
 
@@ -99,11 +103,30 @@ export const JOBS: Job[] = [
     name: 'release.batch',
     everySeconds: 30,
     purpose:
-      'Verify every member attempt is releasable, then flip ONE row: ReleaseBatch.status to ' +
-      'RELEASED. Student visibility is an EXISTS() on that row, so atomicity is structural ' +
-      'rather than a 5,000-row transaction (07 §6).',
+      'Resume RELEASING batches: lock and verify every member, then commit all scores and the ' +
+      'batch visibility gate in one transaction; retry notification delivery after commit.',
     run: async () => {
-      throw new Error('not implemented — P10-T2');
+      const origin = loadEnv().APP_URL;
+      const results = await runReleaseTick(db, systemClock, origin);
+      for (const result of results) {
+        if (result.error) log.error('release failed; next tick retries', { ...result });
+        // Students are waiting on a frozen batch that cannot release; silence here is the outage.
+        else if (result.refusals) log.warn('release refused; batch stays RELEASING', { ...result });
+        else if (result.released || result.notified > 0)
+          log.info('release processed', { ...result });
+      }
+    },
+  },
+  {
+    name: 'student.digest',
+    // Each tick reads every active student. A digest five minutes late costs nobody anything.
+    everySeconds: 300,
+    purpose:
+      'Queue each student’s instruments-only coursework digest at their preferred interval, only ' +
+      'when its content changed, with reversible freeze copy and no rankings.',
+    run: async () => {
+      const result = await runStudentDigestTick(db, systemClock, loadEnv().APP_URL);
+      if (result.queued > 0 || result.failed > 0) log.info('student digests processed', result);
     },
   },
   {

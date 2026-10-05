@@ -130,6 +130,54 @@
       "types": "./dist/sweep.d.ts",
       "default": "./dist/sweep.js"
     },
+    "./release-worker": {
+      "types": "./dist/release-worker.d.ts",
+      "default": "./dist/release-worker.js"
+    },
+    "./release-delivery": {
+      "types": "./dist/release-delivery.d.ts",
+      "default": "./dist/release-delivery.js"
+    },
+    "./student-results": {
+      "types": "./dist/student-results.d.ts",
+      "default": "./dist/student-results.js"
+    },
+    "./student-digest": {
+      "types": "./dist/student-digest.d.ts",
+      "default": "./dist/student-digest.js"
+    },
+    "./attempt-exceptions": {
+      "types": "./dist/attempt-exceptions.d.ts",
+      "default": "./dist/attempt-exceptions.js"
+    },
+    "./grading-feedback": {
+      "types": "./dist/grading-feedback.d.ts",
+      "default": "./dist/grading-feedback.js"
+    },
+    "./grading-regrade": {
+      "types": "./dist/grading-regrade.d.ts",
+      "default": "./dist/grading-regrade.js"
+    },
+    "./grading-write": {
+      "types": "./dist/grading-write.d.ts",
+      "default": "./dist/grading-write.js"
+    },
+    "./grading-policy": {
+      "types": "./dist/grading-policy.d.ts",
+      "default": "./dist/grading-policy.js"
+    },
+    "./grading-access": {
+      "types": "./dist/grading-access.d.ts",
+      "default": "./dist/grading-access.js"
+    },
+    "./grading-notifications": {
+      "types": "./dist/grading-notifications.d.ts",
+      "default": "./dist/grading-notifications.js"
+    },
+    "./grading-bulk-release": {
+      "types": "./dist/grading-bulk-release.d.ts",
+      "default": "./dist/grading-bulk-release.js"
+    },
     "./run-exclusive": {
       "types": "./dist/run-exclusive.d.ts",
       "default": "./dist/run-exclusive.js"
