@@ -9,8 +9,8 @@ vi.mock('@orrery/db', () => ({ getPrisma: () => stub.db }));
 vi.mock('@orrery/config/env', () => ({
   loadEnv: () => ({ APP_URL: 'https://configured.example' }),
 }));
-vi.mock('../../../packages/db/dist/release-worker.js', () => ({ runReleaseTick: stub.release }));
-vi.mock('../../../packages/db/dist/student-digest.js', () => ({
+vi.mock('@orrery/db/release-worker', () => ({ runReleaseTick: stub.release }));
+vi.mock('@orrery/db/student-digest', () => ({
   runStudentDigestTick: stub.digest,
 }));
 

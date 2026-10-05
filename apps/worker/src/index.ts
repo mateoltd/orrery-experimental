@@ -33,9 +33,8 @@ import { loadEnv } from '@orrery/config/env';
 import { createLogger } from '@orrery/config/logging';
 import { getPrisma } from '@orrery/db';
 import { runDeadlineSweep } from '@orrery/db/sweep';
-// The lane forbids `package.json` edits; import the built DB modules until exports are registered.
-import { runReleaseTick } from '../../../packages/db/dist/release-worker.js';
-import { runStudentDigestTick } from '../../../packages/db/dist/student-digest.js';
+import { runReleaseTick } from '@orrery/db/release-worker';
+import { runStudentDigestTick } from '@orrery/db/student-digest';
 
 const db = getPrisma();
 

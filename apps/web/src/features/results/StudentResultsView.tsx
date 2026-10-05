@@ -1,5 +1,5 @@
 import * as React from 'react';
-import type { StudentResults } from '../../../../../packages/db/dist/student-results.js';
+import type { StudentResults } from '@orrery/db/student-results';
 
 void React;
 

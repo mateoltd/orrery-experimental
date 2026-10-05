@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   type ReleasedResults,
   sealedResults,
-} from '../../../../../packages/db/dist/student-results.js';
+} from '@orrery/db/student-results';
 import { resultsResponse } from './results-response';
 import { StudentResultsView } from './StudentResultsView';
 

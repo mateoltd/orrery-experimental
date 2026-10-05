@@ -1,7 +1,7 @@
 import {
   RESULTS_HEADERS,
   type StudentResults,
-} from '../../../../../packages/db/dist/student-results.js';
+} from '@orrery/db/student-results';
 
 /** The route supplies an authenticated owner; missing and other-owner results share one response. */
 export function resultsResponse(results: StudentResults | null): Response {
