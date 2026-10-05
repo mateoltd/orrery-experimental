@@ -153,6 +153,86 @@ for (const [name, count] of counted) {
   if (count > 1) bad(`section "${name}" appears ${String(count)} times`);
 }
 
+// --- 4. a commit naming a task must have moved its row -------------------------
+/**
+ * THE FAILURE THIS EXISTS FOR, RECORDED RATHER THAN DESCRIBED
+ *
+ * **THREE TIMES IN ONE SESSION** I committed work for a task and left its row reading `NOT STARTED`:
+ *
+ *   - `8699fe1` committed `P10-T2/T4/T6/T7`, and `P10-T10` stayed `NOT STARTED` for two commits.
+ *   - `a3679d7` committed `P14-T11` -- the critical-path session -- and its row stayed `NOT STARTED`.
+ *   - `0143dfe` committed `P13-T1` and its row stayed `NOT STARTED`.
+ *
+ * **Each time I had already written the lesson into the tracker and then repeated it**, which is what makes this a gate
+ * rather than a note. The tracker is the only memory of what is finished, so a row asserting nothing was done while
+ * `git log` says otherwise is worse than a stale estimate: it is a false statement, and the next reader trusts it.
+ *
+ * ## WHY A GATE CAN CATCH THIS WHEN NOTHING ELSE COULD
+ *
+ * `check-tracker` verifies rows are well-formed. It cannot know that work exists, because "work exists" is not a property
+ * of the tracker. **But a commit message naming `P13-T1` IS a claim about a task, and it is checkable**: the id must appear
+ * here, and its row must not still read `NOT STARTED`.
+ *
+ * That catches the exact shape of all three misses with no judgement call -- and a judgement call is precisely what kept
+ * failing, three times, under pressure.
+ *
+ * ## AND IT IS DELIBERATELY NARROW
+ *
+ * Only ids actually named in a commit subject count, so style fixes and dependency bumps need no row. `NOT STARTED` is
+ * the only failing status: a row already `DONE` or `PARTIAL` with its commit recorded is exactly what is being asked for.
+ * Requiring the hash on a PARTIAL row too would be a second rule needing its own exemptions.
+ */
+console.log('\n4. a commit naming a task must have moved its row');
+const statusOf = new Map();
+for (const line of current.split('\n')) {
+  const cells = line.split('|').map((cell) => cell.trim());
+  if (cells.length < 4) continue;
+  if (!/^P\d+-T\d+[a-z]?$/u.test(cells[1])) continue;
+  statusOf.set(cells[1], cells[3]);
+}
+
+/** `NOT STARTED` IS COMPARED STRIPPED OF MARKDOWN EMPHASIS, because rows are written `**NOT STARTED**`. */
+const isNotStarted = (status) =>
+  status !== undefined &&
+  status.replace(/[*`]/gu, '').trim().toUpperCase().startsWith('NOT STARTED');
+
+let subjects = [];
+try {
+  subjects = execFileSync('git', ['log', '-400', '--format=%s'], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
+    .split('\n')
+    .filter((subject) => subject.length > 0);
+} catch {
+  // A shallow clone or a missing binary must not turn this section into a false failure: the other four checks still
+  // ran, and a gate that fails for its own reasons teaches people to ignore it.
+  console.log('  · git unavailable; this section is SKIPPED rather than failed');
+}
+
+const staleRows = new Map();
+for (const subject of subjects) {
+  for (const id of subject.match(/P\d+-T\d+[a-z]?/gu) ?? []) {
+    if (!statusOf.has(id)) continue; // an id from a future packet; `gate:board` owns that
+    if (isNotStarted(statusOf.get(id))) staleRows.set(id, subject);
+  }
+}
+
+if (subjects.length === 0) {
+  console.log('  \u00b7 skipped: no commit subjects available');
+} else if (staleRows.size === 0) {
+  console.log(
+    `  \u2713 no commit names a task whose row still reads NOT STARTED (${subjects.length} subjects scanned)`,
+  );
+} else {
+  bad(
+    `${staleRows.size} commit(s) name a task whose tracker row still reads NOT STARTED:\n` +
+      [...staleRows]
+        .map(([id, subject]) => `        ${id}  <-  "${subject.slice(0, 66)}"`)
+        .join('\n'),
+  );
+}
+
 console.log('TRACKER INTEGRITY GATE');
 console.log(`  sections: ${String(headings(current).length)}`);
 console.log(`  task rows: ${String(rows.length)}`);
@@ -166,5 +246,6 @@ console.log('\n  ✓ section count did not decrease');
 console.log(`  ✓ ${String(rows.length)} task rows, one per id`);
 console.log('  ✓ no placeholders in summary rows');
 console.log('  ✓ no duplicated sections');
+console.log('  ✓ no commit names a task whose row still reads NOT STARTED');
 console.log('  ✓ every DONE row carries a commit, and no OPEN row fakes one');
 console.log('\nTRACKER INTEGRITY GATE PASSED');
