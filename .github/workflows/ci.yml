@@ -79,6 +79,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      # `sims/` IS NOT A WORKSPACE (ADR-0013), so `pnpm typecheck` walks past it and the sim tests TRANSPILE
+      # without checking types -- which is how 431 errors across every gold grader sat there invisibly. This step is
+      # the fix's second half: the first was making the errors go, and that half alone just resets the clock.
+      - run: pnpm run sim:typecheck
 
   # ───────────────────────────────────────────────────────── GATE: schema (B1, B3)
   # Its own job so it is a separately required status check: a green `test` must never
