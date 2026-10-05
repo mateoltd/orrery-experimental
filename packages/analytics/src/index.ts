@@ -32,6 +32,7 @@ export {
   REVIEW_IS_COMPLETE,
   unreviewedItemAnalysisFixtures,
 } from './fixtures.js';
+export * from './item-report.js';
 export type { LidFinding, LidPairInput } from './lid.js';
 export {
   classifyLidPair,
