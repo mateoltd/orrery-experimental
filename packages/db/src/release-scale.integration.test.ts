@@ -409,6 +409,9 @@ interface Breakdown {
   readMembersMs: number;
   perAttemptWrites: number;
   perAttemptMs: number;
+  /** The chunked writer's statements, counted and timed SEPARATELY from the per-attempt path.  (`P10-T9`) */
+  bulkStatements: number;
+  bulkMs: number;
   gateMs: number;
   memberUpdateManyCalls: number;
 }
@@ -460,6 +463,27 @@ const timedHandle = (
         breakdown.perAttemptWrites += 1;
         return row;
       },
+    },
+    /**
+     * THE BATCHED WRITER'S STATEMENT, TIMED.  (`P10-T9`)
+     *
+     * The breakdown this handle exists to produce attributed all of the release's cost to `perAttemptMs`, because that
+     * was the only write it modelled. Once the release switched to chunked `UPDATE ... FROM (VALUES ...)` this handle
+     * had no `$executeRawUnsafe`, so the real call threw here rather than being measured -- **a timing harness that
+     * cannot carry the new statement does not report a slower release, it reports an error**, and the fix that preserves
+     * the harness's purpose is to time the statement that now does the work.
+     *
+     * `perAttemptMs` therefore keeps counting per-attempt writes for any call that still uses them, and `bulkMs`
+     * counts the batched path separately, so the two are never silently conflated into one number.
+     */
+    async $executeRawUnsafe(query: string, ...values: unknown[]): Promise<number> {
+      const at = now();
+      const rows = await (inner as unknown as {
+        $executeRawUnsafe(q: string, ...v: unknown[]): Promise<number>;
+      }).$executeRawUnsafe(query, ...values);
+      breakdown.bulkMs += ms(at);
+      breakdown.bulkStatements += 1;
+      return rows;
     },
     $transaction: async <T>(fn: (tx: ReleaseDb) => Promise<T>): Promise<T> => {
       const at = now();
@@ -651,6 +675,8 @@ describe.skipIf(!process.env.DATABASE_URL)('a 5,000-attempt release, measured', 
       readMembersMs: 0,
       perAttemptWrites: 0,
       perAttemptMs: 0,
+      bulkStatements: 0,
+      bulkMs: 0,
       gateMs: 0,
       memberUpdateManyCalls: 0,
     };
@@ -665,9 +691,28 @@ describe.skipIf(!process.env.DATABASE_URL)('a 5,000-attempt release, measured', 
     const b = breakdown;
 
     expect(second.released).toBe(true);
-    expect(b.perAttemptWrites, 'one score write per member, which is the cost under test').toBe(
-      COHORT,
-    );
+    /**
+     * THE ASSERTION INVERTED WHEN THE DEFECT WAS FIXED, AND THE REASONING IS THE POINT.  (`P10-T9`)
+     *
+     * This used to read `expect(b.perAttemptWrites).toBe(COHORT)` -- "one score write per member, which is the cost
+     * under test" -- and it passed precisely because the release was doing the expensive thing. **It failed when
+     * `releaseBatch` was fixed**, because a benchmark that asserts a defect is present stops passing the moment the
+     * defect is gone, and the temptation is to delete the assertion rather than invert it.
+     *
+     * So the claim is now split in two, and both halves are structural -- they hold on a machine ten times slower,
+     * which is what makes them worth having:
+     *
+     * · **the per-attempt path is GONE from production** (`perAttemptWrites === 0`), and
+     * · **the batched path's round-trip count is NOT the cohort** (`bulkStatements < COHORT / 100`).
+     *
+     * The first version of the fix deleted the assertion. That would have left `releaseBatch` free to regress to one
+     * write per member with nothing to notice, which is how the 742 ms margin came back the next time.
+     */
+    expect(b.perAttemptWrites, 'production must not write one statement per member any more').toBe(0);
+    expect(
+      b.bulkStatements,
+      'the batched writer must not scale its round-trip count with the cohort',
+    ).toBeLessThan(COHORT / 100);
     expect(
       b.memberUpdateManyCalls,
       '`releaseBatchMember.updateMany` must never be called: the table has no `status`',
@@ -761,11 +806,20 @@ describe.skipIf(!process.env.DATABASE_URL)('a 5,000-attempt release, measured', 
      *     fact about the code rather than about the machine.
      *  3. **THE VISIBILITY IS IDENTICAL**, checked after every committed release above.
      */
-    expect(b.perAttemptWrites).toBe(COHORT);
+    /**
+     * THE SAME INVERSION, IN THE SUMMARY BLOCK, PLUS THE BOUND THAT NOW MATTERS.
+     *
+     * The per-attempt count is asserted `0` for the same reason as above, and `bulkMs` is folded into the "no phase is
+     * longer than the transaction" check -- **without it that sum would have been trivially satisfiable**, because
+     * leaving the writer's cost out of the total makes any remainder look like slack.
+     */
+    expect(b.perAttemptWrites).toBe(0);
+    expect(b.bulkStatements).toBeLessThan(COHORT / 100);
     expect(candidate.bulk.statements).toBeLessThan(COHORT / 100);
     expect(candidateMs).toBeLessThan(PRISMA_TRANSACTION_CEILING_MS / 5);
-    expect(b.readBatchMs + b.readMembersMs + b.perAttemptMs + b.gateMs).toBeLessThanOrEqual(
-      b.transactionMs,
-    );
+    expect(
+      b.readBatchMs + b.readMembersMs + b.perAttemptMs + b.bulkMs + b.gateMs,
+      'no phase may exceed the whole transaction it sits inside',
+    ).toBeLessThanOrEqual(b.transactionMs);
   }, 600_000);
 });

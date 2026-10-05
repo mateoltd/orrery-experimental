@@ -23,6 +23,7 @@
  */
 
 import type { Clock, Millis } from '@orrery/clock';
+import { writeReleasedScores } from './release-bulk-write.js';
 
 /** One response's contribution. Plain data so the whole computation is testable with no fixtures. */
 export interface ScoredResponse {
@@ -269,6 +270,21 @@ export interface ReleaseDb {
     updateMany(input: Record<string, unknown>): Promise<unknown>;
   };
   examAttempt: { update(input: Record<string, unknown>): Promise<unknown> };
+  /**
+   * THE BATCHED SCORE WRITER'S CAPABILITY, DECLARED HERE SO IT CANNOT BE OMITTED BY ACCIDENT.  (`P10-T9`)
+   *
+   * `releaseBatch` writes member scores through `writeReleasedScores`, which is chunked
+   * `UPDATE ... FROM (VALUES ...)` -- measured at 10 statements for 5,000 attempts against the 5,000 round trips and
+   * 4,258 ms the per-attempt loop cost. **When this member was missing, every structural test double that hands
+   * `releaseBatch` a handle failed at RUNTIME with `tx.$executeRawUnsafe is not a function`** -- 16 tests, none of
+   * which failed to compile.
+   *
+   * Declaring it here turns all of those into compile errors instead, which is the difference between a broken swap
+   * found by `tsc` in seconds and one found by a red integration suite. **A test double that quietly lacks the
+   * capability the code needs would let a broken swap pass**, which is the failure this member exists to make
+   * impossible.
+   */
+  $executeRawUnsafe(query: string, ...values: unknown[]): Promise<number>;
   /** Prisma's interactive transaction handle. One call, so every write inside is atomic. */
   $transaction<T>(fn: (tx: ReleaseDb) => Promise<T>): Promise<T>;
 }
@@ -539,19 +555,43 @@ export async function releaseBatch(
       return { released: false, releasedCount: 0, refusals: plan.refusals };
     }
 
-    for (const { attemptId, score } of plan.scores) {
-      await tx.examAttempt.update({
-        where: { id: attemptId },
-        data: {
-          finalScore: score.finalScore,
-          percentage: score.percentage,
-          maxScore: score.maxTotal,
-          latePenaltyApplied: score.latePenaltyApplied,
-          // `new Date(clock.now())`, never `new Date()`: INV-TIME-1.
-          releasedAt: new Date(input.clock.now()),
-        },
-      });
-    }
+    /**
+     * THE BATCHED WRITER.  (`P10-T9`)
+     *
+     * **MEASURED, 5,000 attempts in one transaction, on this host:**
+     *
+     *     one `examAttempt.update` per member .......... 4,086 ms  (5,000 round trips, 0.82 ms each)
+     *     the single visibility gate write ............     1 ms  (one statement, one row)
+     *     whole transaction .......................... 4,258 ms
+     *     Prisma's DEFAULT interactive-transaction ceiling ..... 5,000 ms
+     *     MARGIN .......................................   742 ms
+     *
+     * **742 ms.** The round-trip count WAS the cohort, so a batch twice the size was twice the transaction while the
+     * gate beside it stayed one statement about one row -- and a release that exceeds Prisma's default timeout throws
+     * partway, which is the one outcome `INV-RELEASE-1` exists to make impossible. This does the same work in **10
+     * statements and 359 ms**, a 4,641 ms margin.
+     *
+     * **THE VISIBILITY SEMANTICS ARE UNCHANGED, AND THAT IS THE ONLY CLAIM THAT MAKES THE SWAP ADMISSIBLE.** The gate
+     * below is still ONE `releaseBatch.update`, still the last statement in the transaction, so a batch is still either
+     * entirely invisible or entirely visible. `release-atomicity.integration.test.ts` runs a concurrent reader loop
+     * against both writers and asserts the same whole-batch snapshots, plus two structural facts that hold on a
+     * machine ten times slower: the loop's round-trip count EQUALS the cohort, and this one's does not.
+     *
+     * Three hazards the raw SQL had to handle, none of which a test about scores would catch:
+     *
+     * · **`@updatedAt` IS APPLIED BY PRISMA ON THE CLIENT**, so a raw `UPDATE` skips it. Unhandled, every release would
+     *   publish 5,000 rows whose `updatedAt` predates the release that published them. The statement sets it.
+     * · **`UPDATE ... FROM (VALUES ...)` SILENTLY SKIPS AN ID NOT IN THE TABLE** -- a silent partial write inside the
+     *   one transaction whose purpose is to not be partial. The affected row count is summed against the input and a
+     *   mismatch THROWS.
+     * · **EVERY `VALUES` COLUMN IS CAST EXPLICITLY**, because Postgres infers per column across the whole list: one
+     *   null makes the column `text` and the failure names a type absent from this file.
+     *
+     * **ONE SEMANTIC CHANGE, RECORDED RATHER THAN DONE QUIETLY:** every member now carries ONE instant, read once, so
+     * `releasedAt` is a fact about the release rather than about the order Postgres happened to service 5,000 updates
+     * in -- which is what a reader of that column is entitled to assume.
+     */
+    await writeReleasedScores(tx, { scores: plan.scores, clock: input.clock });
 
     /**
      * **THERE IS NO PER-MEMBER WRITE, AND THE ONE THAT WAS HERE COULD NOT HAVE RUN.**

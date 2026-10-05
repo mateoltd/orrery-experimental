@@ -420,6 +420,21 @@ const pausingHandle = (
         return result;
       },
     },
+    /**
+     * THE BATCHED WRITER'S OWN STATEMENT, AND THE BARRIER MOVED TO IT.  (`P10-T9`)
+     *
+     * `releaseBatch` no longer issues one `examAttempt.update` per member, so a double exposing only that method cannot
+     * carry the real call at all. **The barrier fires after the chunked score write and before the gate**, which is the
+     * instant this test exists to observe: every score written, the visibility gate not yet flipped.
+     */
+    async $executeRawUnsafe(query: string, ...values: unknown[]): Promise<number> {
+      const rows = await (inner as unknown as {
+        $executeRawUnsafe(q: string, ...v: unknown[]): Promise<number>;
+      }).$executeRawUnsafe(query, ...values);
+      written += 1;
+      if (written === pauseAfter) await onPause();
+      return rows;
+    },
     $transaction: async <T>(fn: (tx: ReleaseDb) => Promise<T>): Promise<T> =>
       inner.$transaction(async (tx) =>
         fn(pausingHandle(tx as unknown as PrismaClient, pauseAfter, onPause)),
@@ -494,8 +509,16 @@ describe.skipIf(!process.env.DATABASE_URL)('INV-RELEASE-1 under a concurrent rea
       for (let i = 0; i < AFTER_COMMIT; i += 1) afterCommit.push(await snapshotSweep(members));
     })();
 
+    /**
+     * `pauseAfter` IS 1, NOT `MEMBER_COUNT`, AND THE TWO ARE THE SAME INSTANT.  (`P10-T9`)
+     *
+     * The release used to write one score per statement, so "pause after member N" meant "pause once every score is
+     * written". It now writes every score in ONE chunked statement, so that instant is the FIRST score statement --
+     * and asking for the 24th waits forever, which is how this test timed out when the writer changed. The instant
+     * observed is unchanged: **every score written, gate not flipped.**
+     */
     const result = await releaseBatch(
-      pausingHandle(prisma(), MEMBER_COUNT, async () => {
+      pausingHandle(prisma(), 1, async () => {
         announcePause();
         await paused;
       }),

@@ -219,23 +219,28 @@ describe('atomic release and worker recovery', () => {
       (tx) =>
         new Proxy(tx, {
           get(target, property) {
-            if (property === 'examAttempt')
-              return new Proxy(target.examAttempt, {
-                get(model, method) {
-                  if (method === 'update')
-                    return (args: Parameters<typeof model.update>[0]) => {
-                      if (++writes === 2) throw new Error('injected worker crash');
-                      return model.update(args);
-                    };
-                  return Reflect.get(model, method);
-                },
-              });
+            /**
+             * THE INJECTION POINT MOVED WITH THE WRITER, AND THE TEST MOVED WITH IT RATHER THAN BEING DELETED.  (`P10-T9`)
+             *
+             * The release used to issue one `examAttempt.update` per member, so the same hazard -- a crash partway
+             * through the score writes -- was injected on the second of those. It now issues ten chunked
+             * `UPDATE ... FROM (VALUES ...)` statements, so the hazard is injected on the writer's own statement.
+             *
+             * **DELETING THIS INSTEAD WOULD HAVE REMOVED THE ONLY COVERAGE OF `INV-RELEASE-1`'s ROLLBACK PATH.** The
+             * batched writer's row-count check is a different guard with a different failure mode: it catches a SILENT
+             * partial write, not a thrown error. Both properties are needed and they are not the same test.
+             */
+            if (property === '$executeRawUnsafe')
+              return async (query: string, ...values: unknown[]) => {
+                if (++writes === 1) throw new Error('injected worker crash');
+                return target.$executeRawUnsafe(query, ...values);
+              };
             return Reflect.get(target, property);
           },
         }),
     );
     await expect(finishRelease(failing, id, clock)).rejects.toThrow('injected worker crash');
-    expect(writes).toBe(2);
+    expect(writes).toBe(1);
     const rows = await db.examAttempt.findMany({
       where: { id: { in: [a, b] } },
       select: { finalScore: true, releasedAt: true },

@@ -46,6 +46,16 @@ export async function bulkRelease(
         releaseBatch: tx.releaseBatch as unknown as ReleaseDb['releaseBatch'],
         releaseBatchMember: tx.releaseBatchMember as unknown as ReleaseDb['releaseBatchMember'],
         examAttempt: tx.examAttempt as unknown as ReleaseDb['examAttempt'],
+        /**
+         * FORWARDED, NOT REIMPLEMENTED.  (`P10-T9`)
+         *
+         * This adapter reuses the real release writer on the caller's transaction handle so the bulk path shares the
+         * release's atomicity rather than opening a second transaction. **The batched score writer's capability has to
+         * be forwarded with it** -- and the fact that the compiler demanded it here is the point: before this member
+         * existed on `ReleaseDb`, a missing capability would have been a RUNTIME failure inside a release, not a
+         * build error.
+         */
+        $executeRawUnsafe: (query, ...values) => tx.$executeRawUnsafe(query, ...values),
         $transaction: (fn) => fn(adapter),
       };
       const result = await releaseBatch(adapter, {

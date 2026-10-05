@@ -414,16 +414,41 @@ describe.skipIf(!process.env.DATABASE_URL)('the release TRANSACTION, against rea
             ).$transaction(async (tx: unknown) => {
               const wrapped = new Proxy(tx as Record<string, unknown>, {
                 get(inner, innerProperty) {
-                  if (innerProperty === 'examAttempt') {
-                    return {
-                      update: (input: Record<string, unknown>) => {
-                        updates += 1;
-                        if (updates === 2)
-                          throw new Error('injected failure on the second attempt');
-                        return (
-                          inner.examAttempt as { update: (i: unknown) => Promise<unknown> }
-                        ).update(input);
-                      },
+                  /**
+                   * THE INJECTION POINT IS THE WRITER'S OWN STATEMENT NOW.  (`P10-T9`)
+                   *
+                   * This used to make the SECOND `examAttempt.update` throw, which was precisely the shape of the real
+                   * thing: the first write succeeded, the second did not. `releaseBatch` now writes member scores in
+                   * ten chunked `UPDATE ... FROM (VALUES ...)` statements, so **no `examAttempt.update` is issued at
+                   * all and this test stopped injecting anything** -- it began reporting a successful release where it
+                   * meant to report a rollback.
+                   *
+                   * **Deleting the assertion instead would have removed the single strongest proof of atomicity in the
+                   * repository**: that a failure during the score writes leaves the batch exactly where it was. So the
+                   * sabotage moved to the statement that now does the work.
+                   *
+                   * **IT THROWS ON THE FIRST CHUNK, NOT THE SECOND, AND THE FIXTURE IS WHY.** Two attempts fit in one
+                   * 500-row chunk, so there is no second statement to fail -- the original "first write succeeded, second
+                   * did not" shape is no longer expressible at this fixture size, and asking for `updates === 2` would
+                   * have injected nothing and reported a successful release. **Forcing 501 attempts to recreate a second
+                   * chunk would have made a transactional test slow to buy a distinction that
+                   * `release-atomicity.integration.test.ts` already covers properly**: its barrier pauses INSIDE the
+                   * transaction after the score write and asserts that every reader still sees the whole batch sealed.
+                   *
+                   * So this test now proves the transaction-level property -- a failure while writing scores commits
+                   * nothing and leaves the batch `RELEASING` -- and the mid-transaction-visibility property lives in the
+                   * one test built to pause a transaction deliberately. **Coverage moved rather than shrank.**
+                   */
+                  if (innerProperty === '$executeRawUnsafe') {
+                    return async (query: string, ...values: unknown[]) => {
+                      updates += 1;
+                      if (updates === 1)
+                        throw new Error('injected failure while writing scores');
+                      return (
+                        inner as unknown as {
+                          $executeRawUnsafe: (q: string, ...v: unknown[]) => Promise<number>;
+                        }
+                      ).$executeRawUnsafe(query, ...values);
                     };
                   }
                   return inner[innerProperty as string];

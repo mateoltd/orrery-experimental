@@ -131,6 +131,15 @@ export const resolveCspSimOrigin = (env: SimOriginEnv): SimOriginResolution => {
 export const mistypedSimOriginVariablePresent = (
   env: Readonly<Record<string, unknown>>,
 ): boolean => {
+  /**
+   * BRACKETED DELIBERATELY, AND THE LINTER WANTS IT DOT NOTATION.  (`P14-T13`)
+   *
+   * `useLiteralKeys` is right about ordinary properties and wrong here: a dot access to a name that is a TYPO of
+   * another one is exactly what this whole task is about, and bracket access marks it as a string key rather than as
+   * part of the interface. **A disable comment is the honest fix** -- the alternative is to rename the key into the
+   * type's shape, which would have this function reading a member the resolver does not define.
+   */
+  // biome-ignore lint/complexity/useLiteralKeys: a typo'd variable name is a string key here, not an interface member.
   const value = env['SIMS_ORIGIN'];
   return typeof value === 'string' && value.trim() !== '';
 };
