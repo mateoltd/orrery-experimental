@@ -31,6 +31,7 @@
     "sim:validate": "node scripts/sim-validate.mjs --all",
     "sim:new": "node scripts/sim-new.mjs",
     "sim:build": "node scripts/sim-build.mjs --all",
+    "sim:typecheck": "tsc --noEmit -p sims/tsconfig.json",
     "sim:conformance": "node scripts/sim-conformance.mjs",
     "sim:sandbox-escape": "node scripts/sim-sandbox-escape.mjs",
     "gate:browser": "pnpm run sim:sandbox-escape && pnpm run sim:conformance",
