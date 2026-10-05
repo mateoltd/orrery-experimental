@@ -3286,6 +3286,52 @@ tab; `Date + number` produced a string where millis were declared. Three separat
 plausible values are a wrong grade, a false accusation, or an unenforced deadline.** A cast is the same move in types.
 Both are places where a compiler error was available and was declined.
 
+### PF-13 · `git checkout <stash> -- <paths>` STAGES WHAT IT RESTORES, AND A COMMIT TAKES EVERYTHING STAGED
+
+Recovering three delegated lanes' work after stashing it, I ran:
+
+```
+git checkout stash@{0}^3 -- <30 paths>     # untracked files, from the stash's third commit
+git checkout stash@{0}   -- <3 paths>      # tracked-modified files
+git add scripts/load-run.mjs
+git commit -m "fix(load-profile): import availableParallelism ..."   # one-line lint fix
+```
+
+**That commit contains 4,892 insertions of three lanes' UNVERIFIED work under a message about an import.** Both
+`git checkout <commit> -- <paths>` forms **update the index**, so every restored path was staged, and `git commit` takes
+everything staged.
+
+## WHY IT WAS NEARLY INVISIBLE
+
+The lane files are **untracked**, so `git status --short` shows them under `??` and an ordinary reader — including me —
+does not connect them to a `git add`. The clue I did notice was that `git status --short | wc -l` had dropped from 43
+to 12 immediately after the commit, which is the one signal that said something had been consumed rather than written.
+**A file count falling is evidence of a destructive git operation and nothing else.**
+
+## THE FIX, AND IT IS THE GENERAL ONE
+
+`git reset --soft HEAD~1 && git reset` unstages without touching the working tree, so every file stayed on disk and the
+lanes' work was recoverable. Then:
+
+```
+git commit -o <path> -m ...
+```
+
+**`git commit -o` / `--only` is the right default whenever other work is in the tree**, and it is the *only* form that is
+safe when anything is staged that you did not stage deliberately. `git commit <path>` has the same effect for a single
+path and is easier to remember; `-o` is what to reach for when you have just run anything that writes the index.
+
+## THE RELATED MISTAKE, WHICH IS WORSE
+
+**I ALSO STASHED WHILE THREE AGENTS WERE WRITING.** The lanes re-created files *after* the stash, so popping it would
+have clobbered their newer edits with my older snapshot. I checked for collisions file by file and restored the
+non-colliding paths from the stash, leaving `packages/analytics/src/index.ts` at the newer working-tree version — which
+is what saved the P11 lane's most recent edits from being reverted.
+
+**So the rule from PF-6 and PF-9 sharpens: do not `git stash` while a delegated lane is in flight, and never `git add`
+anything you did not create in the last minute.** Both are ways of touching another agent's working state, and both
+produced a near-miss here within the same ten minutes.
+
 ### PF-12 · A CAST IS THE THIRD TIME, AND IT IS THE SAME MOVE EVERY TIME
 
 This session found three separate defects that a cast created or concealed: `release.ts`'s leaked `finalScore` (P7-T10's
