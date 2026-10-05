@@ -5,6 +5,16 @@
       "path": "/api/exam/answers",
       "scoreFree": true,
       "reason": "Accepts one answer and returns { attemptId, questionId, revision, isLate }. The revision number is the client's own optimistic-concurrency token and carries no grade information; the response contains no score, no correct/incorrect flag and no model answer, so INV-RELEASE-2 does not apply. The `isLate` flag is timing, not marks, and a student already knows they submitted late. Grade data reaches students only through the release path, which stays gated."
+    },
+    {
+      "path": "/api/auth/sign-in",
+      "scoreFree": true,
+      "reason": "Establishes identity and nothing else. Success returns { ok, message, code: 'AUTH_OK' } plus a Set-Cookie for the opaque session token -- no user id, no role, no attempt, no score, no correct/incorrect flag and no model answer, so INV-RELEASE-2 does not apply. It is listed rather than treated as infrastructure because a set-cookie response is the most security-sensitive thing in the app, and a reader should be able to see that it was considered. Every failure is byte-identical to every other failure including a missing password field, a suspended account and a throttled identifier; a non-JSON body is the one distinguishable case, because it contains no address and so discloses nothing about any ACCOUNT. Note the session cookie is the ONLY thing that establishes a caller: there is no header or body identity path, which is what makes requireUser() meaningful."
+    },
+    {
+      "path": "/api/auth/forgot",
+      "scoreFree": true,
+      "reason": "Dispatches a password-reset email and returns the same conditional sentence whether or not the address has an account -- 'if that address has an account, a reset link is on its way' -- which discloses nothing either way. Sets no cookie, so a successful dispatch cannot be told from a refusal, and is no-store so a shared cache cannot serve one caller a stale answer. Exactly one account lookup and one outbox write happen in both cases, so the database itself carries no existence signal; only the STATUS differs between the two outbox rows, never a skip. No grade data of any kind."
     }
   ]
 }

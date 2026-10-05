@@ -2,6 +2,8 @@ import { actorPresence, isSameActor } from '@orrery/auth/can';
 import { systemClock } from '@orrery/clock';
 import { getPrisma } from '@orrery/db';
 import { submitAnswer } from '@orrery/db/answer-write';
+import { requireUser } from '@/server/auth/session-runtime';
+import { refuseCaller } from '@/server/auth/session-user';
 
 /**
  * The server-authoritative answer write.  (P8-T9, `INV-LATE-1`)
@@ -30,20 +32,29 @@ import { submitAnswer } from '@orrery/db/answer-write';
  * revision bookkeeping desynchronises from the server and every later write collides. That is why `submitAnswer`
  * persists the response body in the ledger rather than recomputing it.
  *
- * ## ⚠️ THIS ROUTE IS CORRECT IN SHAPE AND NOT YET SAFE TO EXPOSE
+ * ## THE SESSION IS REAL NOW, AND IT IS STILL NOT THE GATE
  *
- * `apps/web` has no session layer yet. `classrooms/[classroomId]/roster` reads `ORRERY_DEV_USER_ID`, and every
- * permission after that comes from the database -- so a forged id only gets a caller to be *themselves*.
+ * `requireUser` resolves the caller from the `__Host-` session cookie and returns `null` for every failure — absent,
+ * forged, expired or revoked (`server/auth/session-user.ts`). That is the change from the `ORRERY_DEV_USER_ID` placeholder
+ * this route used to read, and it is what makes the ownership check below mean something: a caller can no longer *become*
+ * somebody else by knowing their id, because the only thing the request can name is which attempt to write to.
  *
- * **On a roster page that is acceptable. On an answer write it is not, and the difference is worth writing down.**
- * Being yourself lets you read your own roster; here it would let anyone write answers into another student's attempt,
- * which corrupts the one thing the exam is measuring. The ownership check below is therefore the real gate and the
- * session is only the name it is checked against -- so until a real session exists, a caller who knows a user id can
- * write as that user.
+ * **THE OWNERSHIP CHECK IS STILL THE GATE, AND THE SESSION IS ONLY THE NAME IT IS CHECKED AGAINST.** `submitAnswer`
+ * re-derives membership, revision and ledger state from the database, so a route that "pre-checked" anything the function
+ * re-derives would be two sources of truth for one fact, and they would disagree under exactly the concurrency the
+ * idempotency ledger exists to handle.
  *
- * `sessionUserId()` returns `null` rather than defaulting, so the route **fails closed** while the session lands. The
- * alternative -- defaulting to the same all-zeroes id the roster page uses -- would make this route writable by
- * anyone, which is a far worse default to ship than an unusable one.
+ * ## THE TWO REFUSALS ARE ONE REFUSAL, AND `refuseCaller` IS WHY THAT IS NOT AN ACCIDENT
+ *
+ * An unauthenticated caller and a caller reaching for somebody else's attempt get the SAME status and the SAME body
+ * (`server/auth/session-user.ts`, `refuseCaller`). This was not true before: the not-yours case answered 403 FORBIDDEN,
+ * which confirms the row exists and turns an exam write route into an existence oracle over every sitting in the school.
+ * One function returning one body means a future edit that wants to say "forbidden" has to change the place where the
+ * reason is written down.
+ *
+ * **AND `submitAnswer` STILL OWNS NOTHING.** The function takes an attempt id because the worker, the teacher tools and
+ * the test harness all call it too, none of whom are the student. Teaching it about sessions would mean every non-session
+ * caller passing a sentinel, and the caller that matters most here is precisely the one that must never be trusted to ask.
  */
 
 export const dynamic = 'force-dynamic';
@@ -53,18 +64,25 @@ const NO_STORE = { 'Cache-Control': 'no-store' } as const;
 export async function POST(request: Request): Promise<Response> {
   const db = getPrisma();
 
-  // **401, NOT 403.** A 403 would confirm the attempt exists, which is an existence oracle over somebody else's exam.
-  const actor = actorPresence(sessionUserId());
-  if (!actor.ok) {
-    return Response.json({ ok: false, reason: actor.reason }, { status: 401, headers: NO_STORE });
-  }
+  /**
+   * THE CALLER, FROM THE `__Host-` SESSION COOKIE. `null` for an absent, forged, expired or revoked cookie — and for a
+   * caller who has no cookie at all while the local development escape hatch is not opted into.
+   */
+  const resolution = await requireUser(request);
+  const actor = actorPresence(resolution?.caller.userId ?? null);
+  if (!actor.ok) return refuseCaller();
   const userId = actor.actorId;
+  // The `Set-Cookie` for a slid window, or null. Applied to EVERY response including the refusals below, because a browser
+  // left holding a cookie whose expiry the database has moved past gets logged out at an arbitrary later moment.
+  const refresh: Record<string, string> = resolution?.setCookie
+    ? { 'Set-Cookie': resolution.setCookie }
+    : {};
 
   const body = await readBody(request);
   if (body === null) {
     return Response.json(
       { ok: false, reason: 'MALFORMED_BODY' },
-      { status: 400, headers: NO_STORE },
+      { status: 400, headers: { ...NO_STORE, ...refresh } },
     );
   }
 
@@ -81,7 +99,7 @@ export async function POST(request: Request): Promise<Response> {
   ) {
     return Response.json(
       { ok: false, reason: 'MALFORMED_BODY' },
-      { status: 400, headers: NO_STORE },
+      { status: 400, headers: { ...NO_STORE, ...refresh } },
     );
   }
 
@@ -97,11 +115,10 @@ export async function POST(request: Request): Promise<Response> {
     select: { studentId: true, gracePeriodSec: true },
   });
 
-  // 404 for a missing attempt and 403 for somebody else's: the second must not confirm that the first exists.
   if (attempt === null) {
     return Response.json(
       { ok: false, reason: 'ATTEMPT_NOT_FOUND' },
-      { status: 404, headers: NO_STORE },
+      { status: 404, headers: { ...NO_STORE, ...refresh } },
     );
   }
   /**
@@ -112,10 +129,12 @@ export async function POST(request: Request): Promise<Response> {
    * separately is a place where the answers eventually differ. `isSameActor` is the one implementation, and it is
    * null-safe on both sides: a row with no owner is owned by nobody, INCLUDING the actor, which a bare `===` reports
    * as the actor's own whenever both sides happen to be `null`.
+   *
+   * AND THE REFUSAL IS `refuseCaller()` — THE SAME RESPONSE AS HAVING NO SESSION. A 403 named FORBIDDEN would tell a
+   * student that somebody else's attempt exists, which is the difference between "you may not write here" and "here is
+   * the list of everyone who is sitting this exam". Both callers are refused; neither is told why.
    */
-  if (!isSameActor(userId, attempt.studentId)) {
-    return Response.json({ ok: false, reason: 'FORBIDDEN' }, { status: 403, headers: NO_STORE });
-  }
+  if (!isSameActor(userId, attempt.studentId)) return refuseCaller();
 
   const answerJson = body.answer ?? null;
 
@@ -144,16 +163,10 @@ export async function POST(request: Request): Promise<Response> {
     attempt.gracePeriodSec * 1000,
   );
 
-  return Response.json(result.body, { status: result.status, headers: NO_STORE });
-}
-
-/**
- * THE SESSION PLACEHOLDER. See the ⚠️ note above: this is not authentication, and this route must not be exposed until
- * it is. It returns `null` rather than defaulting so the route fails closed.
- */
-function sessionUserId(): string | null {
-  const id = process.env.ORRERY_DEV_USER_ID;
-  return typeof id === 'string' && id.length > 0 ? id : null;
+  return Response.json(result.body, {
+    status: result.status,
+    headers: { ...NO_STORE, ...refresh },
+  });
 }
 
 /** A body that is not a JSON object is a 400 rather than an exception. */

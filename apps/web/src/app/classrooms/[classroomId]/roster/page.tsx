@@ -8,18 +8,24 @@
  *
  * ## Where the session comes from
  *
- * `actorUserId(request)` reads a header. That is a placeholder for the real session lookup, and it
- * is the SAME shape as `readImpersonation` in `middleware.ts`: a value that is not yet verified
- * and is only used to *name a user to look up*, never to grant anything. `resolveActorForRequest`
- * in `@orrery/db` re-derives every role from the enrollments, so a header that lies about roles is
- * ignored, and a header naming a user who does not exist gets a 403 rather than a roster.
+ * `currentUser()` resolves the caller from the `__Host-` session cookie and returns `null` for every failure — absent,
+ * forged, expired, revoked, or present while the account is suspended (`server/auth/session-user.ts`). This page used to
+ * read `ORRERY_DEV_USER_ID` and fall back to a fixed all-zeroes UUID, which meant identity was a process-wide environment
+ * variable and the page was readable by anybody who knew a user id (`docs/THREAT-MODEL.md` TM-01).
  *
- * It is called out here because the moment the real session lands, this function is the one thing
- * that changes, and a reader needs to know that is safe to change.
+ * **A MISSING SESSION RENDERS THE SAME `NoAccess` A FORBIDDEN ROSTER DOES, AND THAT IS THE POINT.** The two are the same
+ * answer because the difference between them is a statement about whether the caller's session exists, and this page has
+ * no business making one to a stranger. `rosterPageData` still refuses a caller the database says has no relationship to
+ * the classroom, so the session is where the name comes from and the database is where every permission comes from.
+ *
+ * The development escape hatch is still available and is `ORRERY_ALLOW_DEV_IDENTITY=true` plus `ORRERY_DEV_USER_ID`; it is
+ * refused outright when `NODE_ENV=production`, and it yields a caller whose `kind` is `'dev'` rather than `'session'`, so
+ * the difference is visible in a type rather than only in a comment.
  */
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { type RosterActions, RosterTable, type RosterUiRow } from '@/features/roster/RosterTable';
+import { currentUser } from '@/server/auth/session-runtime';
 import {
   changeRoleAction,
   removeMembersAction,
@@ -43,11 +49,21 @@ const one = (v: string | string[] | undefined): string | null =>
   typeof v === 'string' && v !== '' ? v : null;
 
 export default async function RosterPage(props: PageProps) {
-  const [{ classroomId }, query] = await Promise.all([props.params, props.searchParams]);
+  const [{ classroomId }, query, user] = await Promise.all([
+    props.params,
+    props.searchParams,
+    currentUser(),
+  ]);
+
+  // FAIL CLOSED, BEFORE ANY QUERY. There is no default identity to fall back to and no query to run without a name, so a
+  // missing session costs one render and nothing else.
+  if (user === null) return <NoAccess />;
+
   const data = await rosterPageData({
     classroomId,
-    // A PAGESET and a real session both come from headers; the page does not care which.
-    userId: sessionUserId(),
+    // The name comes from the session; every role, classroom and permission comes from the database, so a session that
+    // claims roles it no longer holds is ignored rather than believed.
+    userId: user.userId,
     search: one(query.search) ?? '',
     role: one(query.role),
     includeEnded: one(query.ended) === '1',
@@ -56,7 +72,7 @@ export default async function RosterPage(props: PageProps) {
 
   if (data.notFound) return <NoAccess />;
 
-  const actions = serverActions(classroomId);
+  const actions = serverActions(classroomId, user.userId);
 
   return (
     <main className="orrery-roster-page">
@@ -97,11 +113,11 @@ function NoAccess() {
  * When tRPC lands (ADR-0005) this is the one function that becomes a delegate — and the component,
  * which is where the accessibility and the "name the person" behaviour live, does not.
  */
-function serverActions(classroomId: string): RosterActions {
+function serverActions(classroomId: string, userId: string): RosterActions {
   return {
     async changeRole(input) {
       const result = await changeRoleAction({
-        userId: sessionUserId(),
+        userId,
         classroomId,
         enrollmentId: input.enrollmentId,
         role: input.role,
@@ -112,7 +128,7 @@ function serverActions(classroomId: string): RosterActions {
     },
     async remove(input) {
       const result = await removeMembersAction({
-        userId: sessionUserId(),
+        userId,
         classroomId,
         enrollmentIds: input.enrollmentIds,
       });
@@ -122,7 +138,7 @@ function serverActions(classroomId: string): RosterActions {
     },
     async restore(input) {
       const result = await restoreMembersAction({
-        userId: sessionUserId(),
+        userId,
         classroomId,
         enrollmentIds: input.enrollmentIds,
       });
@@ -151,18 +167,4 @@ function redirectWith(extra: Readonly<Record<string, string>>): never {
   const search = new URLSearchParams({ ...extra });
   const query = search.toString();
   redirect(query === '' ? '?' : `?${query}`);
-}
-
-/**
- * The placeholder session lookup, and its limits stated.
- *
- * It is NOT a session and it does not authenticate anything: it names a user to look up, and
- * every role, classroom and permission that follows comes from the database. A caller who forges
- * the header gets to be *themselves*, which is a real user with real permissions — so this cannot
- * escalate, but it does mean the page is readable by anyone who knows a user id. That is fixed by
- * the real session, and the test below pins the property that survives the fix: the ACTOR is
- * derived from the database, so a session claiming roles it no longer holds is ignored.
- */
-function sessionUserId(): string {
-  return process.env.ORRERY_DEV_USER_ID ?? '00000000-0000-0000-0000-000000000000';
 }
