@@ -285,6 +285,9 @@ importers:
 
   packages/load-profile:
     dependencies:
+      '@orrery/db':
+        specifier: workspace:*
+        version: link:../db
       '@orrery/rng':
         specifier: workspace:*
         version: link:../rng

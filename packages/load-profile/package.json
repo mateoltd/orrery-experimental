@@ -13,6 +13,14 @@
     "./harness": {
       "types": "./dist/harness.d.ts",
       "default": "./dist/harness.js"
+    },
+    "./correctness": {
+      "types": "./dist/correctness.d.ts",
+      "default": "./dist/correctness.js"
+    },
+    "./leg": {
+      "types": "./dist/leg.d.ts",
+      "default": "./dist/leg.js"
     }
   },
   "scripts": {
@@ -22,7 +30,8 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
-    "@orrery/rng": "workspace:*"
+    "@orrery/rng": "workspace:*",
+    "@orrery/db": "workspace:*"
   },
   "devDependencies": {
     "fast-check": "3.23.2"
