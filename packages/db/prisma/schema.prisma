@@ -1006,6 +1006,9 @@ model Assignment {
   @@index([classroomId, status])
   @@index([status, availableFrom, availableUntil])
   @@index([tenantId, status])
+
+  /** `P11-T6`/`P11-T10`/`P11-T11`: computed figures with their freshness state. One row per kind, by a database unique. */
+  analyticsRollups AnalyticsRollup[]
 }
 
 model AssignmentStudentOverride {
@@ -1535,6 +1538,71 @@ enum ReleaseBatchStatus {
 // member could be added to a `RELEASED` batch. The transitions and the membership freeze are now TRIGGERS, written
 // in migration `0014` because Prisma cannot express them here; `release-batch.ts` holds the same table and a test
 // walks all 25 pairs against the database so the two cannot drift.
+/**
+ * A COMPUTED ANALYTICS FIGURE, WITH THE FRESHNESS AND INVALIDATION STATE THAT MAKES IT HONEST.  (`P11-T6`, `P11-T10`, `P11-T11`)
+ *
+ * `packages/analytics/src/rollups.ts` has defined `Rollup<T>` — computedAt, every invalidation since the last
+ * computation, the value, and whether a recomputation is in flight — since `P11-T11`, and **nothing persisted it.** The
+ * figures `P11-T6` wants (form mean and variability) and `P11-T10` wants (similarity clusters) had nowhere to live with a
+ * freshness timestamp, which is precisely what `plans/08` §6 asks for on every figure.
+ */
+model AnalyticsRollup {
+  id         String @id @default(uuid(7))
+  assignmentId String
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  /**
+   * WHICH FIGURE THIS IS, and an ENUM rather than a free string so a second vocabulary cannot grow beside the first.
+   * `FORM_STATS` carries the facility/mean/variability group `P11-T6` needs; `SIMILARITY` carries the answer clusters
+   * `P11-T10` needs. `ITEM_ANALYSIS` is served live from `report-item-analysis.ts` and deliberately has no rollup.
+   */
+  kind       AnalyticsRollupKind
+
+  /** The computed value, as `Rollup<T>['value']`. JSON because each kind has its own shape and they share one table. */
+  value      Json?
+
+  /** `Rollup<T>['computedAt']`. Zero means NEVER computed, which is a different state from "computed long ago". */
+  computedAt DateTime @default(dbgenerated("'epoch'")) @db.Timestamptz(3)
+
+  /**
+   * `Rollup<T>['invalidatedBy']`, WHOLE, oldest first — not just the latest.
+   *
+   * A rollup invalidated by a regrade and then by new responses is a different situation from one invalidated only by a
+   * regrade, and collapsing the list to a single reason destroys the thing the figure was built to record. `rollups.ts`
+   * appends for exactly this reason and this column is where that decision has to survive a restart.
+   */
+  invalidatedBy Json @default("[]")
+
+  /** `Rollup<T>['isRecomputing']`. */
+  isRecomputing Boolean @default(false)
+
+  /**
+   * A REVISION, incremented on every write, so a concurrent recomputation cannot overwrite a newer one.
+   *
+   * `recompute` in the pure layer is a pure function and knows nothing about concurrency; **without a compare-and-set the
+   * last writer wins**, which is how a stale figure computed before a regrade lands *after* the recompute the regrade
+   * triggered, and the figure is wrong with a fresh timestamp — the one state `serve()` cannot detect.
+   */
+  revision Int @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  /**
+   * ONE ROW PER (assignment, kind), enforced by the database rather than by a read-then-write.
+   *
+   * A `@@unique` is what makes `upsert` correct here; without it two workers inserting FORM_STATS produce two rows and
+   * every read has to decide which one is real, which is the ambiguity this column's absence would have created.
+   */
+  @@unique([assignmentId, kind])
+  @@index([kind])
+}
+
+enum AnalyticsRollupKind {
+  FORM_STATS
+  SIMILARITY
+}
+
 model ReleaseBatch {
   id           String   @id @default(uuid(7))
   tenantId     String?

@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./rollups": {
+      "types": "./dist/rollups.d.ts",
+      "default": "./dist/rollups.js"
     }
   },
   "scripts": {

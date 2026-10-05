@@ -218,6 +218,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@orrery/analytics':
+        specifier: workspace:*
+        version: link:../analytics
       '@orrery/auth':
         specifier: workspace:*
         version: link:../auth
@@ -320,6 +323,21 @@ importers:
       vitest:
         specifier: 3.2.7
         version: 3.2.7(@types/node@24.19.0)(jiti@2.7.0)(jsdom@30.1.1(@noble/hashes@2.4.0))
+
+  packages/telemetry:
+    dependencies:
+      '@orrery/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@orrery/clock':
+        specifier: workspace:*
+        version: link:../clock
+      '@orrery/config':
+        specifier: workspace:*
+        version: link:../config
+      '@orrery/exam-engine':
+        specifier: workspace:*
+        version: link:../exam-engine
 
 packages:
 

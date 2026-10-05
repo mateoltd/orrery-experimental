@@ -212,6 +212,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
+    "@orrery/analytics": "workspace:*",
     "@orrery/auth": "workspace:*",
     "@orrery/clock": "workspace:*",
     "@orrery/contracts": "workspace:*",
