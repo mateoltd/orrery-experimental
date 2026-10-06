@@ -36,6 +36,7 @@ describe('THE HARNESS CATCHES A REAL VIOLATION, WHICH IS THE ONLY TEST THAT MATT
        * deletes the test and with it the only evidence the harness works.
        */
       // biome-ignore lint/a11y/useAltText: a deliberate violation; this test asserts axe catches it.
+      // biome-ignore lint/performance/noImgElement: a raw `<img>` is the point, twice over -- next/image would rewrite the markup this test is deliberately breaking, and it needs a loader a unit test does not have.
       <img src="/x.png" />,
     );
     const results = await axeCheck(container);
@@ -52,6 +53,7 @@ describe('THE HARNESS CATCHES A REAL VIOLATION, WHICH IS THE ONLY TEST THAT MATT
 
   it('passes a component with an image that HAS alt text', async () => {
     /** The other half: a harness that fails on everything is as useless as one that fails on nothing. */
+    // biome-ignore lint/performance/noImgElement: a raw `<img>` keeps this an isolated axe assertion rather than a test of next/image, for the same reason as the planted violation above.
     const { container } = render(<img src="/x.png" alt="a chart of results" />);
     const results = await axeCheck(container);
     expect(results.violations.map((v) => v.id)).not.toContain('image-alt');

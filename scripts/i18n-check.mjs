@@ -34,11 +34,25 @@
  *
  * ## WHAT IT CANNOT SEE, PRINTED ON EVERY RUN
  *
- * A green tick from this script means four things and not a fifth: no catalogue is missing a key, none
- * has an orphan, no translation has changed a placeholder, and no message's plural arms are short for
- * the locale they will serve. It does NOT mean the copy is translated well, does not mean the layout
- * survives text expansion (that is `P13-T8`), and does not mean right-to-left renders correctly (also
- * `P13-T8`). A green tick from a floor-level check is still a claim, so the claim is labelled.
+ * A green tick from this script means five things and not a sixth: no catalogue is missing a key, none
+ * has an orphan, no translation has changed a placeholder, no message's plural arms are short for
+ * the locale they will serve, and every message still parses with its placeholders intact after
+ * **+30% text expansion** (`P13-T8`). It does NOT mean the copy is translated well, and it does NOT
+ * mean the LAYOUT survives the expansion -- see the RTL note below, which is the more important
+ * half. A green tick from a floor-level check is still a claim, so the claim is labelled.
+ *
+ * ## ⚠️ THERE IS NO RTL CHECK IN THIS SCRIPT, AND ONE WOULD BE A GATE THAT CANNOT FAIL
+ *
+ * `P13-T8` asks for "RTL layout check in CI". `plans/20-PHASE-PACKETS.md` cut the third locale, so
+ * the shipped locales are `en-GB` and `en-US` -- **neither of which is right-to-left, and no RTL text
+ * exists anywhere in the repository.** An RTL gate written today would have nothing to assert on and
+ * would report PASS on every run, forever.
+ *
+ * **A check that cannot fail is worse than no check, because it is read as evidence.** So there is
+ * no RTL step here. `plans/15-A11Y-I18N.md`'s exit criteria still demand "three locales ... and
+ * correct RTL behaviour" while the phase packet cut the locale that would have supplied them: that
+ * contradiction is recorded against `P13-T8` rather than ticked. The check becomes meaningful in the
+ * same commit that adds a locale with an RTL script, and not one commit before.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -72,6 +86,8 @@ registerHooks({
 });
 
 const { auditCatalogues } = await import('../packages/i18n/src/audit.ts');
+const { auditExpansion } = await import('../packages/i18n/src/expansion.ts');
+const { parseMessage } = await import('../packages/i18n/src/message.ts');
 const { CATALOGUES } = await import('../packages/i18n/src/catalogues.ts');
 const { LOCALES, SOURCE_LOCALE } = await import('../packages/i18n/src/locale.ts');
 
@@ -115,17 +131,51 @@ process.stdout.write(scan.stdout ?? '');
 process.stderr.write(scan.stderr ?? '');
 const scanFailed = scan.status !== 0;
 
+// ── +30% text expansion. `P13-T8`. ────────────────────────────────────────────────────────────────
+console.log('\n  ── text expansion (+30%) ──');
+const expansionReports = [];
+for (const tag of Object.keys(CATALOGUES)) {
+  const catalogue = CATALOGUES[tag];
+  expansionReports.push({
+    tag,
+    report: auditExpansion(catalogue, CATALOGUES[SOURCE_LOCALE], parseMessage),
+  });
+}
+const expansionFindings = expansionReports.flatMap(({ tag, report: one }) =>
+  one.findings.map((finding) => ({ ...finding, tag })),
+);
+const expansionKeys = expansionReports.reduce((total, one) => total + one.report.checked, 0);
+if (expansionFindings.length === 0) {
+  console.log(
+    `    ✓ ${expansionKeys} messages still parse, and keep every placeholder, at +30%` +
+      ` (German and Finnish are about this much longer than English).`,
+  );
+} else {
+  for (const finding of expansionFindings) {
+    console.log(`    ${finding.tag.padEnd(8)} ${finding.rule.padEnd(30)} ${finding.key}`);
+    console.log(`      ${finding.detail}`);
+  }
+}
+console.log(
+  '    ✗ NOT layout. A message can be 30% longer and still be CLIPPED by a max-width or an',
+);
+console.log(
+  '      ellipsis, which is a rendering property — P13-T6/P13-T9, in a real screen reader.',
+);
+
 console.log('\n  scope of this gate:');
 console.log(
   '    ✓ same keys in every locale, orphans, placeholder sets, plural-arm coverage per locale',
 );
 console.log('    ✓ no NEW hard-coded user-facing string in apps/web/src (scripts/i18n-scan.mjs)');
-console.log('    ✗ NOT copy quality, text expansion, or RTL layout — P13-T8.');
+console.log('    ✓ +30% expansion leaves every message parseable with its placeholders intact');
+console.log('    ✗ NOT copy quality.');
+console.log('    ✗ NOT RTL layout — NO RTL TEXT EXISTS, so such a check could never fail.');
 console.log(
   '    ✗ NOT strings built by concatenation or returned from a function — see the scan header.',
 );
 
-if (report.findings.length > 0 || scanFailed) {
+if (report.findings.length > 0 || scanFailed || expansionFindings.length > 0) {
   console.error('\ni18n:check FAILED');
   process.exit(1);
 }

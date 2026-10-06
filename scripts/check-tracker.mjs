@@ -193,8 +193,7 @@ for (const line of current.split('\n')) {
 
 /** `NOT STARTED` IS COMPARED STRIPPED OF MARKDOWN EMPHASIS, because rows are written `**NOT STARTED**`. */
 const isNotStarted = (status) =>
-  status !== undefined &&
-  status.replace(/[*`]/gu, '').trim().toUpperCase().startsWith('NOT STARTED');
+  status?.replace(/[*`]/gu, '').trim().toUpperCase().startsWith('NOT STARTED') === true;
 
 let subjects = [];
 try {
