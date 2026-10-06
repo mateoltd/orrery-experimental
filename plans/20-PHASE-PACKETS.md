@@ -219,6 +219,7 @@ See `10-SIMULATIONS.md` for the protocol and `§10` for the 24 sims.
 | P8-T14 | Teacher evidence timeline + `IntegrityVerdict` with required reason and evidence-framed copy | P8-T11 | L |
 | P8-T15 | Adversarial suite: clock skew, refresh, tab switch, second device, network loss, forged events, replayed saves, malformed sim state | P8-T11 | L |
 | P8-T16 | Load test: **build** the suite as a versioned artefact with correctness assertions. Declared **synthetic** think-time profile — real time-on-item data does not exist until P17 (`D-15`) | P8-T10 | M |
+| P8-T17 | **Compose the exam runner**: load the attempt's questions, mount `renderers/registry.ts` over them, and wire the answer store + IndexedDB outbox to `submitAnswer` | P8-T13 | L |
 
 **Exit:** with the system clock wrong by days the exam still ends on server time; killing the network for 90 s loses no acknowledged save; refreshing resumes with server state and preserved elapsed time; a forged event cannot change a score; every enforced rule is disclosed before start and every relaxation is teacher-grantable.
 

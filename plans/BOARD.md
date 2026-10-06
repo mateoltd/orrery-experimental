@@ -59,7 +59,7 @@ Lanes available: **6**. P0 is mostly sequential; P0-T1, T2, T3 and T6 can run in
 | P5 Assignments, banks, blueprints | pending | 0 / 15 | M2 |
 | P6 Simulation platform | pending | 0 / 12 | M3 |
 | P7 Quiz runtime & grading | pending | 0 / 14 | M4 |
-| P8 Exam runtime & integrity | pending | 0 / 17 | M5 |
+| P8 Exam runtime & integrity | **NOT DONE** | **0 / 18** | M5 |
 | P9 Review & grading | pending | 0 / 10 | M6 |
 | P10 Release & results | pending | 0 / 10 | M6 |
 | P11 Item analysis & reporting | pending | 0 / 12 | M7 |
@@ -69,7 +69,7 @@ Lanes available: **6**. P0 is mostly sequential; P0-T1, T2, T3 and T6 can run in
 | P15 Reliability & performance | pending | 0 / 8 | M10 |
 | P16 Interoperability | pending | 0 / 9 | M9 |
 | P17 Pilot & GA | pending | 0 / 7 | M10 |
-| | | **0 / 203** | |
+| | | **0 / 204** | |
 
 ---
 
