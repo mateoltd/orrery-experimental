@@ -45,6 +45,16 @@ export type AttemptStatus =
   | 'ABANDONED';
 
 /** Why a write was not accepted. Each maps to a DIFFERENT client behaviour, so they are not collapsed. */
+/**
+ * B15: 64 KiB per answer, enforced where the write is decided -- not at the route, which a direct
+ * caller bypasses, and not in the database, where it arrives as a failed upsert with no reason.
+ * Sim states ride inside the answer JSON (`{ simState, answer }`, per `paper.ts:141-146`), so the
+ * cap covers them too; oversize states refuse rather than overflow to S3, because there is no S3
+ * (D-36), and a refusal states its limit where an overflow would silently depend on infrastructure
+ * nobody has.
+ */
+export const MAX_ANSWER_BYTES = 65536;
+
 export type RejectionReason =
   /** The attempt is not open. The client stops retrying; retrying cannot help. */
   | 'ATTEMPT_NOT_IN_PROGRESS'
@@ -55,7 +65,12 @@ export type RejectionReason =
   /** Someone else wrote since the client last read. A 409 carrying the server copy; the student chooses. */
   | 'STALE_REVISION'
   /** The payload itself is not acceptable — a question this attempt was never assigned. */
-  | 'QUESTION_NOT_IN_ATTEMPT';
+  | 'QUESTION_NOT_IN_ATTEMPT'
+  /** The answer exceeds `MAX_ANSWER_BYTES`. Retrying the same bytes cannot help; send less. */
+  | 'ANSWER_TOO_LARGE'
+  /** A sim-shaped answer whose `simState` is not an object. Stored answers must match what
+   * `grading-replay` reads, and a non-object simState is silent corruption of the replay input. */
+  | 'MALFORMED_SIM_STATE';
 
 /** A rejection, with enough context for the client to act and for a teacher to read the log. */
 export interface Rejection {
@@ -125,6 +140,10 @@ export interface WriteDecisionInput {
   /** How far past a deadline a write may still be accepted. Zero is a hard deadline. */
   readonly graceMs: Duration;
   readonly clock: Clock;
+  /** Byte length of the serialized answer. Checked against `MAX_ANSWER_BYTES` before anything else. */
+  readonly answerBytes: number;
+  /** The answer itself, for sim-shape validation. Unread otherwise: this function grades nothing. */
+  readonly answerJson: unknown;
 }
 
 /** The outcome of evaluating a write: accepted, replayed, or rejected. */
@@ -144,6 +163,23 @@ export type WriteDecision =
       readonly body: unknown;
       readonly revision: number;
     };
+
+/**
+ * Whether an answer claims to be sim-shaped: an object carrying `simState`. Anything else -- strings,
+ * arrays, plain scalars -- passes through untouched, because choice and text answers must never be
+ * inspected for sim-ness.
+ */
+function isSimShaped(answer: unknown): boolean {
+  return (
+    typeof answer === 'object' && answer !== null && !Array.isArray(answer) && 'simState' in answer
+  );
+}
+
+function isSimStateObject(answer: unknown): boolean {
+  if (!isSimShaped(answer)) return true;
+  const state = (answer as Record<string, unknown>).simState;
+  return typeof state === 'object' && state !== null && !Array.isArray(state);
+}
 
 /**
  * EVALUATE A WRITE.
@@ -175,6 +211,24 @@ export const decideWrite = (input: WriteDecisionInput): WriteDecision => {
    * 2. THE ATTEMPT MUST BE OPEN. Checked before the deadlines so a submitted attempt reports the real reason
    *    ("you already submitted") instead of the confusing "the deadline passed".
    */
+  if (input.answerBytes > MAX_ANSWER_BYTES) {
+    return {
+      ok: false,
+      reason: 'ANSWER_TOO_LARGE',
+      message: `this answer is ${String(input.answerBytes)} bytes and the limit is ${String(MAX_ANSWER_BYTES)}; send less state`,
+      isConflict: false,
+    };
+  }
+
+  if (isSimShaped(input.answerJson) && !isSimStateObject(input.answerJson)) {
+    return {
+      ok: false,
+      reason: 'MALFORMED_SIM_STATE',
+      message: 'a sim-shaped answer must carry simState as an object',
+      isConflict: false,
+    };
+  }
+
   if (input.attemptStatus !== 'IN_PROGRESS') {
     return {
       ok: false,
@@ -673,6 +727,10 @@ export async function submitAnswer(
 
     // 3. DECIDE.
     const decision = decideWrite({
+      // Byte length of what was SENT (C5's bytes), not of a re-serialization: re-reading the jsonb
+      // column does not preserve key order, so its length is a different number than the client's.
+      answerBytes: Buffer.byteLength(input.answerBytes, 'utf8'),
+      answerJson: input.answerJson,
       attemptStatus: attempt.status as AttemptStatus,
       // P8-T11 integration: the PER-QUESTION window, read from the response row.
       //

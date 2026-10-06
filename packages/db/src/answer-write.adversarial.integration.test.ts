@@ -330,6 +330,47 @@ describe.skipIf(!process.env.DATABASE_URL)('a second device, against real Postgr
   });
 });
 
+describe.skipIf(!process.env.DATABASE_URL)('B15, against real Postgres', () => {
+  it('refuses a 70 KiB answer end to end, and stores nothing for it', async () => {
+    const f = await fixture({ deadlineAt: new Date(T0 + HOUR), gracePeriodSec: 0 });
+    const big = 'x'.repeat(70 * 1024);
+    const result = await submitAnswer(
+      prisma(),
+      save(f, 'a', {
+        answerJson: { choiceId: 'a', padding: big },
+        answerBytes: JSON.stringify({ choiceId: 'a', padding: big }),
+      }),
+      clockAt(T0),
+      0,
+    );
+    expect(result.outcome).toBe('rejected');
+    expect(JSON.stringify(result)).toContain('ANSWER_TOO_LARGE');
+    // And nothing was stored for it: the refusal is an event, never a ledger row.
+    const stored = await prisma().questionResponse.findFirst({
+      where: { attemptId: f.attemptId, questionId: f.questionId },
+      select: { revision: true },
+    });
+    expect(stored).toBeNull();
+  });
+
+  it('accepts a sim-shaped answer end to end: { simState object, answer } stores as JSON', async () => {
+    const f = await fixture({ deadlineAt: new Date(T0 + HOUR), gracePeriodSec: 0 });
+    const answerJson = { simState: { angle: 42 }, answer: 'done' };
+    const result = await submitAnswer(
+      prisma(),
+      save(f, 'a', { answerJson, answerBytes: JSON.stringify(answerJson) }),
+      clockAt(T0),
+      0,
+    );
+    expect(result.outcome, JSON.stringify(result)).toBe('saved');
+    const stored = await prisma().questionResponse.findFirst({
+      where: { attemptId: f.attemptId, questionId: f.questionId },
+      select: { answer: true },
+    });
+    expect(stored?.answer).toMatchObject({ simState: { angle: 42 } });
+  });
+});
+
 describe.skipIf(!process.env.DATABASE_URL)('INV-LATE-1, against real Postgres', () => {
   it('accepts a write before the attempt deadline, so the refusal below is about time and not the fixture', async () => {
     const f = await fixture({ deadlineAt: new Date(T0 + HOUR), gracePeriodSec: 0 });

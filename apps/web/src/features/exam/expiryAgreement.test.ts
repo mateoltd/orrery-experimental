@@ -105,6 +105,8 @@ const writeInput = (
   perQuestionTimeLimitSec: questionDeadlineAt === null ? null : 60,
   graceMs: GRACE_MS,
   clock: clockAt(now),
+  answerBytes: 12,
+  answerJson: { choiceId: 'a' },
 });
 
 /**

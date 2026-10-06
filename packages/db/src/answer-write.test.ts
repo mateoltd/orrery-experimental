@@ -46,6 +46,8 @@ const base = (over: Partial<WriteDecisionInput> = {}): WriteDecisionInput => ({
   perQuestionTimeLimitSec: null,
   graceMs: 0,
   clock: new FrozenClock(T0),
+  answerBytes: 12,
+  answerJson: { choiceId: 'a' },
   ...over,
 });
 
@@ -348,5 +350,43 @@ describe('perQuestionExpiry', () => {
     // the paper's, so the SOFT/LOCK difference above is caused by the term and by nothing else.
     expect(PAST_THE_QUESTION).toBeGreaterThan(QUESTION_DEADLINE + GRACE_MS);
     expect(PAST_THE_QUESTION).toBeLessThan(ATTEMPT_DEADLINE + GRACE_MS);
+  });
+});
+
+describe('answer size and sim shape (B15)', () => {
+  it('refuses an answer over 64 KiB before anything else, without consuming a revision', () => {
+    const decision = decideWrite(base({ answerBytes: 65537, answerJson: { choiceId: 'a' } }));
+    expect(decision).toMatchObject({ ok: false, reason: 'ANSWER_TOO_LARGE', isConflict: false });
+  });
+
+  it('accepts exactly at the boundary: 65536 bytes is a value, 65537 is a refusal', () => {
+    expect(decideWrite(base({ answerBytes: 65536 })).ok).toBe(true);
+    expect(decideWrite(base({ answerBytes: 65537 })).ok).not.toBe(true);
+  });
+
+  it('accepts a well-formed sim answer: { simState object, answer } passes through to the store', () => {
+    const decision = decideWrite(
+      base({ answerBytes: 200, answerJson: { simState: { angle: 42 }, answer: 'done' } }),
+    );
+    expect(decision.ok).toBe(true);
+  });
+
+  it('refuses a sim-shaped answer whose simState is a string: silent corruption of the replay input', () => {
+    const decision = decideWrite(
+      base({ answerBytes: 60, answerJson: { simState: 'not-an-object', answer: 'done' } }),
+    );
+    expect(decision).toMatchObject({ ok: false, reason: 'MALFORMED_SIM_STATE', isConflict: false });
+  });
+
+  it('refuses a sim-shaped answer whose simState is an array', () => {
+    const decision = decideWrite(
+      base({ answerBytes: 60, answerJson: { simState: [1, 2], answer: 'done' } }),
+    );
+    expect(decision).toMatchObject({ ok: false, reason: 'MALFORMED_SIM_STATE' });
+  });
+
+  it('never inspects non-object answers for sim-ness: strings and arrays pass untouched', () => {
+    expect(decideWrite(base({ answerBytes: 10, answerJson: 'b' })).ok).toBe(true);
+    expect(decideWrite(base({ answerBytes: 20, answerJson: ['a', 'b'] })).ok).toBe(true);
   });
 });
