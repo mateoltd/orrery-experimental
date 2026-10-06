@@ -2018,6 +2018,34 @@ model EmailOutbox {
   @@index([toEmail, template, status])
 }
 
+/// xAPI statement outbox. (P16-T5)
+///
+/// Mirrors `EmailOutbox` deliberately: same five statuses, same claim-before-send, same give-up count.
+/// Two queues with two shapes would be two things to get wrong, so there is one pattern and this table is
+/// its second instance. Differences from email, each load-bearing:
+///
+/// - `statementId` is `${attemptId}:${event}`, SO A RETRIED EMISSION DEDUPES AT THE CONSUMER TOO -- the
+///   outbox `dedupeKey` and the xAPI statement `id` are the same string by construction.
+/// - `verb` is indexed with `status` because the dead-letter review is per-verb ("which statements are we
+///   failing to deliver?"), and a dead-letter queue nobody inspects is a second outbox.
+model XapiOutbox {
+  id          String   @id @default(uuid(7))
+  statementId String   @unique
+  verb        String
+  statement   Json
+  dedupeKey   String   @unique
+  attemptId   String?
+  status      String   @default("QUEUED")
+  attempts    Int      @default(0)
+  lastError   String?
+  scheduledAt DateTime @default(now()) @db.Timestamptz(3)
+  sentAt      DateTime? @db.Timestamptz(3)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([status, scheduledAt])
+  @@index([status, verb])
+}
+
 /// P4-T7. Per-user email preferences. Created lazily; a missing row means the defaults.
 model NotificationPreference {
   id        String   @id @default(uuid(7))
