@@ -123,7 +123,7 @@ export async function seedResources(
         },
         select: { id: true },
       });
-      await db.resourceVersion.create({
+      const version = await db.resourceVersion.create({
         data: {
           id: randomUUID(),
           resourceId: created.id,
@@ -133,6 +133,15 @@ export async function seedResources(
           meta: {},
           createdById: ownerId,
         },
+        select: { id: true },
+      });
+      // A resource with no current version is invisible to the public library AND unassignable --
+      // `public-library.ts` excludes `currentVersionId == null`, and `createAssignment` needs a version
+      // id. The T1 planter originally omitted this, and T2's demo found it: one resource in three had
+      // no version, so the demo built two assignments instead of three.
+      await db.resource.update({
+        where: { id: created.id },
+        data: { currentVersionId: version.id },
       });
     } else {
       await db.resource.update({
