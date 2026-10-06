@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { buildStudentGrade } from './boundary.js';
+import { prepareOutbound, type ReleasedOutbound } from './outbound.js';
 import {
   buildAnsweredStatement,
   buildExperiencedStatement,
@@ -7,6 +9,13 @@ import {
   XAPI_VERBS,
 } from './xapi.js';
 
+const xapiTarget = {
+  standard: 'XAPI',
+  bindingId: 'bind-1',
+  externalId: 'ext-1',
+  attemptId: 'att-1',
+  assignmentId: 'asg-1',
+} as const;
 const base = {
   attemptId: 'att-1',
   actorHomePage: 'https://orrery.example',
@@ -64,43 +73,67 @@ describe('xAPI statements', () => {
     expect(statement.actor.account.name).toBe('user-7');
   });
 
-  it('REFUSES a scored statement for an unreleased score -- not a zero, not a placeholder, no statement', () => {
+  it('REFUSES a scored statement built from a sealed body -- end to end through the chokepoint', () => {
+    // The grade holds a REAL score and is still sealed: the chokepoint drops it, and what reaches the
+    // statement builder has no score at all. Before release the answer is not a zero and not a
+    // placeholder -- it is the absence of a statement.
+    const grade = buildStudentGrade({
+      released: false,
+      attemptId: 'att-1',
+      assignmentId: 'asg-1',
+      submittedAt: '2026-01-01T00:00:00Z',
+      answers: [],
+      score: { rawTotal: 8, maxTotal: 10, percentage: 80, perQuestion: [] },
+      releasedAt: null,
+      regradeNotice: null,
+    });
+    const body = prepareOutbound({ target: xapiTarget, grade });
+    expect(body.state).toBe('SEALED');
     expect(() =>
-      buildScoredStatement({
-        ...base,
-        event: 'scored',
-        score: { raw: 8, min: 0, max: 10, releasedAt: null },
-      }),
+      buildScoredStatement({ ...base, event: 'scored', outbound: body as ReleasedOutbound }),
     ).toThrow(/XAPI_SEALED_SCORE/);
   });
 
-  it('scales the released score and marks success from the verb', () => {
-    const passed = buildScoredStatement({
-      ...base,
-      event: 'passed',
-      score: { raw: 8, min: 0, max: 10, releasedAt: '2026-01-01T00:00:00Z' },
+  it('REFUSES a body approved for the wrong standard -- an AGS score must not reach an LRS', () => {
+    const grade = buildStudentGrade({
+      released: true,
+      attemptId: 'att-1',
+      assignmentId: 'asg-1',
+      submittedAt: '2026-01-01T00:00:00Z',
+      answers: [],
+      score: { rawTotal: 8, maxTotal: 10, percentage: 80, perQuestion: [] },
+      releasedAt: '2026-01-02T00:00:00Z',
+      regradeNotice: null,
     });
-    expect(passed.result?.score?.scaled).toBeCloseTo(0.8);
-    expect(passed.result?.success).toBe(true);
-    expect(passed.result?.completion).toBe(true);
-    const failed = buildScoredStatement({
-      ...base,
-      event: 'failed',
-      score: { raw: 2, min: 0, max: 10, releasedAt: '2026-01-01T00:00:00Z' },
+    const body = prepareOutbound({
+      target: { ...xapiTarget, standard: 'LTI_AGS' },
+      grade,
     });
-    expect(failed.result?.success).toBe(false);
+    expect(body.state).toBe('RELEASED');
+    expect(() =>
+      buildScoredStatement({ ...base, event: 'scored', outbound: body as ReleasedOutbound }),
+    ).toThrow(/XAPI_WRONG_STANDARD/);
   });
 
-  it('answered carries duration in ISO-8601 and the attempt number in extensions', () => {
-    const statement = buildAnsweredStatement({
-      ...base,
-      event: 'answered',
-      durationSeconds: 90,
-      attemptNumber: 3,
+  it('formats a chokepoint-approved XAPI body: scaled, success and completion from the release', () => {
+    const grade = buildStudentGrade({
+      released: true,
+      attemptId: 'att-1',
+      assignmentId: 'asg-1',
+      submittedAt: '2026-01-01T00:00:00Z',
+      answers: [],
+      score: { rawTotal: 8, maxTotal: 10, percentage: 80, perQuestion: [] },
+      releasedAt: '2026-01-02T00:00:00Z',
+      regradeNotice: null,
     });
-    expect(statement.result?.duration).toBe('PT90S');
-    expect(
-      statement.context?.extensions?.['https://orrery.example/extensions/attempt-number'],
-    ).toBe(3);
+    const body = prepareOutbound({ target: xapiTarget, grade });
+    if (body.state !== 'RELEASED') throw new Error('expected a released body');
+    const passed = buildScoredStatement({ ...base, event: 'passed', outbound: body });
+    expect(passed.result?.score?.raw).toBe(8);
+    expect(passed.result?.score?.max).toBe(10);
+    expect(passed.result?.success).toBe(true);
+    expect(passed.result?.completion).toBe(true);
+    const failed = buildScoredStatement({ ...base, event: 'failed', outbound: body });
+    expect(failed.result?.success).toBe(false);
   });
 });

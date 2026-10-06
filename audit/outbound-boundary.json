@@ -17,6 +17,10 @@
     {
       "file": "packages/interop/src/outbound.ts",
       "why": "THE CHOKEPOINT, and the only file in the repository permitted to name these fields. It widens SCORE_BEARING_KEYS by UNION with the two standards' own names (LTI_AGS_SCORE_KEYS, XAPI_SCORE_KEYS) rather than replacing it, so P10-T4's sealed results view keeps its coverage. The sealed arm has NO score field at all -- not nullable, absent -- so a handler that reads one does not compile (outbound.assert.types.ts, seven @ts-expect-error directives, all used). The runtime scan covers what the type cannot: the `envelope`, which is Record<string, unknown> from a codec nobody has audited, and which is where a nested mark would be smuggled. It also drops AttemptReceipt.answers, because plans/16 §3 forbids answer content in an xAPI payload and an answer set is a fingerprint -- no key-based guard would ever have caught that."
+    },
+    {
+      "file": "packages/interop/src/xapi.ts",
+      "why": "THE DELIBERATE EXCEPTION the audit script's own header asks somebody to come and decide. It names the three xAPI score verb IRIs (scored/passed/failed) to CONSTRUCT statements, and it never produces a score: buildScoredStatement takes a ReleasedOutbound from prepareOutbound() and throws on sealed bodies and on LTI_AGS bodies. The release decision lives in the chokepoint; this file formats what the chokepoint approved. If this file ever takes a raw score again, the exception is void."
     }
   ]
 }

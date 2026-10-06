@@ -20,13 +20,19 @@
  * nowhere to put one.** In particular the xAPI `result.response` field -- the obvious place an answer would
  * go -- is never set: `answered` carries duration only.
  *
- * ## SCORED REQUIRES RELEASED, AT THE TYPE LEVEL AND AT RUNTIME
+ * ## SCORED REQUIRES RELEASED, AND THE REQUIREMENT IS NOT CHECKED HERE
  *
  * `plans/16` §4.1: AGS grade passback sends `finalScore` only when released; the same rule governs the
- * `scored`/`completed`/`passed`/`failed` statements here. `buildScoredStatement` takes a `ReleasedScore`
- * whose `releasedAt` is a non-null string, AND throws at runtime when it is null -- because the type
- * protects TypeScript callers and the runtime check protects every other caller, and exactly one of those
- * is insufficient.
+ * `scored`/`completed`/`passed`/`failed` statements here. The first version of this file took a raw score
+ * with a `releasedAt` field and re-checked it -- a SECOND, PARALLEL release gate next to the chokepoint's,
+ * and two gates that can disagree are worse than one. So `buildScoredStatement` takes a `ReleasedOutbound`
+ * produced by `prepareOutbound()`: **the chokepoint stays the only place a score is produced, and this file
+ * only formats what the chokepoint approved.** Passing anything else -- a sealed body, an LTI_AGS body --
+ * throws, because both are ways of smuggling an unapproved mark into a record store.
+ *
+ * The audit gate (`audit-outbound.mjs`) fired on this file for naming the three score verb IRIs, which is
+ * exactly its job. The file is listed in `audit/outbound-boundary.json` with the reason: it names the IRIs
+ * to CONSTRUCT statements from chokepoint-approved bodies and never produces a score.
  *
  * ## IDEMPOTENCY IS THE STATEMENT ID
  *
@@ -34,6 +40,8 @@
  * produces the same id, so a consumer dedupes. The outbox's `dedupeKey` is the same string, so the local
  * queue and the remote consumer agree on identity.
  */
+
+import type { ReleasedOutbound, XapiResult } from './outbound.js';
 
 export const XAPI_VERBS = {
   experienced: 'http://adlnet.gov/expapi/verbs/experienced',
@@ -95,20 +103,17 @@ export interface ExperiencedEvent extends XapiEventBase {
   readonly event: 'experienced';
 }
 
-/** A score that is released. `releasedAt` is non-null BY TYPE; the builder also checks at runtime. */
-export interface XapiReleasedScore {
-  readonly raw: number;
-  readonly min: number;
-  readonly max: number;
-  readonly releasedAt: string | null;
-}
-
+/** A scored/completed/passed/failed event, carrying the chokepoint's approved body -- never a raw score. */
 export interface ScoredEvent extends XapiEventBase {
   readonly event: 'scored' | 'completed' | 'passed' | 'failed';
-  readonly score: XapiReleasedScore;
+  readonly outbound: ReleasedOutbound;
 }
 
-function base(event: XapiEventBase, eventName: string, verb: XapiVerb): Omit<XapiStatement, 'result' | 'context'> {
+function base(
+  event: XapiEventBase,
+  eventName: string,
+  verb: XapiVerb,
+): Omit<XapiStatement, 'result' | 'context'> {
   return {
     id: `${event.attemptId}:${eventName}`,
     timestamp: event.timestamp ?? new Date().toISOString(),
@@ -133,21 +138,33 @@ export function buildExperiencedStatement(event: ExperiencedEvent): XapiStatemen
 }
 
 export function buildScoredStatement(event: ScoredEvent): XapiStatement {
-  // Runtime refusal for non-TypeScript callers. `releasedAt: null` means sealed, and a sealed score
-  // posted to a record store is INV-RELEASE-2 violated somewhere nobody in this repository can see.
-  if (event.score.releasedAt === null) {
+  // The chokepoint's body is the ONLY score this file will format. A sealed body has no score at all;
+  // an LTI_AGS body has the WRONG standard's score. Both throw, because both are unapproved marks.
+  if (event.outbound.state !== 'RELEASED') {
     throw new Error(
-      'XAPI_SEALED_SCORE: refusing to build a scored/completed/passed/failed statement for an unreleased score. ' +
+      'XAPI_SEALED_SCORE: refusing to build a scored/completed/passed/failed statement from a sealed body. ' +
         'Before release the answer is not a zero and not a placeholder -- it is the absence of a statement.',
     );
   }
-  const { raw, min, max } = event.score;
-  const scaled = max === min ? 0 : (raw - min) / (max - min);
+  if (event.outbound.standard !== 'XAPI') {
+    throw new Error(
+      `XAPI_WRONG_STANDARD: refusing to wrap a ${event.outbound.standard} body as an xAPI statement. ` +
+        'Cross-standard re-wrapping is how a mark approved for one peer reaches another.',
+    );
+  }
+  const score = event.outbound.score as XapiResult;
   const verb = event.event;
+  // Emitted exactly as the chokepoint computed: no `min` is invented here (XapiResult carries none),
+  // and `scaled` passes through only when the chokepoint set it. An xAPI `score.min` defaulting is the
+  // consumer's spec business, not a value for this file to assert about someone else's grading.
+  const scoredScore: { readonly scaled?: number; readonly raw: number; readonly max: number } =
+    score.scaled === undefined
+      ? { raw: score.raw, max: score.max }
+      : { scaled: score.scaled, raw: score.raw, max: score.max };
   return {
     ...base(event, event.event, verb),
     result: {
-      score: { scaled, raw, min, max },
+      score: scoredScore,
       success: verb === 'passed' ? true : verb === 'failed' ? false : undefined,
       completion: true,
     },
