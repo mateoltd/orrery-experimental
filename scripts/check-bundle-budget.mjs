@@ -43,13 +43,20 @@ export const BUDGETS = {
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 const failures = [];
-const notes = [];
 const say = (s) => console.log(s);
 const ok = (m) => say(`  \x1b[32m✓\x1b[0m ${m}`);
-const soft = (m) => {
-  notes.push(m);
-  say(`  \x1b[33m·\x1b[0m ${m}`);
-};
+/**
+ * ⚠️ `soft()` AND THE "PASSED WITH NOTES" EXIT WERE DELETED, DELIBERATELY.
+ *
+ * `soft()` existed for exactly one caller in this file's life: the `const prev = 40` guard, which had been exceeded by 2.5x
+ * since it was written and therefore printed the same yellow note on every run of the repository's history. So once the
+ * ratchet replaced it, `notes` was always empty and **`BUNDLE BUDGET GATE PASSED WITH NOTES` became unreachable** -- a softer
+ * green that nothing could produce.
+ *
+ * Leaving it in place would mean keeping a second, quieter way for this gate to pass, and a gate with two greens is a gate
+ * whose green you have to check the spelling of. **Every green this script can print is now a real green.** A future advisory
+ * that is worth having should be added with its reason, not inherited as a channel.
+ */
 const bad = (m) => {
   failures.push(m);
   say(`  \x1b[31m✗\x1b[0m ${m}`);
@@ -148,12 +155,56 @@ try {
     ok(`exam first load within budget (${(BUDGETS.exam - kb).toFixed(1)} KB headroom)`);
   }
 
-  // A per-route regression guard, so a slow growth is visible before it breaches.
-  const prev = 40; // KB; updated deliberately, and a change needs GATE-CHANGE:
-  if (kb > prev) {
-    soft(
-      `exam first load is ${kb.toFixed(1)} KB, above the ${prev} KB regression guard (still under budget)`,
+  // ── the REGRESSION guard: a ratchet against a RECORDED value  (P12-T6) ─────────
+  //
+  // This used to be `const prev = 40`, and it was the weakest line in the file:
+  //
+  //   - it was a CONSTANT, so nothing measured anything -- a regression guard needs a previous
+  //     MEASUREMENT to be a guard, and 40 was a number someone typed;
+  //   - the exam route measured 99.5 KB, so it had been exceeded by 2.5x since the commit that
+  //     introduced it, and `soft()` never fails, so it printed the same yellow note on every run
+  //     of the repository's entire life;
+  //   - 40 KB appears in no plan. plans/03 §8 sets 250 KB for the exam runtime, and that budget is
+  //     enforced above and passes.
+  //
+  // **A GUARD WHOSE THRESHOLD HAS NEVER BEEN MET CANNOT DISTINGUISH A REGRESSION FROM THE STATUS QUO**,
+  // and one that is permanently noisy is one everybody learns to skip -- the same lesson as the
+  // permanently-RED gate, in yellow.
+  //
+  // So the previous value is recorded in `audit/bundle-baseline.json`, the comparison is a real
+  // one, and exceeding the tolerance FAILS. Raising the baseline is a deliberate act: it is a
+  // diff, it is reviewable, and `gate-integrity` requires `GATE-CHANGE:` on this file.
+  const baselinePath = join(root, 'audit', 'bundle-baseline.json');
+  if (!existsSync(baselinePath)) {
+    bad(
+      'audit/bundle-baseline.json is missing, so there is no previous measurement to regress from.\n' +
+        '     A regression guard with no baseline is a constant compared against a number typed by\n' +
+        '     hand, which is what this check used to be. Restore the file, or record a baseline and\n' +
+        '     say why.',
     );
+  } else {
+    const baseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
+    const recorded = baseline.examFirstLoadKb;
+    const tolerance = baseline.toleranceKb ?? 0;
+    if (typeof recorded !== 'number') {
+      bad(
+        `audit/bundle-baseline.json has no numeric examFirstLoadKb (found ${JSON.stringify(recorded)}).`,
+      );
+    } else if (kb > recorded + tolerance) {
+      bad(
+        `the exam route's first load GREW: ${kb.toFixed(1)} KB against a recorded ${String(recorded)} KB ` +
+          `(+${(kb - recorded).toFixed(1)} KB, tolerance ${String(tolerance)} KB).\n` +
+          '     Still under the absolute budget, so this is the check that catches a slow drift\n' +
+          '     before it becomes a breach. Find what was added to the exam surface and whether it\n' +
+          '     needs to be there. If the growth is deliberate, record it in\n' +
+          '     audit/bundle-baseline.json in the same commit as the change -- that diff is the review.',
+      );
+    } else {
+      ok(
+        `exam first load against the recorded baseline: ${kb.toFixed(1)} KB vs ${String(recorded)} KB ` +
+          `(+${Math.max(0, kb - recorded).toFixed(1)}, tolerance ${String(tolerance)})`,
+      );
+    }
   }
 
   // NOTE: the registry-independence check below walks the static directory ON DISK, not
@@ -165,8 +216,39 @@ try {
   // must not grow as the registry does. If a sim bundle appears under the app's static
   // dir, the sandbox and the budget are both quietly undermined.
   const onDisk = [...walk(staticDir), ...walk(distDir)];
+
+  /**
+   * DETECTED BY THE ARTEFACT'S OWN NAME, TAKEN FROM THE REGISTRY -- NOT BY A FILENAME PATTERN.
+   *
+   * The old test was `/sim[-_.][a-z0-9-]*\.[0-9a-f]{8,}\.js$/`, i.e. "a file whose name STARTS WITH `sim`".
+   * **A simulation's artefacts are named `browser.41b0adba2fe6.js` and `grader.fc006cd16a56.js`** -- the `sim` prefix is
+   * in the DIRECTORY name, never the file. So that alternative could never match a real simulation bundle.
+   *
+   * Proven by planting: a real artefact, `grader.fc006cd16a56.js`, copied into `apps/web/.next/static/chunks/`, and the
+   * gate printed **"no simulation bundles in the app output (registry independence holds)"**.
+   *
+   * The only alternative that could have fired is the PATH test `/sims\//`, which needs the bundle nested under a directory
+   * literally named `sims`. **A bundler that emits simulation chunks FLAT into the app's static directory -- which is exactly
+   * what happens the moment somebody imports a simulation into the app -- produces `grader.<hash>.js` and passes.**
+   *
+   * So the comparison is now against the registry's own list of artefact filenames, by exact name. That cannot be evaded by
+   * renaming a directory, because content-hash names are what the build produced and the build is what shipped.
+   *
+   * The path test is kept as a second net, not as the only one.
+   */
+  const registryJson = join(root, 'sims/registry/registry.json');
+  const registeredArtefacts = new Set();
+  if (existsSync(registryJson)) {
+    const parsed = JSON.parse(readFileSync(registryJson, 'utf8'));
+    for (const entry of parsed.entries ?? []) {
+      for (const artefact of Object.values(entry.bundle ?? {})) {
+        if (typeof artefact === 'string') registeredArtefacts.add(artefact.replace(/^\.\//u, ''));
+      }
+    }
+  }
+
   const simLeaks = onDisk.filter(
-    (f) => /[\\/]sims[\\/]/.test(f) || /sim[-_.][a-z0-9-]*\.[0-9a-f]{8,}\.js$/.test(f),
+    (f) => /[\\/]sims[\\/]/u.test(f) || registeredArtefacts.has(f.split(/[\\/]/u).pop()),
   );
   if (simLeaks.length > 0) {
     bad(
@@ -196,9 +278,5 @@ if (failures.length > 0) {
   console.error(`\x1b[31mBUNDLE BUDGET GATE FAILED\x1b[0m — ${failures.length} problem(s)\n`);
   for (const f of failures) console.error(`  • ${f}\n`);
   process.exit(1);
-}
-if (notes.length > 0) {
-  say('\x1b[33mBUNDLE BUDGET GATE PASSED WITH NOTES\x1b[0m');
-  process.exit(0);
 }
 say('\x1b[32mBUNDLE BUDGET GATE PASSED\x1b[0m');

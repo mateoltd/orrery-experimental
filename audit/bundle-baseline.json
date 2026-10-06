@@ -1,0 +1,9 @@
+{
+  "$comment": "P12-T6. The measured gzipped first load of /exam/[attemptId], recorded so the regression guard compares against a VALUE THAT WAS MEASURED rather than against a constant someone typed. Raising a number here is a deliberate act: the diff is the record, and `gate-integrity` requires GATE-CHANGE: on this file.",
+  "$why": "The guard used to be `const prev = 40`, a hardcoded constant in the script, and it emitted a soft note on every run. It was 99.5 KB when P12-T6 started, so it had been exceeded by 2.5x since the day it was written in e05cd90 -- and because `soft()` never fails, it could not tell a REGRESSION from the status quo. A threshold compared against nothing recorded is not a regression guard; it is a standing reminder that the threshold was wrong. 40 KB appears in no plan: plans/03 §8 sets 250 KB for the exam runtime, and that budget is enforced and passes.",
+  "route": "/exam/[attemptId]",
+  "metric": "gzipped first-load bytes, from Next's own app-build-manifest.json",
+  "examFirstLoadKb": 99.5,
+  "toleranceKb": 8,
+  "$tolerance": "8 KB, about 8%. Comfortably above build-to-build noise and far below a dependency someone added for a dashboard. Exceeding it FAILS; staying under it is not permission to drift, because the next increase has to be recorded here, and recording it is the review."
+}
