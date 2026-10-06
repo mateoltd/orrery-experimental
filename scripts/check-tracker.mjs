@@ -118,6 +118,14 @@ for (const line of current.split('\n')) {
       `${id} still carries a *(next commit)* placeholder in its summary row; resolve it in the following commit`,
     );
   }
+  // A bare `PLACEHOLDER` commit cell: nineteen rows carried one while claiming DONE, because the
+  // check above only knew the `*(next commit)*` spelling. A commit column that names no commit is a
+  // row whose evidence cannot be found, which is the same defect in plainer text.
+  const cells = line.split('|');
+  if (line.startsWith('| P') && cells.length > 4 && cells[4].trim() === '`PLACEHOLDER`') {
+    const id = /^\|\s*(P\d+-T\d+)/.exec(line)?.[1] ?? 'a row';
+    bad(`${id} carries a bare PLACEHOLDER commit cell; backfill the real hash`);
+  }
 }
 
 // --- 3b. an OPEN row is allowed to have no commit, and anything else is not ----
