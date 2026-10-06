@@ -156,7 +156,14 @@ export function ExamRunner(props: ExamRunnerProps): React.ReactElement {
       return { kind: 'RETRY', message: `status ${String(response.status)}` };
     };
     const result = await flush(store, send);
-    setSaveState(result.kind === 'DRAINED' || result.kind === 'NOTHING_TO_DO' ? 'saved' : 'saving');
+    // STOPPED means the queue holds an unsent write: to the student that IS failed-saving, even
+    // though the outbox will retry. Reporting it as 'saving' would be the false green tick -- the
+    // announcer below exists precisely so a stuck queue speaks up instead of spinning forever.
+    if (result.kind === 'STOPPED') {
+      setSaveState('failed');
+    } else {
+      setSaveState('saved');
+    }
   }, [store]);
 
   useEffect(() => {
@@ -197,13 +204,30 @@ export function ExamRunner(props: ExamRunnerProps): React.ReactElement {
       .then(() => void pump());
   };
 
+  const goto = (index: number, questionId: string): void => {
+    dispatch({ type: 'GOTO', index });
+    // Focus FOLLOWS the palette move, because a palette that changes the current question without
+    // moving focus leaves a keyboard user operating on a question they cannot perceive. The target
+    // is the question's own `<li tabIndex={-1}>`, not its first control: focusing the first control
+    // would drop the student mid-question with no announcement of WHERE they are, and renderers do
+    // not guarantee headings, so querying for one would silently no-op on exactly the questions
+    // whose structure is unusual.
+    document.getElementById(`exam-q-${questionId}`)?.focus({ preventScroll: false });
+  };
+
   const items = palette(state, Date.now());
 
   return (
     <div data-testid="exam-runner" data-save-state={saveState}>
+      <SaveAnnouncer saveState={saveState} />
       <ol>
-        {props.questions.map((question) => (
-          <li key={question.questionId}>
+        {props.questions.map((question, index) => (
+          <li
+            key={question.questionId}
+            id={`exam-q-${question.questionId}`}
+            tabIndex={-1}
+            aria-label={`Question ${index + 1}`}
+          >
             {renderRunnerQuestion(question, state, answer)}
             <ReportProblem attemptId={props.attemptId} questionId={question.questionId} />
           </li>
@@ -211,12 +235,57 @@ export function ExamRunner(props: ExamRunnerProps): React.ReactElement {
       </ol>
       <nav aria-label="Questions">
         {items.entries.map((entry) => (
-          <span key={entry.questionId} data-status={entry.status}>
+          <button
+            key={entry.questionId}
+            type="button"
+            data-status={entry.status}
+            aria-label={`Question ${entry.index + 1}${entry.status === 'ANSWERED' ? ', answered' : entry.status === 'LOCKED' ? ', locked' : ', unanswered'}`}
+            aria-current={entry.current ? 'true' : undefined}
+            disabled={entry.blockedBecause !== null}
+            onClick={() => goto(entry.index, entry.questionId)}
+          >
             {entry.index + 1}
-          </span>
+          </button>
         ))}
       </nav>
     </div>
+  );
+}
+
+/**
+ * THE LIVE-REGION POLICY, AS A COMPONENT.  (P13-T3)
+ *
+ * One polite region for the whole runner. What it announces, and what it deliberately does not:
+ *
+ *   - save FAILED -> announced (polite, not assertive: the answer is safe in the outbox, so this is
+ *     news, not an emergency -- an assertive interruption mid-thought costs more than it saves);
+ *   - recovered to saved AFTER a failure -> announced once (the resolution of news, not routine);
+ *   - every successful autosave -> NEVER announced (chatter trains the user to ignore the region,
+ *     which is the same lesson as the permanently-noisy gate, in audio).
+ *
+ * Conflicts (server holds a different answer) are NOT announced here: they need a decision, and a
+ * decision needs the reconcile dialog, which announces itself. Two announcers for one event would
+ * speak over each other.
+ */
+function SaveAnnouncer(props: {
+  readonly saveState: 'idle' | 'saving' | 'saved' | 'failed';
+}): React.ReactElement | null {
+  const [hadFailure, setHadFailure] = useState(false);
+  const [message, setMessage] = useState('');
+  useEffect(() => {
+    if (props.saveState === 'failed') {
+      setHadFailure(true);
+      setMessage('Saving failed. Your answer is kept on this device and will be retried.');
+    } else if (props.saveState === 'saved' && hadFailure) {
+      setHadFailure(false);
+      setMessage('Saving recovered. All answers are saved.');
+    }
+  }, [props.saveState, hadFailure]);
+  if (message === '') return null;
+  return (
+    <p role="status" data-testid="save-announcer">
+      {message}
+    </p>
   );
 }
 

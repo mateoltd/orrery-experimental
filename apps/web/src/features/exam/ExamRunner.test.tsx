@@ -140,3 +140,71 @@ describe('ExamRunner mounts the paper', () => {
     }
   });
 });
+
+describe('exam surface accessibility (P13-T3)', () => {
+  it('palette entries are BUTTONS that move focus to their question', async () => {
+    const user = userEvent.setup();
+    render(
+      <ExamRunner
+        attemptId="att-1"
+        policy={EXAM_PROFILE_DEFAULTS}
+        questions={QUESTIONS}
+        store={memoryOutboxStore()}
+      />,
+    );
+    const nav = screen.getByRole('navigation', { name: 'Questions' });
+    const buttons = nav.querySelectorAll('button');
+    // Buttons, not spans: a span palette is mouse-only, and a keyboard author cannot perceive it.
+    expect(buttons).toHaveLength(2);
+    const second = buttons[1];
+    expect(second).toBeDefined();
+    await user.click(second as Element);
+    // Focus followed the palette move to the question itself, not to its first control.
+    expect(document.activeElement?.id).toBe('exam-q-q2');
+  });
+
+  it('announces save failure, and recovery exactly once -- never routine saves', async () => {
+    const user = userEvent.setup();
+    let fail = true;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      if (fail) return new Response('{}', { status: 500 });
+      return new Response('{}', { status: 200 });
+    });
+    try {
+      render(
+        <ExamRunner
+          attemptId="att-1"
+          policy={EXAM_PROFILE_DEFAULTS}
+          questions={QUESTIONS}
+          store={memoryOutboxStore()}
+        />,
+      );
+      // No announcement on mount or on routine saves: chatter trains the user to ignore the region.
+      expect(screen.queryByTestId('save-announcer')).toBeNull();
+      const options = screen.getAllByRole('radio');
+      await user.click(options[1] as Element);
+      const deadline = Date.now() + 2000;
+      while (screen.queryByTestId('save-announcer') === null && Date.now() < deadline) {
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      const announcer = screen.getByTestId('save-announcer');
+      expect(announcer.getAttribute('role')).toBe('status');
+      expect(announcer.textContent).toMatch(/kept on this device/);
+      // Recovery announces once...
+      fail = false;
+      await user.click(options[0] as Element);
+      const recovered = Date.now() + 2000;
+      while (
+        !/recovered/.test(screen.getByTestId('save-announcer').textContent ?? '') &&
+        Date.now() < recovered
+      ) {
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      expect(screen.getByTestId('save-announcer').textContent).toMatch(/recovered/);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+});
