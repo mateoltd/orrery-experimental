@@ -29,7 +29,14 @@
  * it is invisible until a real student's number lands near the boundary.
  */
 
-export type GradingStrategy = 'EXACT' | 'TOLERANCE' | 'SET' | 'ORDER' | 'NUMERIC' | 'RUBRIC';
+export type GradingStrategy =
+  | 'EXACT'
+  | 'TOLERANCE'
+  | 'SET'
+  | 'BAG'
+  | 'ORDER'
+  | 'NUMERIC'
+  | 'RUBRIC';
 
 /**
  * THE CODES THE SDK ITSELF EMITS, which are the codes the product already knows.
@@ -435,6 +442,101 @@ export function setMatch(
  * A list longer than the expected one cannot earn marks for its surplus, because each surplus entry
  * occupies a position that should hold the right item. Its score is reported rather than hidden.
  */
+/**
+ * `BAG` grading — a multiset comparison, where HOW MANY TIMES something occurs IS part of the answer.
+ *
+ * ## WHY THIS EXISTS: `setMatch` CANNOT GRADE A PUNNETT SQUARE, THOUGH ITS DOC NAMED ONE
+ *
+ * `setMatch` compares SETS, so it collapses duplicates on both sides. For a Punnett square that is not a rounding
+ * difference, it is a **false-positive mark**: a cross of `Aa x Aa` produces `AA, Aa, Aa, aa`, and a student who writes
+ * only `AA, Aa, aa` -- omitting one heterozygote, which is the entire content of the exercise -- produces the same
+ * three-element set as the correct four-cell answer and is awarded **full marks**.
+ *
+ * That was found by PLANTING it rather than by reading the code: `biology.genetics-punnett` scored
+ * `{ offspring: ['AA','Aa','aa'], ratio: '1:2:1' }` as `CORRECT 4/4` against a four-cell cross. `setMatch`'s own header
+ * still says "the strategy for a Punnett square", so the doc and the semantics disagreed and the doc was right about the
+ * simulation and wrong about the primitive.
+ *
+ * ## WHY `setMatch` IS NOT FIXED INSTEAD
+ *
+ * **`setMatch` is correct for what it is for.** Ticking "AA" and "aa" in a checkbox list means the set {AA, aa}; a
+ * student cannot select "AA" twice, so collapsing duplicates is right there, and `biology.mitosis-order` already moved to
+ * `orderMatch` for the opposite reason. Changing `setMatch` to count would silently break every selectable-options item in
+ * the catalogue. **The primitive was missing, not wrong.**
+ *
+ * ## PARTIAL CREDIT IS MULTISET JACCARD, FOR THE SAME REASON `setMatch` USES JACCARD
+ *
+ * `sum(min(countGiven, countExpected)) / sum(max(countGiven, countExpected))`. Both halves move together: omitting a
+ * heterozygote lowers the numerator, and inventing an extra one raises the denominator. So `AA, Aa, aa` scores 3/4 rather
+ * than 4/4 -- and, unlike a set comparison, **cannot be inflated by repeating an answer**, because a repeat adds to the
+ * denominator and never to the numerator.
+ */
+export function bagMatch(
+  given: unknown,
+  expected: readonly string[],
+  spec: {
+    readonly maxPoints: number;
+    readonly partialCredit?: boolean;
+    readonly caseSensitive?: boolean;
+  },
+): Grade {
+  const fold = spec.caseSensitive === true ? (value: string): string => value : canonicalText;
+  const givenList = toList(given, fold);
+  const expectedList = expected.map((entry) => fold(entry));
+  const maxPoints = spec.maxPoints;
+
+  if (expectedList.length === 0) {
+    return finish(0, maxPoints, 'BAG', 'the expected bag is empty, so nothing can be credited');
+  }
+
+  /** Counts rather than membership: the whole difference between a bag and a set. */
+  const tally = (items: readonly string[]): Map<string, number> => {
+    const counts = new Map<string, number>();
+    for (const item of items) counts.set(item, (counts.get(item) ?? 0) + 1);
+    return counts;
+  };
+  const givenCounts = tally(givenList);
+  const expectedCounts = tally(expectedList);
+
+  let matched = 0;
+  let total = 0;
+  for (const item of new Set([...givenCounts.keys(), ...expectedCounts.keys()])) {
+    matched += Math.min(givenCounts.get(item) ?? 0, expectedCounts.get(item) ?? 0);
+    total += Math.max(givenCounts.get(item) ?? 0, expectedCounts.get(item) ?? 0);
+  }
+
+  if (matched === expectedList.length && givenList.length === expectedList.length) {
+    return finish(
+      maxPoints,
+      maxPoints,
+      'BAG',
+      `all ${String(expectedList.length)} entries, with the right count for each`,
+    );
+  }
+  if (matched === 0) {
+    return finish(
+      0,
+      maxPoints,
+      'BAG',
+      `none of the ${String(givenList.length)} entries was expected (${[...expectedCounts.keys()].join(', ')})`,
+    );
+  }
+  if (spec.partialCredit === true) {
+    return finish(
+      maxPoints * (matched / total),
+      maxPoints,
+      'BAG',
+      `${String(matched)} of ${String(expectedList.length)} entries correct, counting duplicates`,
+    );
+  }
+  return finish(
+    0,
+    maxPoints,
+    'BAG',
+    `only ${String(matched)} of ${String(expectedList.length)} entries correct, counting duplicates`,
+  );
+}
+
 const toList = (value: unknown, fold: (input: string) => string): string[] => {
   if (!Array.isArray(value)) return [];
   return value.map((entry) => fold(String(entry)));

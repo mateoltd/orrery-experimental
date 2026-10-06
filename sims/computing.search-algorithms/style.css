@@ -1,0 +1,81 @@
+/*
+ * Two colours, both AA on white, because a sim a student cannot read does not exist for them.
+ *
+ * THE COMPARISON NUMBERS ARE SET IN A TABULAR FIGURE, because the count in the corner of a box is the
+ * answer and a student has to transcribe it into a box a screen away.
+ */
+:root {
+  --ground: #1f2933;
+  --path: #2b6cb0;
+  --mark: #9b2c2c;
+}
+#sim-root {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 0.75rem;
+  font-family: system-ui, sans-serif;
+  color: var(--ground);
+  background: #ffffff;
+}
+#sim-canvas {
+  display: block;
+  width: 100%;
+}
+#sim-stepper {
+  display: flex;
+  gap: 0.6rem;
+  margin: 0.5rem 0;
+}
+#sim-marks {
+  border-collapse: collapse;
+  margin: 0.5rem 0 1rem;
+}
+#sim-marks caption {
+  text-align: left;
+  max-width: 42rem;
+  padding-bottom: 0.25rem;
+}
+#sim-marks th,
+#sim-marks td {
+  border: 1px solid var(--ground);
+  padding: 0.25rem 0.55rem;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+#sim-marks thead th {
+  background: #e8eef5;
+}
+#sim-root label {
+  display: block;
+  font-weight: 600;
+  margin-top: 0.6rem;
+}
+#sim-root input {
+  font: inherit;
+  padding: 0.3rem;
+  width: 9rem;
+}
+#sim-root button {
+  font: inherit;
+  padding: 0.35rem 0.8rem;
+  border: 2px solid var(--path);
+  background: #ffffff;
+  color: var(--ground);
+  cursor: pointer;
+}
+#sim-submit {
+  margin-top: 0.75rem;
+  border-color: var(--mark);
+  color: var(--mark);
+}
+#sim-root button:focus-visible,
+#sim-root input:focus-visible,
+#sim-canvas:focus-visible,
+#sim-marks:focus-visible {
+  outline: 3px solid var(--path);
+  outline-offset: 2px;
+}
+#sim-status {
+  font-weight: 600;
+}

@@ -1,0 +1,146 @@
+{
+  "id": "chemistry.solution-concentration",
+  "version": "1.0.0",
+  "title": "Solutions and concentration",
+  "summary": "Dilute a solution by adding water or making it up to a volume, and report molarity, ppm and moles.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["chemistry"],
+  "tags": ["moles", "concentration"],
+  "ageRange": [13, 16],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "Two beakers, one starting and one after the dilution, with the method stated as add or make up, and three labelled boxes for the diluted molarity, the concentration in ppm and the amount in moles.",
+    "reducedMotion": true,
+    "textAlternative": "0.1 moles per litre in 50 cm3 of solution, made up to a total of 100 cm3. That is 0.005 moles in 100 cm3, so the diluted molarity is 0.05 mol per litre and the concentration is 2922 ppm."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "molarity": {
+        "type": "number",
+        "label": "Starting molarity",
+        "unit": "mol/L",
+        "minimum": 0.01,
+        "maximum": 2,
+        "default": 0.1
+      },
+      "volume": {
+        "type": "number",
+        "label": "Starting volume",
+        "unit": "cm3",
+        "minimum": 10,
+        "maximum": 500,
+        "default": 50
+      },
+      "water": {
+        "type": "number",
+        "label": "Water added",
+        "unit": "cm3",
+        "minimum": 0,
+        "maximum": 500,
+        "default": 50
+      },
+      "finalVolume": {
+        "type": "number",
+        "label": "Volume made up to",
+        "unit": "cm3",
+        "minimum": 10,
+        "maximum": 500,
+        "default": 100
+      },
+      "method": {
+        "type": "enum",
+        "label": "Method",
+        "enumValues": ["add", "make-up"],
+        "default": "make-up"
+      },
+      "molarMass": {
+        "type": "number",
+        "label": "Molar mass",
+        "unit": "g/mol",
+        "minimum": 1,
+        "maximum": 200,
+        "default": 58.44
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 520,
+    "minHeight": 320,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "molarity": 0.1,
+            "volume": 50,
+            "water": 50,
+            "finalVolume": 100,
+            "method": "make-up",
+            "molarMass": 58.44
+          }
+        }
+      }
+    ],
+    "type": {
+      "molarity": "0.05",
+      "ppm": "2922",
+      "moles": "0.005"
+    },
+    "expect": {
+      "answer": {
+        "molarity": {
+          "min": 0.0497,
+          "max": 0.0503
+        },
+        "ppm": {
+          "min": 2907,
+          "max": 2937
+        },
+        "moles": {
+          "min": 0.00497,
+          "max": 0.00503
+        }
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "TOLERANCE",
+    "maxPoints": 4,
+    "tolerance": {
+      "relative": 0.005
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You gave a diluted molarity of {answer.molarity} mol per litre; the volumes give {expected.molarity}."
+  }
+}

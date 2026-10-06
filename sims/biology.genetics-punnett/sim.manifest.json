@@ -1,0 +1,101 @@
+{
+  "id": "biology.genetics-punnett",
+  "version": "1.0.0",
+  "title": "Punnett squares",
+  "summary": "Complete a Punnett square for a chosen pair of parents and read the offspring ratio off the cells.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["biology"],
+  "tags": ["genetics", "inheritance"],
+  "ageRange": [13, 16],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A four-cell Punnett square with both parents named along the top and the side, and two boxes for the offspring genotypes and the ratio.",
+    "reducedMotion": true,
+    "textAlternative": "A Punnett square with Aa along the top and Aa down the side, and A the dominant allele. The four cells hold 1 AA, 2 Aa, 1 aa, so the offspring ratio is 1:2:1."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "parentA": {
+        "type": "enum",
+        "label": "First parent",
+        "enumValues": ["AA", "Aa", "aa"],
+        "default": "Aa",
+        "description": "The genotype along the top of the square."
+      },
+      "parentB": {
+        "type": "enum",
+        "label": "Second parent",
+        "enumValues": ["AA", "Aa", "aa"],
+        "default": "Aa",
+        "description": "The genotype down the side of the square."
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 460,
+    "minHeight": 300,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "parentA": "Aa",
+            "parentB": "Aa",
+            "dominant": "A"
+          }
+        }
+      }
+    ],
+    "type": {
+      "offspring": "AA, Aa, aa, Aa",
+      "ratio": "1 : 2 : 1"
+    },
+    "expect": {
+      "answer": {
+        "offspring": {
+          "set": ["AA", "Aa", "aa", "Aa"]
+        },
+        "ratio": {
+          "exact": "1 : 2 : 1"
+        }
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "SET",
+    "maxPoints": 4,
+    "partialCredit": true,
+    "rationaleTemplate": "You listed {answer.offspring} and the ratio {answer.ratio}; the cells give {expected.offspring} and {expected.ratio}."
+  }
+}

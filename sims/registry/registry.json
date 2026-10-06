@@ -1,6 +1,6 @@
 {
   "generatedFrom": "1970-01-01",
-  "digest": "7a462e939db5f0df7804464ec94e36bc614cc5d4989bc0e4691f17f2403fdd4e",
+  "digest": "d1f4ac41280aa4732aa3d1fb0113f24f39336cbd19a534cf2c39641b3761dc51",
   "entries": [
     {
       "id": "astronomy.orrery",
@@ -9,9 +9,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.79cfef6bc1f8.html",
-        "browser": "./browser.d84d64792cc9.js",
-        "grader": "./grader.485653f10b00.js",
+        "page": "./sim.a176a51e25fb.html",
+        "browser": "./browser.6b1d2785047c.js",
+        "grader": "./grader.7957b8d03bb0.js",
         "style": "./style.75a5f5513d82.css"
       },
       "bytes": {
@@ -61,9 +61,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.7154de5e7c26.html",
-        "browser": "./browser.c3dcea694633.js",
-        "grader": "./grader.4718bda0231f.js",
+        "page": "./sim.ff7179a3e9bb.html",
+        "browser": "./browser.41013081987a.js",
+        "grader": "./grader.819f4772441c.js",
         "style": "./style.b44267f09d47.css"
       },
       "bytes": {
@@ -97,15 +97,109 @@
       ]
     },
     {
+      "id": "astronomy.tides",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.ade94cfcb716.html",
+        "browser": "./browser.5f9da78f92e9.js",
+        "grader": "./grader.f30bf7d0a98a.js",
+        "style": "./style.cb23e32acd05.css"
+      },
+      "bytes": {
+        "browser": 14357,
+        "grader": 9756,
+        "total": 26064
+      },
+      "defaultHeight": 560,
+      "minHeight": 320,
+      "parameters": [
+        {
+          "name": "natural",
+          "type": "number",
+          "label": "Basin natural period",
+          "unit": "h",
+          "minimum": 1,
+          "maximum": 30,
+          "step": null,
+          "default": 12.4206012
+        },
+        {
+          "name": "hours",
+          "type": "number",
+          "label": "Hours to plot",
+          "unit": "h",
+          "minimum": 1,
+          "maximum": 720,
+          "step": null,
+          "default": 168
+        },
+        {
+          "name": "phase",
+          "type": "number",
+          "label": "Lunar phase, day of cycle",
+          "unit": "d",
+          "minimum": 0,
+          "maximum": 29.53,
+          "step": null,
+          "default": 0
+        }
+      ]
+    },
+    {
+      "id": "biology.genetics-punnett",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.03f18341fe30.html",
+        "browser": "./browser.0546b5d2db08.js",
+        "grader": "./grader.f78b621cf4de.js",
+        "style": "./style.25c08f553bca.css"
+      },
+      "bytes": {
+        "browser": 12376,
+        "grader": 7919,
+        "total": 22341
+      },
+      "defaultHeight": 460,
+      "minHeight": 300,
+      "parameters": [
+        {
+          "name": "parentA",
+          "type": "enum",
+          "label": "First parent",
+          "unit": null,
+          "minimum": null,
+          "maximum": null,
+          "step": null,
+          "default": "Aa"
+        },
+        {
+          "name": "parentB",
+          "type": "enum",
+          "label": "Second parent",
+          "unit": null,
+          "minimum": null,
+          "maximum": null,
+          "step": null,
+          "default": "Aa"
+        }
+      ]
+    },
+    {
       "id": "biology.mitosis-order",
       "version": "1.0.0",
       "lifecycle": "ACTIVE",
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.4a87b02bf409.html",
-        "browser": "./browser.f485b71412e6.js",
-        "grader": "./grader.0c8e85f17f2d.js",
+        "page": "./sim.e2c78b2fdc49.html",
+        "browser": "./browser.37b2c7da7c5c.js",
+        "grader": "./grader.3854703aebbb.js",
         "style": "./style.f206050a0042.css"
       },
       "bytes": {
@@ -135,9 +229,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.106b205893d2.html",
-        "browser": "./browser.3321836c17ee.js",
-        "grader": "./grader.bea61988c3b8.js",
+        "page": "./sim.49f20680c42b.html",
+        "browser": "./browser.584cccbd7929.js",
+        "grader": "./grader.5016b208c37e.js",
         "style": "./style.eac67ab7c953.css"
       },
       "bytes": {
@@ -197,9 +291,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.c0f467bbdfd3.html",
-        "browser": "./browser.fa939e1ce8c0.js",
-        "grader": "./grader.650800c98389.js",
+        "page": "./sim.f97459ae30f1.html",
+        "browser": "./browser.337fb900addb.js",
+        "grader": "./grader.cf769e4adef0.js",
         "style": "./style.062ac6ea3584.css"
       },
       "bytes": {
@@ -239,9 +333,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.5e60eb5affc9.html",
-        "browser": "./browser.16a1b0969c65.js",
-        "grader": "./grader.9ed553fc117b.js",
+        "page": "./sim.d05f5d588f5f.html",
+        "browser": "./browser.ec7d30f1cec7.js",
+        "grader": "./grader.a745bbfcb8ce.js",
         "style": "./style.3335c02223c8.css"
       },
       "bytes": {
@@ -260,9 +354,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.9aa66d60e356.html",
-        "browser": "./browser.3ecf0260f120.js",
-        "grader": "./grader.4d72d623f7b4.js",
+        "page": "./sim.91711f6129b9.html",
+        "browser": "./browser.4e7e3a25169b.js",
+        "grader": "./grader.59ddc16ff86e.js",
         "style": "./style.13aa5dcedc33.css"
       },
       "bytes": {
@@ -306,15 +400,97 @@
       ]
     },
     {
+      "id": "chemistry.solution-concentration",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.adfcab4077cf.html",
+        "browser": "./browser.bfd54a24de13.js",
+        "grader": "./grader.c1c3e143803e.js",
+        "style": "./style.c0d2c049f818.css"
+      },
+      "bytes": {
+        "browser": 13084,
+        "grader": 9151,
+        "total": 24142
+      },
+      "defaultHeight": 520,
+      "minHeight": 320,
+      "parameters": [
+        {
+          "name": "molarity",
+          "type": "number",
+          "label": "Starting molarity",
+          "unit": "mol/L",
+          "minimum": 0.01,
+          "maximum": 2,
+          "step": null,
+          "default": 0.1
+        },
+        {
+          "name": "volume",
+          "type": "number",
+          "label": "Starting volume",
+          "unit": "cm3",
+          "minimum": 10,
+          "maximum": 500,
+          "step": null,
+          "default": 50
+        },
+        {
+          "name": "water",
+          "type": "number",
+          "label": "Water added",
+          "unit": "cm3",
+          "minimum": 0,
+          "maximum": 500,
+          "step": null,
+          "default": 50
+        },
+        {
+          "name": "finalVolume",
+          "type": "number",
+          "label": "Volume made up to",
+          "unit": "cm3",
+          "minimum": 10,
+          "maximum": 500,
+          "step": null,
+          "default": 100
+        },
+        {
+          "name": "method",
+          "type": "enum",
+          "label": "Method",
+          "unit": null,
+          "minimum": null,
+          "maximum": null,
+          "step": null,
+          "default": "make-up"
+        },
+        {
+          "name": "molarMass",
+          "type": "number",
+          "label": "Molar mass",
+          "unit": "g/mol",
+          "minimum": 1,
+          "maximum": 200,
+          "step": null,
+          "default": 58.44
+        }
+      ]
+    },
+    {
       "id": "computing-science.download-time",
       "version": "1.0.0",
       "lifecycle": "ACTIVE",
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.a14d21d73916.html",
-        "browser": "./browser.2f247b8b078b.js",
-        "grader": "./grader.14d0ebf5bcee.js",
+        "page": "./sim.f6d4ae8af26a.html",
+        "browser": "./browser.b3e818db0b84.js",
+        "grader": "./grader.9cd4cc7d4fa1.js",
         "style": "./style.a4425805387d.css"
       },
       "bytes": {
@@ -354,9 +530,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.feb6d85f9b6b.html",
-        "browser": "./browser.fb6cc1eed515.js",
-        "grader": "./grader.cbb692aa1ec2.js",
+        "page": "./sim.7e4763a936f4.html",
+        "browser": "./browser.e2aefd8d7ea2.js",
+        "grader": "./grader.d1691f292189.js",
         "style": "./style.cd7f3f6bbbc7.css"
       },
       "bytes": {
@@ -390,15 +566,109 @@
       ]
     },
     {
+      "id": "computing.binary-trees",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.ade30e0d628e.html",
+        "browser": "./browser.0cd6330f47c4.js",
+        "grader": "./grader.701144df93dc.js",
+        "style": "./style.547530b578ae.css"
+      },
+      "bytes": {
+        "browser": 13961,
+        "grader": 9476,
+        "total": 25686
+      },
+      "defaultHeight": 620,
+      "minHeight": 360,
+      "parameters": [
+        {
+          "name": "insertOrder",
+          "type": "string",
+          "label": "Insertion order",
+          "unit": null,
+          "minimum": null,
+          "maximum": null,
+          "step": null,
+          "default": "50,25,75,12,37,62,87"
+        }
+      ]
+    },
+    {
+      "id": "computing.search-algorithms",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.d72489c0d673.html",
+        "browser": "./browser.ceea80547cab.js",
+        "grader": "./grader.7dfd346ad255.js",
+        "style": "./style.3be3b20de9fa.css"
+      },
+      "bytes": {
+        "browser": 16247,
+        "grader": 10039,
+        "total": 28282
+      },
+      "defaultHeight": 560,
+      "minHeight": 320,
+      "parameters": [
+        {
+          "name": "algorithm",
+          "type": "enum",
+          "label": "Search",
+          "unit": null,
+          "minimum": null,
+          "maximum": null,
+          "step": null,
+          "default": "binary"
+        },
+        {
+          "name": "size",
+          "type": "integer",
+          "label": "List length",
+          "unit": null,
+          "minimum": 4,
+          "maximum": 64,
+          "step": null,
+          "default": 16
+        },
+        {
+          "name": "target",
+          "type": "integer",
+          "label": "Search for",
+          "unit": null,
+          "minimum": -999,
+          "maximum": 999,
+          "step": null,
+          "default": 9
+        },
+        {
+          "name": "ascending",
+          "type": "boolean",
+          "label": "List is in ascending order",
+          "unit": null,
+          "minimum": null,
+          "maximum": null,
+          "step": null,
+          "default": true
+        }
+      ]
+    },
+    {
       "id": "computing.sorting-visualiser",
       "version": "1.0.0",
       "lifecycle": "ACTIVE",
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.c7362092141e.html",
-        "browser": "./browser.7875f650fdd8.js",
-        "grader": "./grader.8afc6953d67a.js",
+        "page": "./sim.5d006c995280.html",
+        "browser": "./browser.fe1347af4a14.js",
+        "grader": "./grader.bf42d23264a6.js",
         "style": "./style.49f248bb988a.css"
       },
       "bytes": {
@@ -438,9 +708,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.9a84882c7876.html",
-        "browser": "./browser.bbe3fcb765b5.js",
-        "grader": "./grader.b3a0e8f82401.js",
+        "page": "./sim.c5dda46f7c59.html",
+        "browser": "./browser.74a3065c6406.js",
+        "grader": "./grader.80846b8b49cb.js",
         "style": "./style.96ca3d2aa506.css"
       },
       "bytes": {
@@ -480,9 +750,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.0c4f58047868.html",
-        "browser": "./browser.7d0d5e9399cc.js",
-        "grader": "./grader.7a244136b85e.js",
+        "page": "./sim.87fd520605ae.html",
+        "browser": "./browser.c7f942452c90.js",
+        "grader": "./grader.8ce37c83636e.js",
         "style": "./style.42054a81bf3c.css"
       },
       "bytes": {
@@ -522,9 +792,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.d5d0b70e0053.html",
-        "browser": "./browser.69ff3ccf749b.js",
-        "grader": "./grader.10407d9d2840.js",
+        "page": "./sim.4a4d02b380d5.html",
+        "browser": "./browser.fba9bc5c517d.js",
+        "grader": "./grader.924335e62418.js",
         "style": "./style.13aa5dcedc33.css"
       },
       "bytes": {
@@ -578,15 +848,47 @@
       ]
     },
     {
+      "id": "maths.integral-area",
+      "version": "1.0.0",
+      "lifecycle": "ACTIVE",
+      "replacedById": null,
+      "licence": "CC-BY-4.0",
+      "bundle": {
+        "page": "./sim.a522578d708e.html",
+        "browser": "./browser.fcab6c2da630.js",
+        "grader": "./grader.f9481064bded.js",
+        "style": "./style.1323d2b179f7.css"
+      },
+      "bytes": {
+        "browser": 13388,
+        "grader": 8600,
+        "total": 24227
+      },
+      "defaultHeight": 620,
+      "minHeight": 360,
+      "parameters": [
+        {
+          "name": "rectangles",
+          "type": "integer",
+          "label": "Rectangles",
+          "unit": "",
+          "minimum": 2,
+          "maximum": 64,
+          "step": null,
+          "default": 8
+        }
+      ]
+    },
+    {
       "id": "maths.linear-functions",
       "version": "1.0.0",
       "lifecycle": "ACTIVE",
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.a882b90a165d.html",
-        "browser": "./browser.f5973f30f9e5.js",
-        "grader": "./grader.7a4964141a0a.js",
+        "page": "./sim.52e3d47eb83d.html",
+        "browser": "./browser.b0f17dca9501.js",
+        "grader": "./grader.13bfbd83bde2.js",
         "style": "./style.296173ec044e.css"
       },
       "bytes": {
@@ -646,9 +948,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.69563ee6ddef.html",
-        "browser": "./browser.034c2269fe1e.js",
-        "grader": "./grader.d83246c56898.js",
+        "page": "./sim.a7e019b05353.html",
+        "browser": "./browser.e79f917148fe.js",
+        "grader": "./grader.6abd90894387.js",
         "style": "./style.b77ad90f4026.css"
       },
       "bytes": {
@@ -708,9 +1010,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.fd8decdedddc.html",
-        "browser": "./browser.9a0c48732aaf.js",
-        "grader": "./grader.927e8850038a.js",
+        "page": "./sim.acc1ce8d2a31.html",
+        "browser": "./browser.3ddfa9f7b6c7.js",
+        "grader": "./grader.aea503dd6cc8.js",
         "style": "./style.13aa5dcedc33.css"
       },
       "bytes": {
@@ -760,9 +1062,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.ced495d34aaf.html",
-        "browser": "./browser.d5eea4298fb8.js",
-        "grader": "./grader.6e55afb69513.js",
+        "page": "./sim.588a36413077.html",
+        "browser": "./browser.e44eee40dd4b.js",
+        "grader": "./grader.47ffa8b68e13.js",
         "style": "./style.dec5ddce6f96.css"
       },
       "bytes": {
@@ -812,9 +1114,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.11aa8b24da27.html",
-        "browser": "./browser.7537c2a89fdf.js",
-        "grader": "./grader.63a28aa31366.js",
+        "page": "./sim.ef51213ee4dd.html",
+        "browser": "./browser.41b0adba2fe6.js",
+        "grader": "./grader.fc006cd16a56.js",
         "style": "./style.ee228b1a9329.css"
       },
       "bytes": {
@@ -874,9 +1176,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.533905220cbd.html",
-        "browser": "./browser.a9162504a875.js",
-        "grader": "./grader.182d19323218.js",
+        "page": "./sim.3fc8150a1ac0.html",
+        "browser": "./browser.118dea3ce5d5.js",
+        "grader": "./grader.d1fc28d5f952.js",
         "style": "./style.62c29a1b922b.css"
       },
       "bytes": {
@@ -926,9 +1228,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.a34250823bba.html",
-        "browser": "./browser.1295c9509a02.js",
-        "grader": "./grader.df70cce0b821.js",
+        "page": "./sim.b26d32112b6f.html",
+        "browser": "./browser.e524ba7a0e71.js",
+        "grader": "./grader.13edc77ad94e.js",
         "style": "./style.50e3936ad9ed.css"
       },
       "bytes": {
@@ -958,9 +1260,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.28bef8a79dff.html",
-        "browser": "./browser.cfe9be8daba1.js",
-        "grader": "./grader.42412aa4bd8b.js",
+        "page": "./sim.5f6d7e7b34b3.html",
+        "browser": "./browser.0cea6cc7f647.js",
+        "grader": "./grader.98efe6154e7d.js",
         "style": "./style.75a5f5513d82.css"
       },
       "bytes": {
@@ -1000,9 +1302,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.4a5e073539ac.html",
-        "browser": "./browser.03ac1b26265b.js",
-        "grader": "./grader.324ae7aa4f0b.js",
+        "page": "./sim.b9ab9d91e591.html",
+        "browser": "./browser.e50a2a10eca3.js",
+        "grader": "./grader.bd0a18a0de22.js",
         "style": "./style.ab847adcb43f.css"
       },
       "bytes": {
@@ -1042,9 +1344,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.d18047db52a1.html",
-        "browser": "./browser.f18955f24821.js",
-        "grader": "./grader.70daaa351eac.js",
+        "page": "./sim.2491fb5d7cac.html",
+        "browser": "./browser.4158d3bb85fa.js",
+        "grader": "./grader.d6be72fe5639.js",
         "style": "./style.676c2ce82855.css"
       },
       "bytes": {
@@ -1114,9 +1416,9 @@
       "replacedById": null,
       "licence": "CC-BY-4.0",
       "bundle": {
-        "page": "./sim.4968bf531832.html",
-        "browser": "./browser.a4885c0cde80.js",
-        "grader": "./grader.73720359adf4.js",
+        "page": "./sim.f4db3c687af0.html",
+        "browser": "./browser.a4ba8b5357b5.js",
+        "grader": "./grader.47da2d95fc05.js",
         "style": "./style.13aa5dcedc33.css"
       },
       "bytes": {

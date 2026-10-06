@@ -1,0 +1,119 @@
+{
+  "id": "computing.search-algorithms",
+  "version": "1.0.0",
+  "title": "Searching: linear and binary",
+  "summary": "Run a linear or a binary search over a list and count the comparisons it makes.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["computing"],
+  "tags": ["algorithms", "complexity"],
+  "ageRange": [13, 16],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A row of numbered boxes with the comparisons the search made marked on them, a table of the same marks, and four boxes for the comparison count, whether the target was found, its position and the worst case.",
+    "reducedMotion": true,
+    "textAlternative": "A list of 16 numbers in ascending order is searched for 9 by binary search, taking the lower of the two middles. It makes 4 comparisons and finds it at position 8. Its worst case on 16 elements is 5 comparisons."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "algorithm": {
+        "type": "enum",
+        "label": "Search",
+        "enumValues": ["binary", "linear"],
+        "default": "binary"
+      },
+      "size": {
+        "type": "integer",
+        "label": "List length",
+        "minimum": 4,
+        "maximum": 64,
+        "default": 16
+      },
+      "target": {
+        "type": "integer",
+        "label": "Search for",
+        "minimum": -999,
+        "maximum": 999,
+        "default": 9
+      },
+      "ascending": {
+        "type": "boolean",
+        "label": "List is in ascending order",
+        "default": true
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": true,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 560,
+    "minHeight": 320,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "algorithm": "binary",
+            "size": 16,
+            "target": 9,
+            "ascending": true
+          }
+        }
+      }
+    ],
+    "type": {
+      "comparisons": "4",
+      "found": "1",
+      "index": "8",
+      "worst-case": "5"
+    },
+    "expect": {
+      "answer": {
+        "comparisons": 4,
+        "found": {
+          "in": [true]
+        },
+        "index": 8,
+        "worstCase": 5
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "NUMERIC",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0,
+      "relative": 0
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You said {answer.comparisons} comparisons; the trace makes {expected.comparisons}."
+  }
+}

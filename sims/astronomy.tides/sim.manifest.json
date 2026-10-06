@@ -1,0 +1,125 @@
+{
+  "id": "astronomy.tides",
+  "version": "1.0.0",
+  "title": "Tides",
+  "summary": "Change the basin and the lunar phase, and read the tidal range, the period and the resonance.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["astronomy"],
+  "tags": ["tides", "oscillation"],
+  "ageRange": [13, 16],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A tide curve plotting water height against time for a basin, a table of the high and low waters with their times, and four boxes for the range, the period, whether the basin is resonant and the amplification.",
+    "reducedMotion": true,
+    "textAlternative": "A tide curve for 168 hours from a basin whose natural period is 12.42 hours. The range over that window is 72.41 metres, the semidiurnal period is 12.4206 hours, the basin amplifies by 30 and it is near resonance."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "natural": {
+        "type": "number",
+        "label": "Basin natural period",
+        "unit": "h",
+        "minimum": 1,
+        "maximum": 30,
+        "default": 12.4206012
+      },
+      "hours": {
+        "type": "number",
+        "label": "Hours to plot",
+        "unit": "h",
+        "minimum": 1,
+        "maximum": 720,
+        "default": 168
+      },
+      "phase": {
+        "type": "number",
+        "label": "Lunar phase, day of cycle",
+        "unit": "d",
+        "minimum": 0,
+        "maximum": 29.53,
+        "default": 0
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 560,
+    "minHeight": 320,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "natural": 12.4206012,
+            "hours": 168,
+            "phase": 0
+          }
+        }
+      }
+    ],
+    "type": {
+      "range": "72.41",
+      "period": "12.4206",
+      "amplification": "30",
+      "resonant": "yes"
+    },
+    "expect": {
+      "answer": {
+        "range": {
+          "min": 71.4,
+          "max": 73.4
+        },
+        "period": {
+          "min": 11.8,
+          "max": 13.0
+        },
+        "amplification": {
+          "min": 28.5,
+          "max": 31.5
+        },
+        "resonant": {
+          "in": [true]
+        }
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "TOLERANCE",
+    "maxPoints": 4,
+    "tolerance": {
+      "relative": 0.05
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You gave a range of {answer.range} m; the curve gives {expected.range} m over that window."
+  }
+}

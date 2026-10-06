@@ -1,0 +1,73 @@
+/*
+ * Two colours, both AA on white, because a sim a student cannot read does not exist for them.
+ *
+ * HIGH WATER IS THE MARKER COLOUR AND LOW WATER IS THE PATH COLOUR, and the pairing is not decorative: the
+ * whole content of this simulation is which is which, so it is the one thing that must survive both a
+ * monochrome print and a screen reader reading the table.
+ */
+:root {
+  --ground: #1f2933;
+  --path: #2b6cb0;
+  --mark: #9b2c2c;
+}
+#sim-root {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 0.75rem;
+  font-family: system-ui, sans-serif;
+  color: var(--ground);
+  background: #ffffff;
+}
+#sim-canvas {
+  display: block;
+  width: 100%;
+}
+#sim-extremes {
+  border-collapse: collapse;
+  margin: 0.5rem 0 1rem;
+}
+#sim-extremes caption {
+  text-align: left;
+  max-width: 42rem;
+  padding-bottom: 0.25rem;
+}
+#sim-extremes th,
+#sim-extremes td {
+  border: 1px solid var(--ground);
+  padding: 0.22rem 0.5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+#sim-extremes thead th {
+  background: #e8eef5;
+}
+#sim-root label {
+  display: block;
+  font-weight: 600;
+  margin-top: 0.6rem;
+}
+#sim-root input {
+  font: inherit;
+  padding: 0.3rem;
+  width: 14rem;
+}
+#sim-submit {
+  margin-top: 0.75rem;
+  font: inherit;
+  padding: 0.35rem 0.8rem;
+  border: 2px solid var(--mark);
+  background: #ffffff;
+  color: var(--mark);
+  cursor: pointer;
+}
+#sim-root input:focus-visible,
+#sim-submit:focus-visible,
+#sim-extremes:focus-visible {
+  outline: 3px solid var(--path);
+  outline-offset: 2px;
+}
+#sim-status {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

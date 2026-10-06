@@ -1,0 +1,84 @@
+/*
+ * Two colours, both AA on white, because a sim a student cannot read does not exist for them.
+ *
+ * THE SIGN IS CARRIED BY THE COLOUR, NOT ONLY BY THE POSITION: a rectangle drawn from the zero line whose
+ * area is negative is filled with the marker colour, because "below the axis" is the content of this
+ * simulation and a student who cannot see which way a rectangle went has been told nothing.
+ */
+:root {
+  --ground: #1f2933;
+  --path: #2b6cb0;
+  --mark: #9b2c2c;
+}
+#sim-root {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 0.75rem;
+  font-family: system-ui, sans-serif;
+  color: var(--ground);
+  background: #ffffff;
+}
+#sim-canvas {
+  display: block;
+  width: 100%;
+}
+#sim-rectangles {
+  border-collapse: collapse;
+  margin: 0.5rem 0 1rem;
+}
+#sim-rectangles caption {
+  text-align: left;
+  max-width: 42rem;
+  padding-bottom: 0.25rem;
+}
+#sim-rectangles th,
+#sim-rectangles td {
+  border: 1px solid var(--ground);
+  padding: 0.22rem 0.5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+#sim-rectangles thead th {
+  background: #e8eef5;
+}
+#sim-rectangles tfoot th,
+#sim-rectangles tfoot td {
+  background: #f6d7d7;
+  font-weight: 700;
+  color: var(--mark);
+}
+#sim-root label {
+  display: block;
+  font-weight: 600;
+  margin-top: 0.6rem;
+}
+#sim-root input {
+  font: inherit;
+  padding: 0.3rem;
+  width: 12rem;
+}
+#sim-root button {
+  font: inherit;
+  padding: 0.35rem 0.8rem;
+  margin-top: 0.6rem;
+  border: 2px solid var(--path);
+  background: #ffffff;
+  color: var(--ground);
+  cursor: pointer;
+}
+#sim-submit {
+  margin-left: 0.5rem;
+  border-color: var(--mark);
+  color: var(--mark);
+}
+#sim-root button:focus-visible,
+#sim-root input:focus-visible,
+#sim-rectangles:focus-visible {
+  outline: 3px solid var(--path);
+  outline-offset: 2px;
+}
+#sim-status {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}

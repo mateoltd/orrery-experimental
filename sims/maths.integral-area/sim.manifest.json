@@ -1,0 +1,104 @@
+{
+  "id": "maths.integral-area",
+  "version": "1.0.0",
+  "title": "Integral as accumulated area",
+  "summary": "Set the number of rectangles on a curve and read the left sum, the right sum and the signed area.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["maths"],
+  "tags": ["calculus", "integration"],
+  "ageRange": [14, 18],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "The curve y = x squared minus 2 between 0 and 2 with a row of rectangles under it, a table of each rectangle, and three boxes for the left sum, the right sum and the signed area.",
+    "reducedMotion": true,
+    "textAlternative": "The curve y = x squared minus 2 between x = 0 and x = 2, with 8 rectangles of equal width. The left-endpoint sum is -1.81, the right-endpoint sum is -0.81, and the exact signed area is -1.33. Because the curve is below the axis for most of the interval, all three are negative."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "rectangles": {
+        "type": "integer",
+        "label": "Rectangles",
+        "minimum": 2,
+        "maximum": 64,
+        "default": 8,
+        "unit": ""
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 620,
+    "minHeight": 360,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "rectangles": 8
+          }
+        }
+      }
+    ],
+    "type": {
+      "left-sum": "-1.81",
+      "right-sum": "-0.81",
+      "signed-area": "-1.33"
+    },
+    "expect": {
+      "answer": {
+        "leftSum": {
+          "min": -1.815,
+          "max": -1.81
+        },
+        "rightSum": {
+          "min": -0.815,
+          "max": -0.81
+        },
+        "signedArea": {
+          "min": -1.3334,
+          "max": -1.3333
+        }
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "TOLERANCE",
+    "maxPoints": 4,
+    "tolerance": {
+      "absolute": 0.005,
+      "relative": 0.005
+    },
+    "partialCredit": true,
+    "rationaleTemplate": "You gave a left sum of {answer.leftSum} and a signed area of {answer.signedArea}; the rectangles give {expected.leftSum} and {expected.signedArea}."
+  }
+}

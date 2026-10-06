@@ -1,0 +1,81 @@
+/*
+ * Two colours, both AA on white, because a sim a student cannot read does not exist for them.
+ *
+ * THE RATIO IS SET IN A MONOSPACE TABULAR FIGURE, because it is a number a student has to transcribe
+ * into an input three lines away from the table, and a proportional figure makes `1:2:1` and `1:7:1` the
+ * same width.
+ */
+:root {
+  --ground: #1f2933;
+  --rule: #2b6cb0;
+  --mark: #9b2c2c;
+}
+.orrery-sim,
+#sim-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 0.75rem;
+  box-sizing: border-box;
+  font-family: system-ui, sans-serif;
+  color: var(--ground);
+  background: #ffffff;
+}
+#sim-root table {
+  border-collapse: collapse;
+  margin: 0.5rem 0 1rem;
+}
+#sim-root caption {
+  text-align: left;
+  padding: 0.25rem 0;
+  max-width: 40rem;
+}
+#sim-root th,
+#sim-root td {
+  border: 1px solid var(--ground);
+  padding: 0.35rem 0.6rem;
+  text-align: center;
+  min-width: 5.5rem;
+}
+#sim-root thead th,
+#sim-root tbody th {
+  background: #e8eef5;
+}
+#sim-root td {
+  font-variant-numeric: tabular-nums;
+}
+#sim-root label {
+  display: block;
+  margin-top: 0.75rem;
+  font-weight: 600;
+}
+#sim-root input {
+  padding: 0.35rem;
+  font: inherit;
+  min-width: 16rem;
+}
+#sim-root input:focus-visible,
+#sim-root button:focus-visible,
+#sim-root table:focus-visible {
+  outline: 3px solid var(--rule);
+  outline-offset: 2px;
+}
+#sim-offspring-hint {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+}
+#sim-submit {
+  margin-top: 0.75rem;
+  padding: 0.4rem 0.9rem;
+  font: inherit;
+  border: 2px solid var(--mark);
+  background: #ffffff;
+  color: var(--mark);
+  cursor: pointer;
+}
+#sim-status {
+  font-weight: 600;
+}
+#sim-text-alternative {
+  font-variant-numeric: tabular-nums;
+}

@@ -31,6 +31,7 @@ import {
   numeric,
   orderMatch,
   rubric,
+  bagMatch,
   setMatch,
   tolerance,
   withinTolerance,
@@ -217,6 +218,12 @@ describe('grading', () => {
     expect(exact('A', 'a', 1).points).toBe(exact('a', 'A', 1).points);
     expect(setMatch(['a'], ['a'], { maxPoints: 2 }).points).toBe(
       setMatch(['a'], ['a'], { maxPoints: 2 }).points,
+    );
+    // A BAG is symmetric too, and it is worth asserting separately: counting duplicates could have been
+    // implemented asymmetrically without this line noticing, and an asymmetric grade marks the same square
+    // differently depending on which end is the student's.
+    expect(bagMatch(['a', 'a', 'b'], ['a', 'a', 'b'], { maxPoints: 4 }).points).toBe(
+      bagMatch(['a', 'a', 'b'], ['a', 'a', 'b'], { maxPoints: 4 }).points,
     );
   });
 
@@ -916,5 +923,77 @@ describe('a numeric enum sent as a STRING', () => {
     // 'dropped' is not a number, so no coercion is possible; and a numeric-looking value that is not in
     // the list is refused rather than coerced to something adjacent.
     expect(clampParams(textual, { scenario: '0' }).values.scenario).toBe('dropped');
+  });
+});
+
+/**
+ * `bagMatch` — the primitive that was MISSING rather than wrong.
+ *
+ * Found by planting a wrong answer in `biology.genetics-punnett` and watching it score full marks. `setMatch` was doing
+ * exactly what it documents; the document was wrong to name a Punnett square as its use case, because a cross's answer is
+ * a COUNT and a set discards counts.
+ */
+describe('bagMatch — a multiset, so the COUNT is the answer', () => {
+  const four = ['AA', 'Aa', 'Aa', 'aa'];
+
+  const spec = { maxPoints: 4, caseSensitive: true } as const;
+
+  it('CATCHES the answer `setMatch` cannot: three entries for a four-cell cross', () => {
+    // Under `setMatch` this is `CORRECT` with full marks, because both sides collapse to {AA, Aa, aa}.
+    expect(setMatch(['AA', 'Aa', 'aa'], four, spec).points).toBe(4);
+    expect(bagMatch(['AA', 'Aa', 'aa'], four, spec).points).toBeLessThan(4);
+  });
+
+  it('and `setMatch` really does award that mark, because the difference is not theoretical', () => {
+    // Asserted rather than assumed: if a future change to `setMatch` fixed this, the claim in the header would
+    // become false and `bagMatch` would look redundant. Both statements are the finding.
+    expect(setMatch(['AA', 'Aa', 'aa'], four, spec).correct).toBe(true);
+  });
+
+  it('awards full marks for the right multiset in ANY order, because order is not the question', () => {
+    expect(bagMatch(['aa', 'Aa', 'AA', 'Aa'], four, spec).points).toBe(4);
+  });
+
+  it('cannot be inflated by repeating an entry: the denominator moves, the numerator does not', () => {
+    const spec = { maxPoints: 4, caseSensitive: true } as const;
+    expect(bagMatch(['AA', 'Aa', 'aa', 'aa'], four, spec).points).toBeLessThan(4);
+    expect(bagMatch([...four, ...four], four, spec).points).toBeLessThan(4);
+  });
+
+  it('⚠️ WITHOUT `caseSensitive` A GENOTYPE BAG IS MEANINGLESS, and this is the trap', () => {
+    // Folding lowercases `AA`, `Aa` and `aa` to the SAME token, so a four-cell cross collapses to `aa` four
+    // times and any answer of four lowercase genotypes matches. This is the documented reason
+    // `caseSensitive` exists, and it cost me a failing test to meet again -- which is why it is pinned
+    // here as a fact about the default rather than left as prose.
+    expect(bagMatch(['aa', 'aa', 'aa', 'aa'], four, { maxPoints: 4 }).points).toBe(4);
+    expect(bagMatch(['AA', 'Aa', 'aa', 'aa'], four, { maxPoints: 4 }).points).toBe(4);
+  });
+
+  it('honours `caseSensitive`, which is what makes `Aa` and `aa` different answers', () => {
+    expect(bagMatch(['AA', 'Aa', 'aa', 'AA'], four, spec).points).toBeLessThan(4);
+  });
+
+  it('credits ONE of two identical entries, which a set cannot express', () => {
+    const grade = bagMatch(['AA', 'Aa', 'aa', 'AA'], four, {
+      maxPoints: 4,
+      partialCredit: true,
+      caseSensitive: true,
+    });
+    expect(grade.points).toBeGreaterThan(0);
+    expect(grade.points).toBeLessThan(4);
+  });
+
+  it('reports the multiset shortfalls in its FEEDBACK, so the correction is actionable', () => {
+    // The field is `feedback`, not `reason` -- which is what the SDK's `Grade` actually declares and what a
+    // student's feedback panel reads. Naming it `reason` here is the error a reader makes from the function name.
+    const grade = bagMatch(['AA', 'Aa', 'aa'], four, { maxPoints: 4, caseSensitive: true });
+    expect(grade.strategy).toBe('BAG');
+    expect(grade.feedback).toMatch(/counting duplicates/u);
+  });
+
+  it('credits nothing against an empty expected bag, and says why', () => {
+    const grade = bagMatch(['AA'], [], { maxPoints: 4 });
+    expect(grade.points).toBe(0);
+    expect(grade.feedback).toMatch(/expected bag is empty/u);
   });
 });

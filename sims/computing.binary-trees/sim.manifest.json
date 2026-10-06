@@ -1,0 +1,101 @@
+{
+  "id": "computing.binary-trees",
+  "version": "1.0.0",
+  "title": "Binary search trees",
+  "summary": "Insert values into a binary search tree and name its in-order, pre-order and post-order traversals.",
+  "authors": [],
+  "licence": "CC-BY-4.0",
+  "provenance": "ORIGINAL",
+  "protocol": 1,
+  "subjects": ["computing"],
+  "tags": ["trees", "recursion"],
+  "ageRange": [13, 16],
+  "accessibility": {
+    "keyboard": true,
+    "screenReaderSummary": "A binary search tree drawn as nested lists, a table of every node with its parent and side, and three boxes for the in-order, pre-order and post-order traversals.",
+    "reducedMotion": true,
+    "textAlternative": "A binary search tree built by inserting 50, 25, 75, 12, 37, 62 and 87 in that order, with no rebalancing. In order it reads 12, 25, 37, 50, 62, 75, 87. It is 2 edges tall and balanced."
+  },
+  "entry": "./browser.js",
+  "grader": "./grader.js",
+  "styles": "./style.css",
+  "budget": {
+    "maxBytes": 350000
+  },
+  "params": {
+    "type": "object",
+    "properties": {
+      "insertOrder": {
+        "type": "string",
+        "label": "Insertion order",
+        "default": "50,25,75,12,37,62,87",
+        "description": "The values in the order they were inserted, comma separated."
+      }
+    },
+    "required": []
+  },
+  "capabilities": {
+    "state": true,
+    "grading": true,
+    "randomised": false,
+    "audio": false,
+    "webgl": false,
+    "stepper": false,
+    "scenarios": []
+  },
+  "stateSchema": {
+    "type": "object"
+  },
+  "answerSchema": {
+    "type": "object"
+  },
+  "lifecycle": {
+    "autoPlay": false,
+    "defaultHeight": 620,
+    "minHeight": 360,
+    "aspectRatio": "16/10"
+  },
+  "conformance": {
+    "script": [
+      {
+        "command": "setParams",
+        "args": {
+          "params": {
+            "insertOrder": "50,25,75,12,37,62,87"
+          }
+        }
+      }
+    ],
+    "type": {
+      "in-order": "12,25,37,50,62,75,87",
+      "pre-order": "50,25,12,37,75,62,87",
+      "post-order": "12,37,25,62,87,75,50",
+      "height": "2",
+      "balanced": "yes"
+    },
+    "expect": {
+      "answer": {
+        "in-order": {
+          "sequence": ["12", "25", "37", "50", "62", "75", "87"]
+        },
+        "pre-order": {
+          "sequence": ["50", "25", "12", "37", "75", "62", "87"]
+        },
+        "post-order": {
+          "sequence": ["12", "37", "25", "62", "87", "75", "50"]
+        },
+        "height": 2,
+        "balanced": {
+          "in": [true]
+        }
+      },
+      "grade": 4
+    }
+  },
+  "grading": {
+    "strategy": "ORDER",
+    "maxPoints": 4,
+    "partialCredit": true,
+    "rationaleTemplate": "You gave in-order {answer.in-order}; the tree reads {expected.in-order}."
+  }
+}
