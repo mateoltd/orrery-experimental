@@ -33,7 +33,10 @@ export default defineConfig({
     // Absolute, because vitest resolves `include` against the process CWD rather than this file's
     // directory, so a relative glob silently matches nothing when the runner is invoked from the repo
     // root — and "No test files found" looks like an empty suite rather than a wrong path.
-    include: [join(here, '*/test/**/*.test.ts')],
+    // The SECOND pattern is the catalogue-wide sweep. It lives at `sims/test/`, not inside any one
+    // simulation, because it is a test ABOUT the catalogue: it has to enumerate the simulations itself,
+    // and a test inside `sims/<id>/test/` could only ever see one of them.
+    include: [join(here, '*/test/**/*.test.ts'), join(here, 'test/**/*.test.ts')],
     // `_template` and `_fixtures` are SCAFFOLDING, not simulations. The template's grader test is
     // placeholder text that cannot pass, and a permanently red test in the suite is a test people learn
     // to ignore -- which is how the real ones stop being read too.

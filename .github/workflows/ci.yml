@@ -345,6 +345,17 @@ jobs:
         run: pnpm build
       - name: build every simulation and write the registry
         run: pnpm run sim:build
+      - name: simulation unit tests, the load sweep, and the misconception cases
+        # `test:sims` WAS MISSING ENTIRELY, so all 30 simulations' tests ran NOWHERE in CI -- locally they were 505 and
+        # everywhere else they were nothing. That made `P12-T7`'s own words, "any regression blocks merge", FALSE: a
+        # regression in a simulation did not block merge, because the suite that would have caught it was never invoked.
+        #
+        # This is the THIRD instance of one defect in this file. The `telemetry` comment in the matrix above records the
+        # second ("a package tested locally and never in CI is one nobody is told about"), and `P13-T7`'s i18n step called a
+        # script that did not exist. **The file documents the hazard and had still fallen into it three times**, so the
+        # reason is recorded here as well: this job grew by adding one step per finding, and nothing ever asked which
+        # suites the repository HAS.
+        run: pnpm run test:sims
       - name: the registry ARTEFACT gate
         # Asserts the artefact EXISTS; that its entry set equals the manifest set IN BOTH DIRECTIONS,
         # which is what "no user code reaches the sandbox" means mechanically; that every bundle path
