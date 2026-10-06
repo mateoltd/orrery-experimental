@@ -27,11 +27,11 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { defineSim, gradeStoredState } from './define.js';
 import {
+  bagMatch,
   exact,
   numeric,
   orderMatch,
   rubric,
-  bagMatch,
   setMatch,
   tolerance,
   withinTolerance,

@@ -94,10 +94,14 @@ const kindOf = (file) => {
   return 'route';
 };
 
-const audit = existsSync(auditPath) ? JSON.parse(readFileSync(auditPath, 'utf8')) : { routes: [], exempt: [] };
+const audit = existsSync(auditPath)
+  ? JSON.parse(readFileSync(auditPath, 'utf8'))
+  : { routes: [], exempt: [] };
 /** Keyed by `path#kind`, because a page and a route can share a path and need separate decisions. */
 const key = (path, kind) => `${path}#${kind}`;
-const listed = new Map(audit.routes.map((entry) => [key(entry.path, entry.kind ?? 'route'), entry]));
+const listed = new Map(
+  audit.routes.map((entry) => [key(entry.path, entry.kind ?? 'route'), entry]),
+);
 
 /**
  * Infrastructure exemptions, EXACT PATHS ONLY, declared in the audit file.
@@ -117,6 +121,27 @@ const listed = new Map(audit.routes.map((entry) => [key(entry.path, entry.kind ?
  */
 const exemptEntries = audit.exempt ?? [];
 const exempt = new Set(exemptEntries.map((entry) => entry.path));
+const serving = walk(appDir).map((file) => ({
+  path: routePathFor(file),
+  kind: kindOf(file),
+  file,
+}));
+const actual = serving.map((entry) => key(entry.path, entry.kind)).sort();
+const infrastructure = serving
+  .filter((entry) => exempt.has(entry.path))
+  .map((entry) => key(entry.path, entry.kind));
+
+const problems = [];
+
+/**
+ * EVERY EXEMPTION MUST STATE WHY.
+ *
+ * Placed here rather than beside the `exempt` Set because the first version sat ABOVE `problems`'s declaration, in
+ * its temporal dead zone. **It worked, because every exemption in the file had a reason, so the `push` never ran** --
+ * and removing one reason would have thrown `ReferenceError` instead of reporting the finding. A check that has
+ * never executed is not evidence that it works, and this is the third time this session that something looked
+ * green only because the branch was cold.
+ */
 for (const entry of exemptEntries) {
   if (typeof entry?.reason === 'string' && entry.reason.length > 0) continue;
   problems.push(
@@ -125,12 +150,6 @@ for (const entry of exemptEntries) {
       `  reader will find it without reading this script.`,
   );
 }
-
-const serving = walk(appDir).map((file) => ({ path: routePathFor(file), kind: kindOf(file), file }));
-const actual = serving.map((entry) => key(entry.path, entry.kind)).sort();
-const infrastructure = serving.filter((entry) => exempt.has(entry.path)).map((entry) => key(entry.path, entry.kind));
-
-const problems = [];
 
 /**
  * A ROUTE THAT SERVES STUDENTS MUST BE DECLARED.
@@ -231,7 +250,9 @@ for (const [declared, entry] of listed) {
 console.log('STUDENT ROUTE LEAK AUDIT (INV-RELEASE-2, mechanism b)');
 console.log(`  routes found:     ${String(actual.length)}`);
 console.log(`  listed:           ${String(listed.size)}`);
-console.log(`  infrastructure:   ${String(infrastructure.length)} (exact paths, not a prefix rule)`);
+console.log(
+  `  infrastructure:   ${String(infrastructure.length)} (exact paths, not a prefix rule)`,
+);
 
 if (problems.length === 0) {
   console.log('  ✓ every student-facing route is declared');

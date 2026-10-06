@@ -1,0 +1,37 @@
+{
+  "$comment": "P12-T3. Each case is the answer a student holding ONE NAMED MISCONCEPTION would submit, and the ceiling that answer may earn. Lives outside the simulations' own suites on purpose: a test asserting its own premise cannot report that the premise has stopped being true. Executed by scripts/audit-sim-misconceptions.mjs.",
+  "$why": "biology.genetics-punnett had four wrong-answer tests -- blank answer, case folding, aA-vs-Aa, keyboard noise -- and still awarded CORRECT 4/4 for omitting a heterozygote. Every test covered an axis the author had already thought about. Multiplicity was an axis nobody tested. Grossly wrong answers cannot fail against any grader, so a test suite built from them proves nothing about the near miss, which is where the defect lives.",
+  "cases": [
+    {
+      "id": "biology.genetics-punnett",
+      "misconception": "Counts a monohybrid cross as 1 AA : 1 Aa : 1 aa, i.e. treats the square as if each parent contributed one allele rather than one of each",
+      "answer": {
+        "offspring": ["AA", "Aa", "aa"],
+        "ratio": "1:2:1"
+      },
+      "params": {
+        "parentA": "Aa",
+        "parentB": "Aa"
+      },
+      "state": {},
+      "atMost": 3.5,
+      "why": "The genotype half scores multiset Jaccard 3/4, so 1.5 of its 2 marks; the answer states the RATIO correctly and earns those 2 marks legitimately. 3.5 is the honest ceiling. My first declared ceiling was 2, on the assumption that a wrong genotype scores zero -- which is how a ceiling gets set by guessing instead of by reading the grader."
+    },
+    {
+      "id": "maths.pythagoras",
+      "misconception": "Names the SHORTEST side as the longest",
+      "answer": "a",
+      "params": {
+        "a": 3,
+        "b": 4,
+        "c": 5,
+        "giveLengths": false
+      },
+      "state": {},
+      "atMost": 0,
+      "why": "'a' is the side of length 3, the shortest, so naming it earns nothing: no partial credit on this item. My first case answered 'c', which with sides 3,4,5 IS the longest -- so the case was awarding full marks to a CORRECT answer and would have looked like it caught the misconception."
+    }
+  ],
+  "$bothOfMyFirstCasesWereWrong": "Both of the first two cases I declared were wrong, and the gate caught both, which is the argument for it. (1) I set punnett's ceiling to 2 assuming the genotype half would score 0; it scores 3/4 of 2 by multiset Jaccard, so the honest ceiling is 3.5 -- the answer states the RATIO correctly and earns those 2 marks legitimately. The gate's message says to fix the GRADER, not the ceiling, and having to write the Jaccard arithmetic out to justify 3.5 is exactly the review step this file exists for. (2) I named pythagoras' misconception 'names the SHORTEST side' and then answered 'c' -- which with sides 3,4,5 IS the longest, so the case passed for the wrong reason by awarding full marks to a correct answer. The answer was 'a'. A case that passes because it is mis-specified is WORSE than a gap, because it inflates the coverage number while checking nothing.",
+  "$removedThePlaceholder": "I first declared a case for chemistry.equation-balancing with the answer \"H2O\" and a guessed ceiling of 3. It passed -- almost certainly because that string is UNPARSEABLE for an equation, so it earns 0 and satisfies any ceiling. A case that passes because it cannot be parsed is not a misconception case; it is a way of making the coverage number look better while checking nothing. Removed rather than left to green-wash the number."
+}
