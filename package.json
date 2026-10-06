@@ -56,7 +56,8 @@
     "gate:outbound": "node scripts/audit-outbound.mjs",
     "test:count": "bash scripts/unit-count.sh",
     "sim:misconceptions": "node scripts/audit-sim-misconceptions.mjs",
-    "ops:restore-drill": "node scripts/restore-drill.mjs"
+    "ops:restore-drill": "node scripts/restore-drill.mjs",
+    "ops:index-review": "node scripts/index-review.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
