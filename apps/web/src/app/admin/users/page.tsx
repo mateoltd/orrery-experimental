@@ -1,5 +1,10 @@
-import { Suspense } from 'react';
-import { listUsersForAdmin, suspendUserAction, unsuspendUserAction } from '@/server/admin';
+import {
+  listUsersForAdmin,
+  startImpersonationAction,
+  stopImpersonationAction,
+  suspendUserAction,
+  unsuspendUserAction,
+} from '@/server/admin';
 import { currentUser } from '@/server/auth/session-runtime';
 
 export const dynamic = 'force-dynamic';
@@ -17,6 +22,21 @@ async function suspend(form: FormData): Promise<void> {
   const reason = form.get('reason');
   if (typeof target !== 'string' || typeof reason !== 'string') return;
   await suspendUserAction({ callerUserId: user.userId, targetUserId: target, reason });
+}
+
+async function impersonate(form: FormData): Promise<void> {
+  'use server';
+  const user = await currentUser();
+  if (user === null) return;
+  const target = form.get('target');
+  const reason = form.get('reason');
+  if (typeof target !== 'string' || typeof reason !== 'string') return;
+  await startImpersonationAction({ callerUserId: user.userId, targetUserId: target, reason });
+}
+
+async function stopImpersonating(): Promise<void> {
+  'use server';
+  await stopImpersonationAction();
 }
 
 async function unsuspend(form: FormData): Promise<void> {
@@ -82,6 +102,17 @@ export default async function AdminUsersPage({
                   : `Suspended since ${row.suspendedAt}${row.suspendedReason === null ? '' : ` -- ${row.suspendedReason}`}`}
               </td>
               <td>
+                <form action={impersonate}>
+                  <input type="hidden" name="target" value={row.id} />
+                  <label>
+                    Reason
+                    <input type="text" name="reason" required minLength={3} />
+                  </label>
+                  <button type="submit">Impersonate</button>
+                </form>
+                <form action={stopImpersonating}>
+                  <button type="submit">Stop impersonating</button>
+                </form>
                 {row.suspendedAt === null ? (
                   <form action={suspend}>
                     <input type="hidden" name="target" value={row.id} />
@@ -104,8 +135,4 @@ export default async function AdminUsersPage({
       </table>
     </main>
   );
-}
-
-export function AdminUsersLoading(): React.ReactNode {
-  return <Suspense fallback={<p>Loading user administration…</p>} />;
 }
