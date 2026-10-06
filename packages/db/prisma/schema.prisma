@@ -133,6 +133,7 @@ model User {
   commentsModerated     Comment[]                    @relation("CommentModerator")
   flagsReported         Flag[]                       @relation("FlagReporter")
   flagsResolved         Flag[]                       @relation("FlagResolver")
+  incidentsReported     ExamIncident[]               @relation("IncidentReporter")
   accommodationsGranted Accommodation[]         @relation("AccommodationGrantor")
   accommodationsHeld    Accommodation[]         @relation("AccommodationStudent")
   accommodationRequests AccommodationRequest[]  @relation("RequestStudent")
@@ -1203,6 +1204,7 @@ model ExamAttempt {
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   responses        QuestionResponse[]
+  incidents        ExamIncident[] @relation("AttemptIncidents")
   sessions         AttemptSession[]
   events           AttemptEventRecord[]
   integrityEvents  IntegrityEvent[]
@@ -2100,4 +2102,45 @@ model ExternalBinding {
   @@unique([kind, externalId, localType, localId])
   @@index([localType, localId])
   @@index([tenantId])
+}
+
+/// An in-exam incident report: a student telling us something is wrong DURING the exam.  (P17-T5)
+///
+/// This is the channel `P17-T4`'s "every defect triaged to fixed" arrives through -- without it, pilot
+/// defects arrive as hallway complaints, which is to say they do not arrive. Categories are exam-shaped,
+/// NOT the moderation `FlagReason`: a broken question and an offensive comment triage differently, and
+/// sharing the enum would entangle two queues with different SLAs.
+///
+/// `detail` is required when `reason` is OTHER and optional otherwise, for the same reason as flags: a
+/// queue cannot act on "other". Reports are NEVER deduplicated: two identical reports from one student
+/// may be a double-submit, or may be two sightings of an intermittent failure -- and dropping the second
+/// is how an intermittent sim failure reads as a single confused student.
+model ExamIncident {
+  id          String   @id @default(uuid(7))
+  attemptId   String
+  attempt     ExamAttempt @relation("AttemptIncidents", fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId  String?
+  reporterId  String
+  reporter    User     @relation("IncidentReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reason      ExamIncidentReason
+  detail      String?
+  status      ExamIncidentStatus @default(OPEN)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([attemptId, createdAt])
+  @@index([status, createdAt])
+}
+
+enum ExamIncidentReason {
+  BROKEN_QUESTION
+  SIM_WONT_LOAD
+  TYPO
+  TIMING
+  OTHER
+}
+
+enum ExamIncidentStatus {
+  OPEN
+  TRIAGED
+  RESOLVED
 }

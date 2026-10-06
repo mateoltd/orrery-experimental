@@ -203,7 +203,10 @@ export function ExamRunner(props: ExamRunnerProps): React.ReactElement {
     <div data-testid="exam-runner" data-save-state={saveState}>
       <ol>
         {props.questions.map((question) => (
-          <li key={question.questionId}>{renderRunnerQuestion(question, state, answer)}</li>
+          <li key={question.questionId}>
+            {renderRunnerQuestion(question, state, answer)}
+            <ReportProblem attemptId={props.attemptId} questionId={question.questionId} />
+          </li>
         ))}
       </ol>
       <nav aria-label="Questions">
@@ -214,6 +217,66 @@ export function ExamRunner(props: ExamRunnerProps): React.ReactElement {
         ))}
       </nav>
     </div>
+  );
+}
+
+function ReportProblem(props: {
+  readonly attemptId: string;
+  readonly questionId: string;
+}): React.ReactElement {
+  const [sent, setSent] = useState(false);
+  const [failed, setFailed] = useState(false);
+  return (
+    <details>
+      <summary>Report a problem with this question</summary>
+      {sent ? (
+        <p role="status">Thanks -- your report was recorded and will be triaged.</p>
+      ) : (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            const form = new FormData(event.currentTarget);
+            const reason = String(form.get('reason') ?? '');
+            const detail = String(form.get('detail') ?? '');
+            fetch('/api/exam/incidents', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                attemptId: props.attemptId,
+                questionId: props.questionId,
+                reason,
+                detail,
+              }),
+            })
+              .then((response) => {
+                if (response.ok) setSent(true);
+                else setFailed(true);
+              })
+              .catch(() => setFailed(true));
+          }}
+        >
+          <label>
+            What is wrong?
+            <select name="reason" required defaultValue="">
+              <option value="" disabled>
+                Choose one
+              </option>
+              <option value="BROKEN_QUESTION">The question itself is broken</option>
+              <option value="SIM_WONT_LOAD">The simulation will not load</option>
+              <option value="TYPO">Typo or unclear wording</option>
+              <option value="TIMING">Timing or deadline problem</option>
+              <option value="OTHER">Something else</option>
+            </select>
+          </label>
+          <label>
+            Details
+            <textarea name="detail" rows={3} />
+          </label>
+          {failed ? <p role="alert">Could not send the report. Try again.</p> : null}
+          <button type="submit">Send report</button>
+        </form>
+      )}
+    </details>
   );
 }
 

@@ -201,6 +201,10 @@
     "./admin": {
       "types": "./dist/admin.d.ts",
       "default": "./dist/admin.js"
+    },
+    "./exam-incidents": {
+      "types": "./dist/exam-incidents.d.ts",
+      "default": "./dist/exam-incidents.js"
     }
   },
   "scripts": {

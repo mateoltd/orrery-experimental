@@ -102,6 +102,12 @@
       "kind": "page",
       "scoreFree": true,
       "reason": "PLATFORM-ADMIN user list: email, name, suspension state and reason. Declared rather than exempt because it takes an identifier (the search query) and renders per-user rows -- the shape most likely to gain a score column later. Renders no grade data today; the score-key scan and the call-graph walk (server/admin.ts -> db/admin.ts, both score-free) are what establish that, not this sentence. Non-admins receive the same empty list as an empty search, so the page is not an admin-existence oracle."
+    },
+    {
+      "path": "/api/exam/incidents",
+      "kind": "route",
+      "scoreFree": true,
+      "reason": "Accepts an incident report (attemptId, optional questionId, reason, detail) and returns { ok, id }. Own-attempt only, enforced in the service the same way submitAnswer enforces it. Carries no grade data in either direction: the request has no answer field by construction, and the response is an incident id, not a mark -- so INV-RELEASE-2 does not apply. Declared rather than exempt because a reporting endpoint that later grew a 'resolution' field could start carrying grades."
     }
   ]
 }
