@@ -3721,15 +3721,15 @@ rather than restated.** |
 
 | Task | Description | Status | Commit | Evidence |
 |---|---|---|---|---|
-| P16-T1 | `interop` package skeleton, `ExternalBinding` model, codec registry | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
-| P16-T2 | QTI 2.2 export: items, tests, partial-credit response processing, export manifest | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
-| P16-T3 | QTI 3.0 export superset | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
-| P16-T4 | QTI import with a mapping report; round-trip golden tests | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
-| P16-T5 | xAPI statement emission, queued, batched, idempotent, dead-lettered | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
-| P16-T6 | LTI 1.3: OIDC login, tool launch, Deep Linking | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
-| P16-T7 | LTI AGS grade passback with the release rule enforced and tested | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
-| P16-T8 | OneRoster 1.2 roster sync with dry run and diff | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
-| P16-T9 | Documentation: the supported subset, the honest gaps, and import/export guides | NOT STARTED | -- | deps and size from `plans/20-PHASE-PACKETS.md`; confirmed NOT BUILT by reading this file and `git log`, not assumed (PF-1). |
+| P16-T1 | `interop` package skeleton, `ExternalBinding` model, codec registry | **DONE -- ROW WAS STALE, NOT THE WORK** | -- | **Provenance (PF-6): verified directly.** All three parts exist: `packages/interop/` with boundary/codec/digest/csp plus `MappingReport` and `assertExportIsAuditable` (68/68 tests green today), `ExternalBinding` as `schema.prisma:2058`, and `P10-T10`'s outbound chokepoint already gated. The row said NOT STARTED while the work sat green -- **the exact stale-row disease the commit-status gate was built to catch, except the gate only fires on commits that NAME a task.** ||
+| P16-T2 | QTI 2.2 export: items, tests, partial-credit response processing, export manifest | **NOT STARTED -- BUILDABLE NOW** | -- | Pure file-format work: no external system needed. Queued with T3-T5 as the buildable half of P16. ||
+| P16-T3 | QTI 3.0 export superset | **NOT STARTED -- BUILDABLE NOW** | -- | Same as T2: no external dependency. ||
+| P16-T4 | QTI import with a mapping report; round-trip golden tests | **NOT STARTED -- BUILDABLE NOW** | -- | File-format work; the `MappingReport` type it must fill already exists from T1. ||
+| P16-T5 | xAPI statement emission, queued, batched, idempotent, dead-lettered | **NOT STARTED -- HALF BUILDABLE** | -- | Queue/batch/idempotent/dead-letter emission is buildable locally with the same patterns as the email outbox; DELIVERY needs an LRS endpoint that does not exist. ||
+| P16-T6 | LTI 1.3: OIDC login, tool launch, Deep Linking | **BLOCKED -- NO LMS PLATFORM** | -- | `D-36` names "a real LMS platform for LTI" as Day-0 provisioning and it is not done. An OIDC login flow cannot be built or tested against nothing. ||
+| P16-T7 | LTI AGS grade passback with the release rule enforced and tested | **BLOCKED -- NO LMS PLATFORM** | -- | Same as T6, plus the release-gate half IS already enforced at the outbound chokepoint (`P10-T10`): the missing part is the AGS transport, not the rule. ||
+| P16-T8 | OneRoster 1.2 roster sync with dry run and diff | **BLOCKED -- NO DISTRICT SIS** | -- | Needs a counterpart system; the `ONEROSTER_CLASS`/`ONEROSTER_USER` kinds are declared in the codec registry so the shape is reserved. ||
+| P16-T9 | Documentation: the supported subset, the honest gaps, and import/export guides | **NOT STARTED -- AFTER T2-T5** | -- | Documents whatever T2-T5 actually ship; writing it now would document intentions. ||
 
 #### P17 Pilot & GA · 7 tasks · M10
 
