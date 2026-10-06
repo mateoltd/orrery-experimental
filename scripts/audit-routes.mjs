@@ -23,7 +23,7 @@
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -93,6 +93,101 @@ const kindOf = (file) => {
   if (/(^|\/)page\.tsx?$/.test(file)) return 'page';
   return 'route';
 };
+
+/**
+ * THE CALL GRAPH, FOLLOWED TRANSITIVELY.  (P10-T8 remainder)
+ *
+ * ## WHAT WAS MISSING, AND IT IS THE HOLE THE TASK ITSELF NAMED
+ *
+ * The score-key check read each surface's own source. **A surface that DELEGATES shows nothing.** The declared
+ * score-free `/classrooms/[classroomId]/roster` page mentions no score key at all -- it imports `rosterPageData`
+ * from `@/server/roster` and renders whatever that returns. So the check on it was not evidence; it was the absence
+ * of a string in a file that never had one in the first place.
+ *
+ * **THE SEALED-DTO ARGUMENT IS GOOD, AND IT IS NOT SOMETHING A STRING SEARCH CAN MAKE.** Mechanism (a) of
+ * INV-RELEASE-2 -- the sealed arm having no score field to omit -- is a type-level property of a function this
+ * audit does not call. So the honest move is not to fake the type check. It is to **at least prove that a
+ * surface declared score-free reaches only code that is itself free of score keys**, and to make a delegation into
+ * territory that is not a finding rather than a silence.
+ *
+ * ## WHAT IT IS NOT
+ *
+ * This is not a bundler and not a type checker. It resolves relative and `@/`-aliased imports -- what the app's
+ * own files use for anything local -- and STOPS at `@orrery/*` package specifiers, because those are real
+ * packages with their own gates and pretending to follow them would be a claim this script cannot support. Every
+ * hop count is printed per surface, so a reader can see how deep the walk went and what it declined to follow.
+ *
+ * Comments and template literals are stripped before the search, because a score key named in a comment is not a
+ * score key in a payload -- the same prose-versus-code trap this session has walked into repeatedly.
+ */
+
+/** Import specifiers this walk will follow: relative paths and the app's own `@/` alias. */
+const FOLLOWABLE = /^(?:\.|@\/)/u;
+/** A termination guarantee, not a policy: cyclic import graphs are legal in ES modules. */
+const MAX_HOPS = 24;
+
+// `apps/web/src`, NOT `join(appDir, 'src')` -- that would be `apps/web/src/app/src`, so every `@/` alias
+// resolved to nothing and the walk reported "1 files" for every surface while looking like it had run.
+const webSrc = join(appDir, '..');
+
+const codeOf = (file) =>
+  readFileSync(file, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//gu, '')
+    .replace(/(^|[^:])\/\/[^\n]*/gu, '$1')
+    .replace(/`(?:\\.|[^`\\])*`/gu, '``');
+
+/** Resolves one specifier from one importer, or null when it is not a followable local file. */
+function resolveSpecifier(specifier, importer) {
+  if (!FOLLOWABLE.test(specifier)) return null;
+  const base = specifier.startsWith('@/')
+    ? join(webSrc, specifier.slice(2))
+    : join(dirname(importer), specifier);
+  for (const candidate of [
+    `${base}.ts`,
+    `${base}.tsx`,
+    join(base, 'index.ts'),
+    join(base, 'index.tsx'),
+  ]) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Every local file `entry` can reach, plus the specifiers deliberately not followed.
+ *
+ * Truncation at the hop limit is REPORTED, never silent: a silently truncated walk under-reports reachability,
+ * which is the exact failure this closes.
+ */
+function reach(entry) {
+  const seen = new Set([entry]);
+  const frontier = [entry];
+  const declined = new Set();
+  let hops = 0;
+  let truncated = false;
+
+  while (frontier.length > 0) {
+    const file = frontier.shift();
+    const specifiers = [...codeOf(file).matchAll(/\bfrom\s+['"]([^'"]+)['"]/gu)].map((m) => m[1]);
+    for (const specifier of specifiers) {
+      if (!FOLLOWABLE.test(specifier)) continue;
+      const resolved = resolveSpecifier(specifier, file);
+      if (resolved === null) {
+        declined.add(specifier);
+        continue;
+      }
+      if (seen.has(resolved)) continue;
+      if (hops >= MAX_HOPS) {
+        truncated = true;
+        continue;
+      }
+      seen.add(resolved);
+      hops += 1;
+      frontier.push(resolved);
+    }
+  }
+  return { files: [...seen], declined: [...declined].sort(), truncated };
+}
 
 const audit = existsSync(auditPath)
   ? JSON.parse(readFileSync(auditPath, 'utf8'))
@@ -231,19 +326,42 @@ const SCORE_BEARING = [
   'pointsAwarded',
 ];
 
+/** Per-surface reachability, so the summary can print the depth the walk actually achieved. */
+const reachability = [];
+
 for (const [declared, entry] of listed) {
   if (entry.scoreFree !== true) continue;
   const found = serving.find((candidate) => key(candidate.path, candidate.kind) === declared);
   if (!found) continue;
-  const source = readFileSync(found.file, 'utf8');
-  for (const scoreKey of SCORE_BEARING) {
-    if (source.includes(scoreKey)) {
+
+  const walked = reach(found.file);
+  reachability.push({ declared, ...walked });
+
+  for (const file of walked.files) {
+    const source = codeOf(file);
+    for (const scoreKey of SCORE_BEARING) {
+      if (!source.includes(scoreKey)) continue;
+      const where =
+        file === found.file
+          ? ''
+          : ` via ${relative(root, file)}\n    REACHED TRANSITIVELY, so this is not the surface's own payload.`;
       problems.push(
-        `DECLARED SCORE-FREE BUT MENTIONS A SCORE KEY: ${declared} uses "${scoreKey}"\n` +
-          `  Either it is not score-free, or the name appears in something other than a payload. Fix the\n` +
-          `  declaration or the route; do not silence this.`,
+        `DECLARED SCORE-FREE BUT REACHES A SCORE KEY: ${declared} uses "${scoreKey}"${where}\n` +
+          `  Either it is not score-free, or the name appears in something other than a payload.\n` +
+          `  A surface that DELEGATES shows nothing in its own file, which is why this follows the imports.\n` +
+          `  Fix the declaration or the code; do not silence this.`,
       );
     }
+  }
+
+  if (walked.truncated) {
+    // Never silent. A truncated walk UNDER-reports reachability, which is the failure this check closes, so
+    // saying nothing here would reintroduce it in a new place.
+    problems.push(
+      `THE CALL-GRAPH WALK HIT ITS HOP LIMIT: ${declared}\n` +
+        `  Reached ${String(walked.files.length)} files and stopped at ${String(MAX_HOPS)} hops, so this surface's\n` +
+        `  reachability is UNDER-REPORTED. Raise MAX_HOPS, or accept the gap explicitly here.`,
+    );
   }
 }
 
@@ -253,6 +371,19 @@ console.log(`  listed:           ${String(listed.size)}`);
 console.log(
   `  infrastructure:   ${String(infrastructure.length)} (exact paths, not a prefix rule)`,
 );
+
+if (reachability.length > 0) {
+  console.log(
+    '\n  call graph followed per score-free surface (local imports only; @orrery/* not followed):',
+  );
+  for (const entry of reachability) {
+    console.log(
+      `    ${entry.declared.padEnd(38)} ${String(entry.files.length)} files` +
+        (entry.truncated ? '  ⚠️ TRUNCATED' : '') +
+        (entry.declined.length > 0 ? `  (not followed: ${entry.declined.join(', ')})` : ''),
+    );
+  }
+}
 
 if (problems.length === 0) {
   console.log('  ✓ every student-facing route is declared');
