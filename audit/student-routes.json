@@ -1,25 +1,101 @@
 {
-  "$comment": "The authority for P10-T8's generated audit. Every student-facing route must appear here with an explicit scoreFree decision and a reason. scripts/audit-routes.mjs fails on anything unlisted, and on anything listed that no longer exists.",
+  "$comment": "The authority for P10-T8's generated audit. Every surface that can put bytes in front of a student -- `route.ts`, `page.tsx` AND `layout.tsx` -- must appear here with an explicit scoreFree decision and a reason. `kind` is `route`, `page` or `layout`, because those three collide at one path and a declaration written for one says nothing about the others. `scripts/audit-routes.mjs` fails on anything unlisted, on anything listed that no longer exists, and on anything whose declared `kind` disagrees with the file on disk.",
+  "$whyPagesAreAudited": "The first version of this file listed API routes only. A server component renders grade data into HTML, and `private, no-store` + `Vary: Cookie` are properties of a ROUTE HANDLER's response -- a page inherits none of them unless it sets its own. That blind spot is not hypothetical: it is exactly how `/exam/[attemptId]/page.tsx` shipped as a placeholder paragraph while P8 was reported DONE at 17/17. An audit that only looked at API routes would never have seen it, because there was no leaking route to see. The hole in the audit was the same shape as the hole in the product.",
+  "$whyExemptIsExactPaths": "The exemptions were once a regex, `/^\\/(healthz|readyz|robots\\.txt|sitemap\\.xml|og)(\\/|$)/`, whose trailing `(\\/|$)` made it a PREFIX rule. Any route ever added under `/og/` would have been silently exempt forever: `/og/[slug]` is a PNG generator today, and `/og/api/attempt-scores` would match, return grade JSON, and pass. A widening exemption is worse than no exemption because it converts a future decision into a present pass. These are exact strings, so widening the exemption is a visible edit rather than a new route's accident.",
+  "exempt": [
+    {
+      "path": "/healthz",
+      "reason": "Liveness. Returns process liveness only -- no request identity, no attempt, no grade data, and nothing that varies by caller, so two callers receive byte-identical output."
+    },
+    {
+      "path": "/readyz",
+      "reason": "Readiness, for the orchestrator to gate traffic on. Same reasoning as /healthz: a boolean about this replica's ability to serve, with no per-caller or per-attempt content."
+    },
+    {
+      "path": "/robots.txt",
+      "reason": "A static crawler policy. Contains two lines of text, authored in the repository, and no data is derived from a request at all."
+    },
+    {
+      "path": "/sitemap.xml",
+      "reason": "Lists the MARKETING routes only. Deliberately: an attempt URL in a sitemap would hand a crawler every live attempt id, and the exam page sets `robots: { index: false, follow: false }` for the same reason. If a student-facing URL is ever added here, this exemption must be re-examined first."
+    },
+    {
+      "path": "/og/[slug]",
+      "reason": "Generates a static Open Graph PNG for a marketing slug. It returns `image/png`, not JSON, and it reads no attempt, no user and no grade. Listed as an EXACT path deliberately: under the old regex every future `/og/` route inherited this exemption silently."
+    }
+  ],
   "routes": [
     {
       "path": "/api/exam/answers",
+      "kind": "route",
       "scoreFree": true,
       "reason": "Accepts one answer and returns { attemptId, questionId, revision, isLate }. The revision number is the client's own optimistic-concurrency token and carries no grade information; the response contains no score, no correct/incorrect flag and no model answer, so INV-RELEASE-2 does not apply. The `isLate` flag is timing, not marks, and a student already knows they submitted late. Grade data reaches students only through the release path, which stays gated."
     },
     {
       "path": "/api/auth/sign-in",
+      "kind": "route",
       "scoreFree": true,
       "reason": "Establishes identity and nothing else. Success returns { ok, message, code: 'AUTH_OK' } plus a Set-Cookie for the opaque session token -- no user id, no role, no attempt, no score, no correct/incorrect flag and no model answer, so INV-RELEASE-2 does not apply. It is listed rather than treated as infrastructure because a set-cookie response is the most security-sensitive thing in the app, and a reader should be able to see that it was considered. Every failure is byte-identical to every other failure including a missing password field, a suspended account and a throttled identifier; a non-JSON body is the one distinguishable case, because it contains no address and so discloses nothing about any ACCOUNT. Note the session cookie is the ONLY thing that establishes a caller: there is no header or body identity path, which is what makes requireUser() meaningful."
     },
     {
       "path": "/api/auth/forgot",
+      "kind": "route",
       "scoreFree": true,
       "reason": "Dispatches a password-reset email and returns the same conditional sentence whether or not the address has an account -- 'if that address has an account, a reset link is on its way' -- which discloses nothing either way. Sets no cookie, so a successful dispatch cannot be told from a refusal, and is no-store so a shared cache cannot serve one caller a stale answer. Exactly one account lookup and one outbox write happen in both cases, so the database itself carries no existence signal; only the STATUS differs between the two outbox rows, never a skip. No grade data of any kind."
     },
     {
       "path": "/api/results/[attemptId]",
+      "kind": "route",
       "scoreFree": false,
-      "reason": "THE FIRST STUDENT-FACING ROUTE THAT RETURNS A MARK, and the first test of this audit's own premise. PREDICATE, not conclusion: it returns grade data ONLY when the attempt's OWN ReleaseBatch membership is RELEASED -- loadStudentResults resolves that membership itself, and before it does it returns the SEALED arm, which has NO SCORE FIELD AT ALL, so a handler cannot leak a mark it never receives and cannot be edited into leaking one without the type objecting. The identity is the session and nothing else: studentId is not in the path, not in the query string, not in a header and not read from a body, so a caller cannot ask for somebody else's paper. A development identity (`Caller.kind === 'dev'`) is REFUSED, because the gate is meant to be a verified caller and a discriminant is the only thing that survives being scrolled past. Missing and other-owner attempts share ONE 404, because 403-for-not-yours confirms the row exists and turns this into an existence oracle over every attempt in the school. Unauthenticated callers get 401 before the path is even read, so the anonymous answer does not depend on whether the attempt exists. `force-dynamic` removes Next's own handler cache, because a correct body served from a cache is still a leak; RESULTS_HEADERS adds `private, no-store` and `Vary: Cookie`."
+      "reason": "THE FIRST STUDENT-FACING SURFACE THAT RETURNS A MARK, and the first test of this audit's own premise. PREDICATE, not conclusion: it returns grade data ONLY when the attempt's OWN ReleaseBatch membership is RELEASED -- loadStudentResults resolves that membership itself, and before it does it returns the SEALED arm, which has NO SCORE FIELD AT ALL, so a handler cannot leak a mark it never receives and cannot be edited into leaking one without the type objecting. The identity is the session and nothing else: studentId is not in the path, not in the query string, not in a header and not read from a body, so a caller cannot ask for somebody else's paper. A development identity (`Caller.kind === 'dev'`) is REFUSED, because the gate is meant to be a verified caller and a discriminant is the only thing that survives being scrolled past. Missing and other-owner attempts share ONE 404, because 403-for-not-yours confirms the row exists and turns this into an existence oracle over every attempt in the school. Unauthenticated callers get 401 before the path is even read, so the anonymous answer does not depend on whether the attempt exists. `force-dynamic` removes Next's own handler cache, because a correct body served from a cache is still a leak; RESULTS_HEADERS adds `private, no-store` and `Vary: Cookie`."
+    },
+    {
+      "path": "/",
+      "kind": "layout",
+      "scoreFree": true,
+      "reason": "The root layout. Audited as its own surface because a layout can fetch and render, not only wrap. It reads nothing from the database and takes no attempt or user id from params; it supplies the document shell and font setup. Note this is the layout that wraps EVERY page below it, so a fetch added here would sit in front of the results route too -- which is why it is declared rather than assumed harmless."
+    },
+    {
+      "path": "/(auth)",
+      "kind": "layout",
+      "scoreFree": true,
+      "reason": "The auth-group layout: a minimal provider tree around the sign-in and forgot pages. No data access of any kind, and it deliberately does NOT read the session -- an auth layout that redirected a signed-in caller away would need the caller identity, and keeping identity out of it is what stops a redirect from becoming a disclosure oracle."
+    },
+    {
+      "path": "/(auth)/forgot",
+      "kind": "page",
+      "scoreFree": true,
+      "reason": "The forgot-password form. A client component holding an address the student typed; it renders no server-derived data and fetches nothing. Its disclosure surface is the address itself, and the POST it makes is audited separately at `/api/auth/forgot`, where the conditional-response property is argued."
+    },
+    {
+      "path": "/(auth)/sign-in",
+      "kind": "page",
+      "scoreFree": true,
+      "reason": "The sign-in form. Client-side only, renders nothing derived from an account, and reveals no field names because every failure from `/api/auth/sign-in` is byte-identical."
+    },
+    {
+      "path": "/(marketing)",
+      "kind": "page",
+      "scoreFree": true,
+      "reason": "Static marketing copy. It contains the WORD 'scores' in prose -- 'client clocks and scores are untrusted' -- which is worth stating because it is the near miss the score-key scan exists to catch, and `scores` is deliberately not one of the keys: the check looks for `finalScore`, `maxScore` and the rest, so prose about scores does not trip a gate that claims to find score FIELDS."
+    },
+    {
+      "path": "/classrooms/[classroomId]/roster",
+      "kind": "page",
+      "scoreFree": true,
+      "reason": "TEACHER-FACING, and the reason it is declared rather than left implicit: it takes a classroomId from the path and calls `currentUser()`, so it is the first surface in this file whose audience is not a student. `RosterTable` renders no score key -- the score-key scan is what established that, not an assumption. It carries a member list, so two things must hold and are argued in its own row rather than here: the caller must be a TEACHER OF THAT CLASSROOM, and a non-member must get the same response as a non-existent classroom, or the roster becomes an existence oracle over class ids."
+    },
+    {
+      "path": "/exam/[attemptId]",
+      "kind": "page",
+      "scoreFree": true,
+      "reason": "SCORE-FREE BUT NOT AUTHENTICATED, AND BOTH FACTS MATTER. It renders no grade data -- today it renders one paragraph -- so INV-RELEASE-2 does not bite. But it calls no `currentUser()` and no `requireUser()`, and it interpolates `attemptId.slice(0, 8)` into the HTML for ANY caller who requests the URL, including an anonymous one. Its own metadata comment claims 'a student must not be able to share an exam URL and have it render meaningfully', and **it does render meaningfully: the title, the heading, and the first eight characters of the attempt id.** The attempt id is not a secret -- B7 says so explicitly -- so this is an existence oracle over attempt ids and nothing more, but the comment overstates the protection and the missing authentication is real. Recorded against `P8-T17`, which is building the surface that must replace this paragraph."
+    },
+    {
+      "path": "/exam/[attemptId]",
+      "kind": "layout",
+      "reason": "AUDITED SEPARATELY FROM THE PAGE BECAUSE THEY SHARE A PATH AND ARE DIFFERENT FILES. Under a two-kind keying they collided, the Map kept one, and one of the two files was never audited while the summary still reported a clean count -- **the exact 'reports clean because it read the wrong file' failure this script exists to prevent, introduced by the fix for it.** This layout is where `ExamShell` is mounted, so it is where the server clock, the watchdog set and the IndexedDB outbox enter the exam path. It reads no grade data and takes no identity from params: `ExamShell` receives only `attemptId` and the same authentication gap as the page it wraps is recorded on the page's row.",
+      "scoreFree": true
     }
   ]
 }
