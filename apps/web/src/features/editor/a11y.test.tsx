@@ -25,6 +25,7 @@ import {
   missingKeyboardEquivalents,
 } from '@orrery/contracts/a11y/keymap';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AtomicNode } from './AtomicNodeViews.js';
@@ -331,5 +332,124 @@ describe('axe on the editor surface', () => {
       expect(name).toMatch(/paragraph|equation|table/);
     }
     expect(new Set(names).size).toBe(3);
+  });
+});
+
+/**
+ * NO KEYBOARD TRAPS.  (P13-T2 remainder)
+ *
+ * ## WHAT WAS MISSING, AND IT IS THE ONE THE TASK NAMES FIRST AFTER NAMES
+ *
+ * This file had 15 tests: focus management, keyboard equivalents, handle names, and an axe sweep over the
+ * handle, the palette and the atomic views. **Zero of them pressed Tab.** The task reads "block handle names,
+ * keyboard movement, no traps, focus management" -- and "no traps" was the untested quarter, which is also the
+ * quarter a keyboard author feels first: a palette that opens and never lets go is not an inconvenience, it is
+ * the end of the lesson for that author.
+ *
+ * ## WHAT "NO TRAP" MEANS HERE, MECHANICALLY
+ *
+ * Two directions, both asserted against a mounted surface with a sentinel button on each side:
+ *
+ *   - **forward:** from the first focusable element inside the surface, repeated Tab reaches the trailing
+ *     sentinel -- focus can LEAVE;
+ *   - **backward:** Shift+Tab from that first element reaches the leading sentinel -- focus can leave the
+ *     other way too, which is the direction every dialog test forgets.
+ *
+ * Plus one structural invariant over the whole mounted tree: **no `tabIndex > 0` anywhere.** A positive tabindex
+ * reorders focus ahead of DOM order, so a surface that passes the walk today can still trap a keyboard user
+ * tomorrow the moment anything inserts an element -- and the walk would not notice until the order changed.
+ *
+ * ## WHAT IT DELIBERATELY DOES NOT CLAIM
+ *
+ * jsdom implements focus navigation well enough for Tab order through natively focusable elements, and that is
+ * all this asserts. **Whether focus is VISIBLE -- the focus ring, the 2.4.11 obscured check, the sticky-chrome
+ * overlap -- needs a rendered page and is `P13-T3`'s once `P8-T17` exists.** A trap test that claimed visible
+ * focus from jsdom would be asserting a property of nothing.
+ */
+describe('no keyboard traps', () => {
+  const FOCUSABLE =
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
+    'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  function mounted() {
+    const user = userEvent.setup();
+    const { container } = render(
+      <FocusProvider>
+        <main>
+          <button type="button" data-testid="before">
+            Before
+          </button>
+          <div data-testid="surface">
+            <BlockHandle
+              blockId="b1"
+              position={0}
+              total={2}
+              blockType="paragraph"
+              onAction={() => {}}
+            />
+            <SlashPalette
+              value="/tab"
+              caret={4}
+              onChange={() => {}}
+              onInsert={() => {}}
+              onClose={() => {}}
+            />
+          </div>
+          <button type="button" data-testid="after">
+            After
+          </button>
+        </main>
+      </FocusProvider>,
+    );
+    return { user, container };
+  }
+
+  it('has no positive tabindex anywhere in the mounted editor tree', () => {
+    const { container } = mounted();
+    const offenders = [...container.querySelectorAll('[tabindex]')].filter(
+      (element) => Number((element as HTMLElement).tabIndex) > 0,
+    );
+    // A positive tabindex pulls focus out of DOM order ahead of everything else, so the walk below can
+    // pass today and trap tomorrow. Naming the element is what makes this actionable.
+    expect(
+      offenders.map((element) => (element as HTMLElement).outerHTML.slice(0, 100)),
+      'elements with tabIndex > 0',
+    ).toEqual([]);
+    cleanup();
+  });
+
+  it('lets focus LEAVE forward: Tab from inside the surface reaches the trailing sentinel', async () => {
+    const { user, container } = mounted();
+    const surface = container.querySelector('[data-testid="surface"]') as HTMLElement;
+    const inside = [...surface.querySelectorAll(FOCUSABLE)] as HTMLElement[];
+    expect(inside.length, 'focusable elements inside the surface').toBeGreaterThan(0);
+
+    const first = inside[0];
+    expect(first, 'a first focusable element to start the walk from').toBeDefined();
+    first?.focus();
+    // Walk further than the surface holds, so reaching the sentinel proves exit rather than arrival.
+    for (let step = 0; step < inside.length + 2; step += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await user.tab();
+      if (document.activeElement?.getAttribute('data-testid') === 'after') break;
+    }
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('after');
+    cleanup();
+  });
+
+  it('lets focus leave BACKWARD: Shift+Tab from the first surface element reaches the leading sentinel', async () => {
+    const { user, container } = mounted();
+    const surface = container.querySelector('[data-testid="surface"]') as HTMLElement;
+    const inside = [...surface.querySelectorAll(FOCUSABLE)] as HTMLElement[];
+    expect(inside.length, 'focusable elements inside the surface').toBeGreaterThan(0);
+
+    const first = inside[0];
+    expect(first, 'a first focusable element to start the walk from').toBeDefined();
+    first?.focus();
+    // THE DIRECTION EVERY DIALOG TEST FORGETS. A palette that releases Tab but swallows Shift+Tab traps
+    // exactly the author who navigates backwards, which is to say the one who is already lost.
+    await user.tab({ shift: true });
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('before');
+    cleanup();
   });
 });
