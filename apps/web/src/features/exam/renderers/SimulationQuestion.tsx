@@ -26,6 +26,7 @@
 
 import type { PublicSimulationSpec } from '@orrery/contracts/question';
 import * as React from 'react';
+import { SimulationFrame } from '@/features/sim/SimulationFrame';
 
 export interface SimulationProps {
   readonly spec: PublicSimulationSpec;
@@ -57,6 +58,27 @@ export interface SimulationProps {
   readonly handledKeys?: readonly string[];
   readonly readyForInput?: string;
   readonly disabled?: boolean;
+  /**
+   * THE FRAME CONFIG. Absent by default, and absent means the historical behavior: chrome and canvas
+   * mount with nothing booted behind them. Present means a real `SimulationFrame` mounts on engage,
+   * with its answer/state callbacks wired to whoever supplied them.
+   *
+   * Optional rather than required because 97 tests construct this component without a sim backend,
+   * and a required frame config would make every one of them invent deployment URLs. The runner
+   * supplies it from loader-resolved registry data; tests supply nothing.
+   */
+  readonly frame?: {
+    readonly bundleUrl: string;
+    readonly simOrigin: string;
+    readonly params?: Readonly<Record<string, unknown>>;
+    readonly onAnswer?: (answer: unknown) => void;
+    readonly onState?: (state: unknown, checksum: string | null) => void;
+    /**
+     * Test injection, mirroring `SimulationFrame`'s own `probeFetch`: the reachability probe in
+     * jsdom has no network worth probing, so tests stub it. Production never passes this.
+     */
+    readonly probeFetch?: typeof fetch | null;
+  };
 }
 
 export function SimulationQuestion({
@@ -69,7 +91,12 @@ export function SimulationQuestion({
   handledKeys = [],
   readyForInput,
   disabled = false,
+  frame,
 }: SimulationProps) {
+  // Whether the student has taken control. The frame mounts ONLY here: mounting it eagerly would
+  // download and boot a simulation the student may never touch, and -- worse -- would start its
+  // handshake clock before anyone is listening.
+  const [engaged, setEngaged] = React.useState(false);
   const regionId = React.useId();
   const surfaceId = `${regionId}-surface`;
   const returnId = `${regionId}-return`;
@@ -90,7 +117,10 @@ export function SimulationQuestion({
 
     if (event.key === 'Enter') {
       // HAND CONTROL OVER. Deliberate, on a key the student pressed, and the region says so.
+      // Sets engaged exactly like the click path below: keyboard and pointer engagement must mount
+      // the SAME frame, or there are two ways to engage and only one of them boots the simulation.
       event.preventDefault();
+      setEngaged(true);
       onEngage();
       return;
     }
@@ -172,10 +202,35 @@ export function SimulationQuestion({
           aria-label={`${title} interactive surface. Press Enter to hand control to the simulation, Escape to return to the question.`}
           aria-describedby={altId}
           onKeyDown={onKeyDown}
-          onClick={onEngage}
+          onClick={() => {
+            setEngaged(true);
+            onEngage();
+          }}
         >
           <span aria-hidden="true" data-testid="sim-mount">
-            <canvas width={640} height={360} />
+            {engaged && frame !== undefined ? (
+              <SimulationFrame
+                simId={spec.simId}
+                simVersion={spec.simVersion}
+                bundleUrl={frame.bundleUrl}
+                simOrigin={frame.simOrigin}
+                probeFetch={frame.probeFetch}
+                params={frame.params ?? {}}
+                mode="graded"
+                // FIXED seed keyed by sim id: every student sees the identical variant, which is the
+                // fair default. Per-student variance needs the attempt id plumbed through SimulationProps,
+                // which does not carry it -- recorded, not guessed at.
+                seedPolicy={{ kind: 'FIXED', seed: spec.simId }}
+                defaultHeight={420}
+                minHeight={240}
+                textAlternative={textAlternative.shows}
+                title={title}
+                onAnswer={frame.onAnswer}
+                onState={frame.onState}
+              />
+            ) : (
+              <canvas width={640} height={360} />
+            )}
           </span>
         </button>
 

@@ -23,7 +23,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RunnerQuestion } from '@/server/exam-runner.js';
-import { ExamRunner } from './ExamRunner.js';
+import { ExamRunner, shapeSimAnswer, shapeSimState } from './ExamRunner.js';
 import { memoryOutboxStore } from './outbox.js';
 
 afterEach(cleanup);
@@ -206,5 +206,14 @@ describe('exam surface accessibility (P13-T3)', () => {
     } finally {
       vi.restoreAllMocks();
     }
+  });
+});
+
+describe('sim answer shaping (P8-T17 remainder)', () => {
+  it('shapes reported answers and captured states exactly as grading-replay reads them', () => {
+    // `{ simState, answer }` per paper.ts:141-146. These constructors are the only place the runner
+    // builds the shape, so a drift fails here first rather than as a silent replay mismatch.
+    expect(shapeSimAnswer('b')).toEqual({ simState: null, answer: 'b' });
+    expect(shapeSimState({ angle: 42 })).toEqual({ simState: { angle: 42 }, answer: null });
   });
 });

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import type { PublicSimulationSpec } from '@orrery/contracts/question';
-import { cleanup, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -193,5 +193,70 @@ describe('as DRIVEN', () => {
     await userEvent.keyboard('{ArrowLeft}{a}{7}');
     expect(spy.engage).not.toHaveBeenCalled();
     expect(spy.release).not.toHaveBeenCalled();
+  });
+});
+
+describe('the frame rewire (P8-T17 remainder)', () => {
+  const okFetch = (): typeof fetch =>
+    (() =>
+      Promise.resolve(
+        new Response('ok', {
+          status: 200,
+          headers: { 'Access-Control-Allow-Origin': 'https://app.example' },
+        }),
+      )) as unknown as typeof fetch;
+
+  const framed = (extra?: {
+    onAnswer?: (answer: unknown) => void;
+    onState?: (state: unknown, checksum: string | null) => void;
+  }) => (
+    <SimulationQuestion
+      spec={spec}
+      prompt="What happens to the perigee as the orbit decays?"
+      title="Orbital decay"
+      textAlternative={textAlternative}
+      onEngage={() => {}}
+      frame={{
+        bundleUrl: 'https://sims.example/sims/orbital-decay/sim.abc123.html',
+        simOrigin: 'https://sims.example',
+        probeFetch: okFetch(),
+        ...extra,
+      }}
+    />
+  );
+
+  it('mounts NO frame before engage: the canvas mount is what ships without interaction', () => {
+    const { container } = render(framed());
+    expect(container.querySelector('iframe')).toBeNull();
+    expect(container.querySelector('[data-testid="sim-mount"]')).not.toBeNull();
+  });
+
+  it('mounts the frame with the configured bundle on engage (click AND keyboard agree)', async () => {
+    const user = userEvent.setup();
+    const { container } = render(framed());
+    const surface = screen.getByRole('button', { name: /interactive surface/ });
+    await user.click(surface);
+    const frame = container.querySelector('iframe.sim-host__frame');
+    expect(frame?.getAttribute('src')).toBe(
+      'https://sims.example/sims/orbital-decay/sim.abc123.html',
+    );
+  });
+
+  it('without frame config, engage mounts NO frame: the canvas stays and nothing boots', async () => {
+    // The absent-config path is the common one in tests and in deployments without sim hosting.
+    // A renderer that booted something here would be reaching past its props for a network.
+    const user = userEvent.setup();
+    const { container } = render(
+      <SimulationQuestion
+        spec={spec}
+        prompt="What happens to the perigee as the orbit decays?"
+        title="Orbital decay"
+        textAlternative={textAlternative}
+        onEngage={() => {}}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /interactive surface/ }));
+    expect(container.querySelector('iframe')).toBeNull();
+    expect(container.querySelector('[data-testid="sim-mount"]')).not.toBeNull();
   });
 });

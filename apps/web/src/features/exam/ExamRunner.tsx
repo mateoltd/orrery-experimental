@@ -65,6 +65,19 @@ export interface ExamRunnerProps {
   readonly store?: OutboxStore;
 }
 
+/**
+ * The sim answer shape, as pure functions so the contract is testable without a live sim.
+ * `{ simState, answer }` is what `paper.ts:141-146` defines and what `grading-replay` reads; these
+ * two constructors are the only place the runner builds it, so a shape drift fails here first.
+ */
+export function shapeSimAnswer(reported: unknown): unknown {
+  return { simState: null, answer: reported };
+}
+
+export function shapeSimState(captured: unknown): unknown {
+  return { simState: captured, answer: null };
+}
+
 function answerPayload(type: string, value: unknown): unknown {
   switch (type) {
     case 'single_choice':
@@ -418,6 +431,20 @@ function renderRunnerQuestion(
           </p>
         );
       }
+      // The frame mounts only when the loader resolved hosting; otherwise the renderer shows its
+      // fallback with the text alternative, which is exactly what the no-frame path always did.
+      // Captured state is shaped `{ simState, answer }` -- the contract `paper.ts:141-146` defines
+      // and the write path now accepts under the 64 KiB cap -- and flows through the same outbox as
+      // every other answer, because a second save path would be a second place to lose one.
+      const frame =
+        sim.bundleUrl !== undefined && sim.simOrigin !== undefined
+          ? {
+              bundleUrl: sim.bundleUrl,
+              simOrigin: sim.simOrigin,
+              onAnswer: (reported: unknown) => answer(question, shapeSimAnswer(reported)),
+              onState: (captured: unknown) => answer(question, shapeSimState(captured)),
+            }
+          : undefined;
       return (
         <>
           {renderQuestion({
@@ -426,9 +453,15 @@ function renderRunnerQuestion(
             title: sim.title,
             textAlternative: sim.textAlternative,
             onEngage: () => {},
-            disabled: true,
+            // Enabled exactly when a frame is present to engage with: a disabled surface with a live
+            // frame behind it would be a control that looks dead but boots on Enter, and an enabled
+            // surface with no frame would be a control that engages nothing.
+            disabled: frame === undefined,
+            ...(frame === undefined ? {} : { frame }),
           })}
-          <p role="note">Answer capture for this question type is not yet wired in the runner.</p>
+          {frame === undefined ? (
+            <p role="note">This simulation cannot start here: its hosting is not configured.</p>
+          ) : null}
         </>
       );
     }

@@ -32,6 +32,7 @@ import {
   type QuestionSpec,
 } from '@orrery/contracts/question';
 import type { PrismaClient } from '@orrery/db';
+import { resolveCspSimOrigin } from './csp-sim-origin.js';
 
 export interface RunnerSimExtras {
   readonly title: string;
@@ -40,6 +41,14 @@ export interface RunnerSimExtras {
     readonly task: string;
     readonly reportedIn: string;
   };
+  /**
+   * Frame config for the rewire, or absent when unresolvable. Bundle path from the registry entry,
+   * origin from `resolveCspSimOrigin` -- the same resolution the CSP uses, so the frame and the
+   * policy cannot disagree about where sims live. Absent in tests and in deployments without sim
+   * hosting, in which case the renderer shows its fallback instead of a broken frame.
+   */
+  readonly bundleUrl?: string;
+  readonly simOrigin?: string;
 }
 
 export interface RunnerQuestion {
@@ -86,6 +95,7 @@ export function simExtrasFor(
   simId: string,
   prompt: string,
   simsRoot: string,
+  simVersion?: string,
 ): RunnerSimExtras | null {
   const path = join(simsRoot, simId, 'sim.manifest.json');
   if (!existsSync(path)) return null;
@@ -110,7 +120,7 @@ export function simExtrasFor(
       ? accessibility.textAlternative
       : null;
   if (title === null || alternative === null) return null;
-  return {
+  const extras: RunnerSimExtras = {
     title,
     textAlternative: {
       shows: alternative,
@@ -118,6 +128,34 @@ export function simExtrasFor(
       reportedIn: 'Recorded as your answer to this question once sim answer capture is wired.',
     },
   };
+  // Bundle URL from the registry entry for THIS version; origin from the CSP resolution. Either
+  // absent means no frame config, and the renderer falls back -- a sim question that refuses the
+  // paper for lack of hosting config would hold the whole exam hostage to deployment.
+  const registryPath = join(simsRoot, 'registry', 'registry.json');
+  try {
+    const registry = JSON.parse(readFileSync(registryPath, 'utf8')) as {
+      entries?: { id?: unknown; version?: unknown; bundle?: { page?: unknown } }[];
+    };
+    const entry = (registry.entries ?? []).find(
+      (candidate) =>
+        candidate.id === simId && (simVersion === undefined || candidate.version === simVersion),
+    );
+    const page =
+      typeof entry?.bundle?.page === 'string' ? entry.bundle.page.replace(/^\.\//u, '') : null;
+    if (page !== null) {
+      const resolved = resolveCspSimOrigin(process.env);
+      if (resolved.origin !== null) {
+        return {
+          ...extras,
+          bundleUrl: `${resolved.origin}/sims/${simId}/${simVersion ?? 'latest'}/${page}`,
+          simOrigin: resolved.origin,
+        };
+      }
+    }
+  } catch {
+    // Unreadable registry or unresolvable origin: extras without a frame, by design (see above).
+  }
+  return extras;
 }
 
 export async function loadExamRunnerData(
@@ -179,7 +217,7 @@ export async function loadExamRunnerData(
     // `P13-T4` guards at the manifest level, and rendering it anyway would bypass the guard.
     let sim: RunnerSimExtras | undefined;
     if (spec.type === 'simulation') {
-      const extras = simExtrasFor(spec.simId, prompt, simsRoot);
+      const extras = simExtrasFor(spec.simId, prompt, simsRoot, spec.simVersion);
       if (extras === null) return null;
       sim = extras;
     }
