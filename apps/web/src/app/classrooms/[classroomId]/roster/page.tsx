@@ -22,8 +22,12 @@
  * refused outright when `NODE_ENV=production`, and it yields a caller whose `kind` is `'dev'` rather than `'session'`, so
  * the difference is visible in a type rather than only in a comment.
  */
+
+import { getPrisma } from '@orrery/db';
+import { resolveActorForRequest } from '@orrery/db/classrooms';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
+import { AccommodationRegister } from '@/features/roster/AccommodationRegister';
 import { type RosterActions, RosterTable, type RosterUiRow } from '@/features/roster/RosterTable';
 import { currentUser } from '@/server/auth/session-runtime';
 import {
@@ -77,6 +81,11 @@ export default async function RosterPage(props: PageProps) {
   return (
     <main className="orrery-roster-page">
       <h1>Class roster</h1>
+      <AccommodationRegister
+        classroomId={classroomId}
+        callerUserId={user.userId}
+        canGrant={await teacherOfClassroom(classroomId, user.userId)}
+      />
       {data.forbidden ? (
         <NoAccess />
       ) : (
@@ -167,4 +176,11 @@ function redirectWith(extra: Readonly<Record<string, string>>): never {
   const search = new URLSearchParams({ ...extra });
   const query = search.toString();
   redirect(query === '' ? '?' : `?${query}`);
+}
+
+/** Whether the caller may grant in this room. The actions re-check; this only hides the form. */
+async function teacherOfClassroom(classroomId: string, userId: string): Promise<boolean> {
+  const actor = await resolveActorForRequest(getPrisma(), userId);
+  const role = actor?.classroomRoles[classroomId];
+  return role === 'OWNER' || role === 'TEACHER';
 }

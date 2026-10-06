@@ -108,6 +108,12 @@
       "kind": "route",
       "scoreFree": true,
       "reason": "Accepts an incident report (attemptId, optional questionId, reason, detail) and returns { ok, id }. Own-attempt only, enforced in the service the same way submitAnswer enforces it. Carries no grade data in either direction: the request has no answer field by construction, and the response is an incident id, not a mark -- so INV-RELEASE-2 does not apply. Declared rather than exempt because a reporting endpoint that later grew a 'resolution' field could start carrying grades."
+    },
+    {
+      "path": "/api/classrooms/[classroomId]/accommodations/export",
+      "kind": "route",
+      "scoreFree": true,
+      "reason": "CSV audit export of accommodation grants (who, what, when, status). Teacher-or-owner gated with 403 otherwise. Carries no grade data -- relaxations and reasons, never marks -- so INV-RELEASE-2 does not apply. Declared rather than exempt because an export endpoint is exactly where a future column could leak."
     }
   ]
 }
