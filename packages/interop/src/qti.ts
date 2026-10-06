@@ -1,5 +1,17 @@
 /**
- * QTI 2.2 EXPORT: items, tests, partial-credit response processing, manifest.  (P16-T2)
+ * QTI 2.2 AND 3.0 EXPORT: items, tests, partial-credit response processing, manifest.  (P16-T2, P16-T3)
+ *
+ * ## WHAT 3.0 CHANGES, AND WHAT IT DOES NOT
+ *
+ * For everything this exporter emits, QTI 3.0 is QTI 2.2 with different URIs: the item/test namespace
+ * (`imsqti_v2p2` -> `qti/v3p0`) and the response-processing template base (`qti_v2p2` -> `qti_v3p0`).
+ * `choiceInteraction`, `simpleChoice`, `mapResponse` mappings, `extendedTextInteraction` and the content
+ * packaging manifest are structurally identical. **A "3.0 exporter" that reimplemented the documents would
+ * be two exporters that can disagree; this one parameterizes the version table and shares everything else.**
+ *
+ * What 3.0 ADDS that is deliberately NOT claimed here: `qti-assessment-item` web-component packaging,
+ * PCI custom interactions, and `testPart` refinements -- none of which our constructs need, and each of
+ * which would be a new format to get wrong rather than a URI to swap.
  *
  * ## SCOPE, STATED FIRST BECAUSE AN EXPORTER'S SCOPE IS ITS HONESTY
  *
@@ -36,12 +48,7 @@
  * on every golden output.
  */
 
-import {
-  assertExportIsAuditable,
-  type ExternalBinding,
-  emptyMappingReport,
-  type MappingReport,
-} from './codec.js';
+import { assertExportIsAuditable, type ExternalBinding, type MappingReport } from './codec.js';
 
 /** A portable question: the only input this exporter accepts. */
 export interface QtiChoiceQuestion {
@@ -115,7 +122,11 @@ function choiceId(itemId: string, index: number): string {
   return `${itemId}-choice-${String(index)}`;
 }
 
-function exportItem(question: QtiChoiceQuestion, approximated: string[]): string {
+function exportItem(
+  question: QtiChoiceQuestion,
+  approximated: string[],
+  version: (typeof QTI_VERSIONS)[QtiVersion],
+): string {
   if (question.correctChoiceIndex < 0 || question.correctChoiceIndex >= question.choices.length) {
     throw new Error(
       `QTI_ITEM_INVALID: ${question.id} correctChoiceIndex ${String(question.correctChoiceIndex)} ` +
@@ -144,7 +155,7 @@ function exportItem(question: QtiChoiceQuestion, approximated: string[]): string
     .join('\n');
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
-    `<assessmentItem xmlns="http://www.imsglobal.org/xsd/imsqti_v2p2" identifier="${escapeXml(question.id)}" title="${escapeXml(question.id)}" adaptive="false" timeDependent="false">`,
+    `<assessmentItem xmlns="${version.itemNs}" identifier="${escapeXml(question.id)}" title="${escapeXml(question.id)}" adaptive="false" timeDependent="false">`,
     `  <responseDeclaration identifier="RESPONSE" cardinality="single" baseType="identifier">`,
     `    <correctResponse><value>${correct}</value></correctResponse>`,
     `    <mapping lowerBound="0" upperBound="${String(question.points)}" defaultValue="0">`,
@@ -158,17 +169,20 @@ function exportItem(question: QtiChoiceQuestion, approximated: string[]): string
     options,
     `    </choiceInteraction>`,
     `  </itemBody>`,
-    `  <responseProcessing template="http://www.imsglobal.org/question/qti_v2p2/rptemplates/map_response"/>`,
+    `  <responseProcessing template="${version.templateBase}/map_response"/>`,
     `</assessmentItem>`,
     '',
   ].join('\n');
 }
 
 /** A simulation as `extendedTextInteraction`, exactly as `NON_PORTABLE_FEATURES` specifies. */
-function exportSimReference(ref: QtiSimReference): string {
+function exportSimReference(
+  ref: QtiSimReference,
+  version: (typeof QTI_VERSIONS)[QtiVersion],
+): string {
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
-    `<assessmentItem xmlns="http://www.imsglobal.org/xsd/imsqti_v2p2" identifier="sim-${escapeXml(ref.simId)}" title="sim-${escapeXml(ref.simId)}" adaptive="false" timeDependent="false">`,
+    `<assessmentItem xmlns="${version.itemNs}" identifier="sim-${escapeXml(ref.simId)}" title="sim-${escapeXml(ref.simId)}" adaptive="false" timeDependent="false">`,
     `  <responseDeclaration identifier="RESPONSE" cardinality="single" baseType="string"/>`,
     `  <outcomeDeclaration identifier="SCORE" cardinality="single" baseType="float"/>`,
     `  <itemBody>`,
@@ -180,8 +194,26 @@ function exportSimReference(ref: QtiSimReference): string {
   ].join('\n');
 }
 
+export type QtiVersion = '2.2' | '3.0';
+
+const QTI_VERSIONS = {
+  '2.2': {
+    itemNs: 'http://www.imsglobal.org/xsd/imsqti_v2p2',
+    templateBase: 'http://www.imsglobal.org/question/qti_v2p2/rptemplates',
+  },
+  '3.0': {
+    itemNs: 'http://www.imsglobal.org/xsd/qti/v3p0',
+    templateBase: 'http://www.imsglobal.org/question/qti_v3p0/rptemplates',
+  },
+} as const;
+
 export interface QtiAssessmentInput {
   readonly title: string;
+  /**
+   * Defaults to '2.2': the version the goldens were written against, and the wider-supported interchange.
+   * '3.0' swaps the namespace and template URIs; the documents are otherwise identical by construction.
+   */
+  readonly version?: QtiVersion;
   readonly questions: readonly QtiChoiceQuestion[];
   readonly sims?: readonly QtiSimReference[];
   /**
@@ -197,12 +229,13 @@ export interface QtiAssessmentInput {
 export function exportQtiAssessment(input: QtiAssessmentInput): QtiExport {
   assertExportIsAuditable({ kind: 'QTI_ASSESSMENT', binding: input.binding, items: input.itemIds });
   const approximated: string[] = [];
+  const version = QTI_VERSIONS[input.version ?? '2.2'];
   const items = input.questions.map((question) => ({
     id: question.id,
-    xml: exportItem(question, approximated),
+    xml: exportItem(question, approximated, version),
   }));
   for (const sim of input.sims ?? []) {
-    items.push({ id: `sim-${sim.simId}`, xml: exportSimReference(sim) });
+    items.push({ id: `sim-${sim.simId}`, xml: exportSimReference(sim, version) });
     approximated.push(
       `simulation ${sim.simId}@${sim.version} exported as extendedTextInteraction carrying id+version (per NON_PORTABLE_FEATURES); interaction state is not portable`,
     );
@@ -215,7 +248,7 @@ export function exportQtiAssessment(input: QtiAssessmentInput): QtiExport {
     .join('\n');
   const testXml = [
     `<?xml version="1.0" encoding="UTF-8"?>`,
-    `<assessmentTest xmlns="http://www.imsglobal.org/xsd/imsqti_v2p2" identifier="${escapeXml(input.title)}" title="${escapeXml(input.title)}">`,
+    `<assessmentTest xmlns="${version.itemNs}" identifier="${escapeXml(input.title)}" title="${escapeXml(input.title)}">`,
     `  <testPart identifier="part-1" navigationMode="linear" submissionMode="simultaneous">`,
     `    <assessmentSection identifier="section-1" title="${escapeXml(input.title)}" visible="true">`,
     refs,

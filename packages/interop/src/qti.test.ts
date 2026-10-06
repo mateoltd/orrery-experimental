@@ -165,3 +165,48 @@ describe('QTI 2.2 export', () => {
     expect(tagsBalanced(out.manifestXml)).toBe(true);
   });
 });
+
+describe('QTI 3.0 (P16-T3)', () => {
+  it('swaps the namespace and template URIs and nothing else', () => {
+    const v22 = exportQtiAssessment({
+      title: 't',
+      questions: [question()],
+      itemIds: ['q1'],
+      binding,
+    });
+    const v30 = exportQtiAssessment({
+      title: 't',
+      questions: [question()],
+      itemIds: ['q1'],
+      binding,
+      version: '3.0',
+    });
+    expect(v30.items[0].xml).toContain('xmlns="http://www.imsglobal.org/xsd/qti/v3p0"');
+    expect(v30.items[0].xml).toContain('/qti_v3p0/rptemplates/map_response');
+    expect(v30.items[0].xml).not.toContain('v2p2');
+    expect(v30.testXml).toContain('xmlns="http://www.imsglobal.org/xsd/qti/v3p0"');
+    // Same document modulo the version URIs: strip them and the outputs are identical, which is what
+    // "parameterized, not reimplemented" means.
+    const strip = (xml: string): string =>
+      xml.replace(/qti\/v3p0|imsqti_v2p2|qti_v3p0|qti_v2p2/gu, 'V');
+    expect(strip(v30.items[0].xml)).toBe(strip(v22.items[0].xml));
+    expect(strip(v30.testXml)).toBe(strip(v22.testXml));
+  });
+
+  it('defaults to 2.2, so existing consumers see byte-identical output', () => {
+    const implicit = exportQtiAssessment({
+      title: 't',
+      questions: [question()],
+      itemIds: ['q1'],
+      binding,
+    });
+    const explicit = exportQtiAssessment({
+      title: 't',
+      questions: [question()],
+      itemIds: ['q1'],
+      binding,
+      version: '2.2',
+    });
+    expect(implicit.items[0].xml).toBe(explicit.items[0].xml);
+  });
+});
