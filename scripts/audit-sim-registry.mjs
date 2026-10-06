@@ -130,6 +130,81 @@ const manifestNames = existsSync(simsDir)
       .sort()
   : [];
 
+/**
+ * THE REPLACEMENT CHAIN MUST RESOLVE AND MUST TERMINATE.  (P12-T4)
+ *
+ * ## WHAT WAS MISSING, AND BOTH WERE PLANTED
+ *
+ * `packages/contracts/src/sim-manifest` already refuses a `deprecated` manifest with no successor and refuses
+ * `replacedById === id`. Both of those are checks a manifest can make about ITSELF.
+ *
+ * **A successor that does not exist passed the build.** `maths.projectile-motion` with
+ * `replacedById: "maths.does-not-exist"` produced a green `SIMULATION REGISTRY ARTEFACT GATE PASSED`, and the
+ * artefact carries it: a student opening the sim is told it is going away and pointed at nothing.
+ *
+ * **A two-cycle passed too.** `maths.projectile-motion -> physics.kinematics -> maths.projectile-motion` is equally green.
+ * Nothing follows the chain today, so nothing noticed -- and an authoring UI that follows `replacedById` to suggest the
+ * newest version would loop. **A pointer nobody dereferences is unchecked, and an unchecked pointer is still a pointer.**
+ *
+ * ## WHY A SELF-REFERENCE IS NOT THE SAME AS A CYCLE
+ *
+ * `A -> A` is caught by the manifest schema, on one file, with no other file involved. `A -> B -> A` needs both manifests
+ * and cannot be expressed as a per-file rule at all, which is why it belongs here where every manifest is visible at once.
+ *
+ * Cycles are found by WALKING, with a step limit as well as a seen-set: the seen-set terminates on a cycle, and the step
+ * limit terminates on a chain longer than the catalogue, so neither is the only line of defence.
+ */
+const byId = new Map(entries.map((entry) => [entry.id, entry]));
+
+for (const entry of entries) {
+  const successor = entry.replacedById;
+  if (successor === null || successor === undefined) continue;
+
+  if (typeof successor !== 'string' || successor.length === 0) {
+    fail(
+      `REPLACED_BY_NOT_A_SIM_ID: ${entry.id} has replacedById=${JSON.stringify(successor)}\n` +
+        `  It must name another simulation. An author UI follows this pointer to offer a replacement.`,
+    );
+    continue;
+  }
+
+  if (!byId.has(successor)) {
+    fail(
+      `REPLACED_BY_DOES_NOT_EXIST: ${entry.id} is replaced by "${successor}", which is not in the registry\n` +
+        `  This is the case that passed silently. A student is told the simulation is going away and pointed at\n` +
+        `  nothing. Either publish the successor or remove replacedById -- but a deprecated simulation with no\n` +
+        `  successor is already refused by the manifest schema, so this is the same defect wearing an id.`,
+    );
+    continue;
+  }
+
+  // Walk the chain. `path` gives the order for the message AND terminates a cycle, so one array does both
+  // jobs; the step limit terminates a chain longer than the catalogue, so neither is the only defence.
+  const path = [entry.id, successor];
+  for (let step = 0; step <= entries.length; step += 1) {
+    const next = byId.get(path[path.length - 1]);
+    if (next === undefined) break; // existence checked for the first hop; each later hop is checked by the same loop
+    const following = next.replacedById;
+    if (following === null || following === undefined) break; // terminates: this is a well-formed chain
+    // The cycle is in the POINTER, so the test is on `following` -- not on `next.id`, which is
+    // `path[path.length - 1]` by construction and therefore always "already seen". Testing the node you
+    // just arrived at reports a one-hop cycle for every well-formed chain.
+    if (path.includes(following)) {
+      // Rendered from the first repeated hop, so the message reads as the loop a human would draw.
+      const cycleStart = path.indexOf(following);
+      const cycle = [...path.slice(cycleStart), following];
+      fail(
+        `REPLACEMENT_CYCLE: ${cycle.join(' -> ')}\n` +
+          `  A two-cycle was planted and passed every gate. Anything that follows replacedById to suggest the\n` +
+          `  newest version will loop, and that loop is in the authoring path a teacher is holding open\n` +
+          `  mid-lesson. A single self-reference IS caught by the manifest schema; this needs two files.`,
+      );
+      break;
+    }
+    path.push(next.id);
+  }
+}
+
 const registryIds = entries.map((entry) => `${entry.id}@${entry.version}`).sort();
 if (registryIds.length === 0) {
   fail(
