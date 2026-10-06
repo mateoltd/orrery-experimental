@@ -1,0 +1,244 @@
+{
+  "resources": [
+    {
+      "slug": "astronomy.orrery",
+      "title": "An orrery",
+      "summary": "A planet on its orbit around the Sun, a slider for the day, a number box for the answer, and step buttons.",
+      "subjectSlug": "astronomy",
+      "simId": "astronomy.orrery",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "astronomy.parallax-distance",
+      "title": "Distance from annual parallax",
+      "summary": "An annual parallax in arcseconds, a choice of units, and a box for the distance.",
+      "subjectSlug": "astronomy",
+      "simId": "astronomy.parallax-distance",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "astronomy.tides",
+      "title": "Tides",
+      "summary": "A tide curve plotting water height against time for a basin, a table of the high and low waters with their times, and four boxes for the range, the period, whet",
+      "subjectSlug": "astronomy",
+      "simId": "astronomy.tides",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "biology.genetics-punnett",
+      "title": "Punnett squares",
+      "summary": "A four-cell Punnett square with both parents named along the top and the side, and two boxes for the offspring genotypes and the ratio.",
+      "subjectSlug": "biology",
+      "simId": "biology.genetics-punnett",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "biology.mitosis-order",
+      "title": "Ordering the stages of cell division",
+      "summary": "A list of six described events with buttons to move each one up and down, and a button to submit.",
+      "subjectSlug": "biology",
+      "simId": "biology.mitosis-order",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "chem.ideal-gas-law",
+      "title": "Ideal gas law",
+      "summary": "A piston with three dials for pressure, volume and amount, and the resulting temperature in kelvin and Celsius.",
+      "subjectSlug": "chemistry",
+      "simId": "chem.ideal-gas-law",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "chem.mole-concentration",
+      "title": "Concentration by dilution",
+      "summary": "A burette reading in centimetres, a flask volume in millilitres, and a box for the concentration in moles per litre.",
+      "subjectSlug": "chemistry",
+      "simId": "chem.mole-concentration",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "chemistry.equation-balancing",
+      "title": "Balancing a chemical equation",
+      "summary": "An unbalanced equation, a single text box for the balanced equation, and a button to check it.",
+      "subjectSlug": "chemistry",
+      "simId": "chemistry.equation-balancing",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "chemistry.particle-view",
+      "title": "How often do the atoms meet?",
+      "summary": "A box full of small dots moving about and bouncing off each other, a running collision counter, a temperature slider, and a box for the collisions each second.",
+      "subjectSlug": "chemistry",
+      "simId": "chemistry.particle-view",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "chemistry.solution-concentration",
+      "title": "Solutions and concentration",
+      "summary": "Two beakers, one starting and one after the dilution, with the method stated as add or make up, and three labelled boxes for the diluted molarity, the concentra",
+      "subjectSlug": "chemistry",
+      "simId": "chemistry.solution-concentration",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "computing-science.download-time",
+      "title": "How long does the download take?",
+      "summary": "A file size in megabytes, a connection speed in megabits per second, and a box for the time in seconds.",
+      "subjectSlug": "computing",
+      "simId": "computing-science.download-time",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "computing.binary-search",
+      "title": "Counting binary search comparisons",
+      "summary": "A row of numbered cells that are searched one at a time, and a box for the number of comparisons.",
+      "subjectSlug": "computing",
+      "simId": "computing.binary-search",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "computing.binary-trees",
+      "title": "Binary search trees",
+      "summary": "A binary search tree drawn as nested lists, a table of every node with its parent and side, and three boxes for the in-order, pre-order and post-order traversal",
+      "subjectSlug": "computing",
+      "simId": "computing.binary-trees",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "computing.search-algorithms",
+      "title": "Searching: linear and binary",
+      "summary": "A row of numbered boxes with the comparisons the search made marked on them, a table of the same marks, and four boxes for the comparison count, whether the tar",
+      "subjectSlug": "computing",
+      "simId": "computing.search-algorithms",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "computing.sorting-visualiser",
+      "title": "How many comparisons does bubble sort make?",
+      "summary": "A row of numbered blocks that swap places as bubble sort runs, a running comparison counter, a pass slider, and a box for the total.",
+      "subjectSlug": "computing",
+      "simId": "computing.sorting-visualiser",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "general-science.energy-budget",
+      "title": "Where the energy goes",
+      "summary": "An energy input in joules and an efficiency percentage, a bar split into useful work and heat, and a box for the useful energy.",
+      "subjectSlug": "general-skills",
+      "simId": "general-science.energy-budget",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "geography.map-scale-distance",
+      "title": "Real distance from a map scale",
+      "summary": "A measured distance on a map, the scale the map is printed at, and a box for the real distance.",
+      "subjectSlug": "earth-science",
+      "simId": "geography.map-scale-distance",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "maths.coordinate-geometry",
+      "title": "Where does the line cross the y-axis?",
+      "summary": "A square grid with a line through two marked points, a square marker on the vertical axis, arrow-key controls, and undo and redo buttons.",
+      "subjectSlug": "maths",
+      "simId": "maths.coordinate-geometry",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "maths.integral-area",
+      "title": "Integral as accumulated area",
+      "summary": "The curve y = x squared minus 2 between 0 and 2 with a row of rectangles under it, a table of each rectangle, and three boxes for the left sum, the right sum an",
+      "subjectSlug": "maths",
+      "simId": "maths.integral-area",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "maths.linear-functions",
+      "title": "Linear functions",
+      "summary": "A straight line drawn on a pair of axes, with buttons to walk points along it and to reveal where it crosses the x-axis.",
+      "subjectSlug": "maths",
+      "simId": "maths.linear-functions",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "maths.midpoint-of-segment",
+      "title": "Midpoint of a line segment",
+      "summary": "A line segment drawn on axes with both endpoints labelled, and two boxes for the coordinates of its midpoint.",
+      "subjectSlug": "maths",
+      "simId": "maths.midpoint-of-segment",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "maths.monte-carlo-pi",
+      "title": "Estimating pi by throwing points",
+      "summary": "A square with a quarter circle, a scatter of thrown points, a running count, and a box for the estimate.",
+      "subjectSlug": "maths",
+      "simId": "maths.monte-carlo-pi",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "maths.projectile-motion",
+      "title": "Projectile motion",
+      "summary": "A side view of a thrown ball, with the ground, its path and a range marker.",
+      "subjectSlug": "maths",
+      "simId": "maths.projectile-motion",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "maths.pythagoras",
+      "title": "Pythagoras and triangle facts",
+      "summary": "A triangle drawn to scale with its three sides labelled and its angles written beside them.",
+      "subjectSlug": "maths",
+      "simId": "maths.pythagoras",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "maths.quadratic-roots",
+      "title": "Roots of a quadratic",
+      "summary": "A parabola drawn on axes, with two boxes for the roots and a button to clear both.",
+      "subjectSlug": "maths",
+      "simId": "maths.quadratic-roots",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "maths.sequence-next",
+      "title": "Next in the sequence",
+      "summary": "A row of numbers, a rule stated beneath it, and a box to type the next number into.",
+      "subjectSlug": "maths",
+      "simId": "maths.sequence-next",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "physics.free-body-diagram",
+      "title": "Free-body diagram of a crate",
+      "summary": "A crate on a floor with a rope pulling it, a box for each force, and a button to submit for marking.",
+      "subjectSlug": "physics",
+      "simId": "physics.free-body-diagram",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "physics.kinematics",
+      "title": "Displacement under acceleration",
+      "summary": "A choice of situation, a time in seconds, and a box to work out the distance travelled in.",
+      "subjectSlug": "physics",
+      "simId": "physics.kinematics",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "physics.newtons-second-law",
+      "title": "Newton's second law",
+      "summary": "A block with a force arrow on it, a choice of which quantity to find, and a box to answer in.",
+      "subjectSlug": "physics",
+      "simId": "physics.newtons-second-law",
+      "simVersion": "1.0.0"
+    },
+    {
+      "slug": "physics.pendulum",
+      "title": "How long is one swing of a pendulum?",
+      "summary": "A swinging pendulum drawn as a line, with step and play buttons, an energy graph, and a box for the period in seconds.",
+      "subjectSlug": "physics",
+      "simId": "physics.pendulum",
+      "simVersion": "1.0.0"
+    }
+  ]
+}
