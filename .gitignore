@@ -54,3 +54,8 @@ sims/*/dist/
 # would put a digest in git that a rebuild can invalidate, and a committed registry is a registry a
 # human edited.
 sims/registry/
+
+# P12-T5 screenshot capture. BOTH the PNGs and the generated `.host.html` scaffolding are build output:
+# the capture writes one host page per simulation, and biome was linting 30 generated HTML files as if
+# they were source. Regenerate with `pnpm sim:screenshots`.
+sims/screenshots/
