@@ -1,17 +1,18 @@
 // @vitest-environment jsdom
 
-import type { FileSubmissionSpec } from '@orrery/contracts/question';
+import type { PublicFileSubmissionSpec } from '@orrery/contracts/question';
 import { cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { assertRendersContract } from './contractHarness';
+import { assertRendersContract, PUBLIC_COMMON } from './contractHarness.js';
 import { FileSubmissionQuestion, uploadConstraints } from './FileSubmissionQuestion';
 
 /** Referenced so the classic-runtime JSX requirement is a REAL use rather than a stripped import. */
 void React;
 
-const spec: FileSubmissionSpec = {
+const spec: PublicFileSubmissionSpec = {
+  ...PUBLIC_COMMON,
   type: 'file_submission',
   maxFiles: 3,
   maxBytes: 2_097_152,
@@ -158,6 +159,6 @@ describe('the constraint sentence', () => {
   });
 
   it('is absent when the spec constrains nothing, rather than printing an empty "Allowed:"', () => {
-    expect(uploadConstraints({ type: 'file_submission' })).toBeUndefined();
+    expect(uploadConstraints({})).toBeUndefined();
   });
 });

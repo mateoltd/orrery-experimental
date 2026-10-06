@@ -12,7 +12,7 @@
  */
 
 import { contractFor } from '@orrery/contracts/a11y/questionInteraction';
-import type { SingleChoiceSpec } from '@orrery/contracts/question';
+import type { PublicSingleChoiceSpec } from '@orrery/contracts/question';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 /**
@@ -25,7 +25,7 @@ import userEvent from '@testing-library/user-event';
  */
 import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { assertRendersContract, renderAndAudit } from './contractHarness';
+import { assertRendersContract, PUBLIC_COMMON, renderAndAudit } from './contractHarness.js';
 import { SingleChoiceQuestion } from './SingleChoiceQuestion';
 
 /**
@@ -40,14 +40,14 @@ afterEach(cleanup);
 /** Referenced so the classic-runtime JSX requirement is a REAL use rather than a stripped import. */
 void React;
 
-const spec: SingleChoiceSpec = {
+const spec: PublicSingleChoiceSpec = {
+  ...PUBLIC_COMMON,
   type: 'single_choice',
   choices: [
     { id: 'a', text: 'Alpha' },
     { id: 'b', text: 'Bravo' },
     { id: 'c', text: 'Charlie' },
   ],
-  key: { choiceId: 'a' },
 };
 
 const PROMPT = 'Which one is the powerhouse of the cell?';
@@ -83,7 +83,7 @@ describe("as DRAWN: axe, the contract's role, and an accessible name", () => {
 
   it('is CLEAN WITH ONE OPTION AND WITH MANY, because the contract does not care about the count', async () => {
     for (const count of [1, 2, 3, 12]) {
-      const wide: SingleChoiceSpec = {
+      const wide: PublicSingleChoiceSpec = {
         ...spec,
         choices: Array.from({ length: count }, (_, n) => ({
           id: `o${String(n)}`,

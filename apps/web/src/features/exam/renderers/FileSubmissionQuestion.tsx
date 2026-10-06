@@ -28,11 +28,11 @@
  * file dialog close are exactly the noise that makes screen-reader users turn announcements off.
  */
 
-import type { FileSubmissionSpec } from '@orrery/contracts/question';
+import type { PublicFileSubmissionSpec } from '@orrery/contracts/question';
 import * as React from 'react';
 
 export interface FileSubmissionProps {
-  readonly spec: FileSubmissionSpec;
+  readonly spec: PublicFileSubmissionSpec;
   readonly prompt: string;
   readonly value?: readonly File[];
   /**
@@ -54,7 +54,9 @@ export interface FileSubmissionProps {
 }
 
 /** The constraint sentence, built from the spec so it cannot drift from what will actually be enforced. */
-export const uploadConstraints = (spec: FileSubmissionSpec): string | undefined => {
+export const uploadConstraints = (
+  spec: Pick<PublicFileSubmissionSpec, 'allow' | 'maxBytes' | 'maxFiles'>,
+): string | undefined => {
   const parts: string[] = [];
   if (spec.maxFiles !== undefined) parts.push(`${String(spec.maxFiles)} file(s) at most`);
   if (spec.maxBytes !== undefined) parts.push(`up to ${formatBytes(spec.maxBytes)} each`);

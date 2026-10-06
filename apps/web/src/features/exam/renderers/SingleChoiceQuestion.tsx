@@ -23,12 +23,12 @@
  */
 
 import { contractFor } from '@orrery/contracts/a11y/questionInteraction';
-import type { SingleChoiceSpec } from '@orrery/contracts/question';
+import type { PublicSingleChoiceSpec } from '@orrery/contracts/question';
 // the classic transform its absence is a `ReferenceError` on the `return (`, which is an unhelpful place to find out.
 import * as React from 'react';
 
 export interface SingleChoiceProps {
-  readonly spec: SingleChoiceSpec;
+  readonly spec: PublicSingleChoiceSpec;
   /**
    * THE QUESTION TEXT, and it is a PROP rather than `spec.prompt` because no such field exists.
    *
@@ -120,7 +120,7 @@ export function SingleChoiceQuestion({
 /**
  * INLINE TEXT ONLY, and the limitation is stated rather than hidden.
  *
- * `SingleChoiceSpec.choices[].text` is a plain string, not a rich-text document, so there is nothing to render but
+ * `PublicSingleChoiceSpec.choices[].text` is a plain string, not a rich-text document, so there is nothing to render but
  * the string. A question whose prompt needs a formula or a diagram is a different spec shape, and pretending to
  * support it here would mean silently dropping the maths -- which is worse than not offering it.
  *

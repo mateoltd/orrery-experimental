@@ -26,11 +26,11 @@
  */
 
 import { contractFor } from '@orrery/contracts/a11y/questionInteraction';
-import type { MultiSelectSpec, TrueFalseSpec } from '@orrery/contracts/question';
+import type { PublicMultiSelectSpec, PublicTrueFalseSpec } from '@orrery/contracts/question';
 import * as React from 'react';
 
 export interface ChoiceGroupProps {
-  readonly spec: MultiSelectSpec | TrueFalseSpec;
+  readonly spec: PublicMultiSelectSpec | PublicTrueFalseSpec;
   readonly prompt: string;
   /** The chosen option ids. A single-element array for `true_false`. */
   readonly value?: readonly string[];

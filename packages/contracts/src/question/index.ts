@@ -382,6 +382,37 @@ const publicCommon = (spec: QuestionCommon): Omit<QuestionCommon, 'modelAnswer'>
  * Exhaustive, one arm per type, with a `never` check. That check is the mechanism `plans/02` §187 asks for:
  * "exhaustively typed so a new question type fails compilation until it is handled."
  */
+/**
+ * NAMED PUBLIC ARMS, SO A RENDERER CAN DEMAND ONE.
+ *
+ * `PublicQuestionSpec` is the union; these are its members by name. A renderer whose props take the
+ * teacher-side spec accepts the answer key by type, and then the only thing keeping the key out of the
+ * browser is nobody passing it -- which is exactly the default-permissive shape `plans/07` §2 forbids.
+ * Renderers take these; the registry dispatches on them; the loader produces them.
+ */
+export type PublicSingleChoiceSpec = Extract<
+  PublicQuestionSpec,
+  { readonly type: 'single_choice' }
+>;
+export type PublicMultiSelectSpec = Extract<PublicQuestionSpec, { readonly type: 'multi_select' }>;
+export type PublicTrueFalseSpec = Extract<PublicQuestionSpec, { readonly type: 'true_false' }>;
+export type PublicNumericSpec = Extract<PublicQuestionSpec, { readonly type: 'numeric' }>;
+export type PublicShortTextSpec = Extract<PublicQuestionSpec, { readonly type: 'short_text' }>;
+export type PublicOrderingSpec = Extract<PublicQuestionSpec, { readonly type: 'ordering' }>;
+export type PublicFreeResponseSpec = Extract<
+  PublicQuestionSpec,
+  { readonly type: 'free_response' }
+>;
+export type PublicFileSubmissionSpec = Extract<
+  PublicQuestionSpec,
+  { readonly type: 'file_submission' }
+>;
+export type PublicSimulationSpec = Extract<PublicQuestionSpec, { readonly type: 'simulation' }>;
+export type PublicWorkedSolutionSpec = Extract<
+  PublicQuestionSpec,
+  { readonly type: 'worked_solution' }
+>;
+
 export function publicQuestionSpec(spec: QuestionSpec): PublicQuestionSpec {
   const common = publicCommon(spec);
   switch (spec.type) {

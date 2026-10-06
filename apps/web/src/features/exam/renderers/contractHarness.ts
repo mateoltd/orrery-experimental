@@ -121,6 +121,21 @@ export const renderAndAudit = async (
  * correct as drawn", and the interaction test answers "does it respond", and conflating them is how a renderer ends
  * up passing because the accessible name was right and the arrow keys were not.
  */
+/**
+ * The common fields every public spec carries. Fixtures spread this so tests construct PUBLIC specs --
+ * the shape a renderer actually receives -- rather than teacher specs with the key quietly attached.
+ * A fixture that needs a key is a test about grading, and it belongs in a grader test, not here.
+ */
+export const PUBLIC_COMMON = {
+  id: 'fixture-q',
+  points: 4,
+  gradingMode: 'AUTO',
+  shuffleOptions: false,
+  estimatedSeconds: 60,
+  cognitiveDemand: 'REMEMBER',
+  tags: [],
+} as const;
+
 export const assertRendersContract = async (
   type: QuestionType,
   element: React.ReactElement,

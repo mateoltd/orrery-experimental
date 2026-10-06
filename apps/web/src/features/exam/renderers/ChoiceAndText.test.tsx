@@ -10,44 +10,44 @@
  */
 
 import type {
-  MultiSelectSpec,
-  NumericSpec,
-  ShortTextSpec,
-  TrueFalseSpec,
+  PublicMultiSelectSpec,
+  PublicNumericSpec,
+  PublicShortTextSpec,
+  PublicTrueFalseSpec,
 } from '@orrery/contracts/question';
 import { cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChoiceGroupQuestion } from './ChoiceGroupQuestion';
-import { assertRendersContract, renderAndAudit } from './contractHarness';
+import { assertRendersContract, PUBLIC_COMMON, renderAndAudit } from './contractHarness.js';
 import { TextFieldQuestion, toleranceHint } from './TextFieldQuestion';
 
 afterEach(cleanup);
 
 const PROMPT = 'Which of these are correct?';
 
-const multi: MultiSelectSpec = {
+const multi: PublicMultiSelectSpec = {
+  ...PUBLIC_COMMON,
   type: 'multi_select',
   choices: [
     { id: 'a', text: 'Alpha' },
     { id: 'b', text: 'Bravo' },
     { id: 'c', text: 'Charlie' },
   ],
-  key: { choiceIds: ['a', 'c'] },
   partialCredit: 'NC',
 };
 
-const trueFalse: TrueFalseSpec = { type: 'true_false', key: { value: true } };
+const trueFalse: PublicTrueFalseSpec = { ...PUBLIC_COMMON, type: 'true_false' };
 
-const numeric: NumericSpec = {
+const numeric: PublicNumericSpec = {
+  ...PUBLIC_COMMON,
   type: 'numeric',
-  key: { value: 9.81 },
   tolerance: { absolute: 0.05 },
 };
-const shortText: ShortTextSpec = {
+const shortText: PublicShortTextSpec = {
+  ...PUBLIC_COMMON,
   type: 'short_text',
-  key: { text: 'mitochondria' },
   matcher: 'EXACT',
 };
 

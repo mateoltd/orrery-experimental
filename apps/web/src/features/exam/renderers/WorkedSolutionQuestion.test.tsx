@@ -1,27 +1,30 @@
 // @vitest-environment jsdom
 
-import type { WorkedSolutionSpec } from '@orrery/contracts/question';
+import type { PublicWorkedSolutionSpec } from '@orrery/contracts/question';
 import { cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { assertRendersContract } from './contractHarness';
+import { assertRendersContract, PUBLIC_COMMON } from './contractHarness.js';
 import { solutionHeading, solutionSummary, WorkedSolutionQuestion } from './WorkedSolutionQuestion';
 
 /** Referenced so the classic-runtime JSX requirement is a REAL use rather than a stripped import. */
 void React;
 
-const spec: WorkedSolutionSpec = {
+const spec: PublicWorkedSolutionSpec = {
+  ...PUBLIC_COMMON,
   type: 'worked_solution',
   steps: [
-    { id: 's1', prompt: 'Write the equation of motion.', points: 2, key: { text: 'F = ma' } },
-    { id: 's2', prompt: 'Rearrange it for acceleration.', points: 1, key: { text: 'a = F / m' } },
+    { id: 's1', prompt: 'Write the equation of motion.', points: 2 },
+    { id: 's2', prompt: 'Rearrange it for acceleration.', points: 1 },
     // A step with NO key, to pin the difference between "expected answer is blank" and "not compared".
     { id: 's3', prompt: 'State what a negative sign means.', points: 1 },
   ],
 };
 
 afterEach(cleanup);
+
+const SOLUTIONS = { s1: 'F = ma', s2: 'a = F / m' };
 
 const Stateful = ({
   answered = false,
@@ -34,6 +37,7 @@ const Stateful = ({
     spec={spec}
     prompt="Show the derivation."
     answered={answered}
+    solutions={SOLUTIONS}
     onReveal={() => {
       spy?.();
     }}
@@ -151,13 +155,13 @@ describe('as DRIVEN', () => {
 
 describe('the derived strings', () => {
   it('singularises correctly, because "1 steps" reads as a bug to a student', () => {
-    expect(
-      solutionHeading({ type: 'worked_solution', steps: [{ id: 'a', prompt: 'p', points: 1 }] }),
-    ).toBe('Worked solution: 1 step');
+    expect(solutionHeading({ steps: [{ id: 'a', prompt: 'p', points: 1 }] })).toBe(
+      'Worked solution: 1 step',
+    );
   });
 
   it('sums the marks from the spec, so the display cannot disagree with the grading', () => {
     expect(solutionSummary(spec)).toBe('3 steps, 4 marks.');
-    expect(solutionSummary({ type: 'worked_solution', steps: [] })).toBe('0 steps, 0 marks.');
+    expect(solutionSummary({ steps: [] })).toBe('0 steps, 0 marks.');
   });
 });

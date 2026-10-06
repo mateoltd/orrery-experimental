@@ -24,11 +24,11 @@
  * back out.
  */
 
-import type { SimulationSpec } from '@orrery/contracts/question';
+import type { PublicSimulationSpec } from '@orrery/contracts/question';
 import * as React from 'react';
 
 export interface SimulationProps {
-  readonly spec: SimulationSpec;
+  readonly spec: PublicSimulationSpec;
   readonly prompt: string;
   /** The simulation's own title, from the registry entry rather than the question text. */
   readonly title: string;

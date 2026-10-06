@@ -12,7 +12,7 @@
  *
  * ## THE KEYWORD LAYER IS NOT SHOWN, AND SAYING SO IS THE POINT
  *
- * `FreeResponseSpec.conceptHints` is an optional layer that only *suggests*. `plans/07` is careful that it never
+ * `PublicFreeResponseSpec.conceptHints` is an optional layer that only *suggests*. `plans/07` is careful that it never
  * decides a score, and it is stripped from the student payload along with the rubric. So the renderer must not print
  * it. A student who sees "expected concepts: momentum, impulse" reasonably concludes the answer is graded against
  * that list, and a written answer that is correct without using either word becomes a support conversation.
@@ -22,11 +22,11 @@
  * gaming a keyword matcher. So the rendered text states the reviewing model and nothing about the hints.
  */
 
-import type { FreeResponseSpec } from '@orrery/contracts/question';
+import type { PublicFreeResponseSpec } from '@orrery/contracts/question';
 import * as React from 'react';
 
 export interface FreeResponseProps {
-  readonly spec: FreeResponseSpec;
+  readonly spec: PublicFreeResponseSpec;
   readonly prompt: string;
   readonly value?: string;
   /**

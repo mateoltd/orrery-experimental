@@ -1,23 +1,19 @@
 // @vitest-environment jsdom
 
-import type { FreeResponseSpec } from '@orrery/contracts/question';
+import type { PublicFreeResponseSpec } from '@orrery/contracts/question';
 import { cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { assertRendersContract } from './contractHarness';
+import { assertRendersContract, PUBLIC_COMMON } from './contractHarness.js';
 import { DEFAULT_MARKING_NOTE, FreeResponseQuestion } from './FreeResponseQuestion';
 
 /** Referenced so the classic-runtime JSX requirement is a REAL use rather than a stripped import. */
 void React;
 
-const spec: FreeResponseSpec = {
+const spec: PublicFreeResponseSpec = {
+  ...PUBLIC_COMMON,
   type: 'free_response',
-  rubric: [
-    { points: 3, descriptor: 'names both forces and the resulting acceleration' },
-    { points: 1, descriptor: 'names one force' },
-  ],
-  conceptHints: ['momentum', 'impulse'],
 };
 
 afterEach(cleanup);

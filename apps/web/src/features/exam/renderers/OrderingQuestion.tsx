@@ -33,7 +33,7 @@
  */
 
 import { contractFor } from '@orrery/contracts/a11y/questionInteraction';
-import type { OrderingSpec } from '@orrery/contracts/question';
+import type { PublicOrderingSpec } from '@orrery/contracts/question';
 /*
  * `React` IS A NAMESPACE IMPORT, AND THAT IS THE POINT RATHER THAN A STYLE.  (P7-T7)
  *
@@ -55,7 +55,7 @@ import type { OrderingSpec } from '@orrery/contracts/question';
 import * as React from 'react';
 
 export interface OrderingProps {
-  readonly spec: OrderingSpec;
+  readonly spec: PublicOrderingSpec;
   readonly prompt: string;
   /** The current order of item ids. */
   readonly value: readonly string[];

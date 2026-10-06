@@ -9,17 +9,18 @@
  * different one, and a blind student and a sighted student would then submit different answers to the same question.
  */
 
-import type { OrderingSpec } from '@orrery/contracts/question';
+import type { PublicOrderingSpec } from '@orrery/contracts/question';
 import { cleanup, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { assertRendersContract } from './contractHarness';
+import { assertRendersContract, PUBLIC_COMMON } from './contractHarness.js';
 import { moveItem, OrderingQuestion } from './OrderingQuestion';
 
 afterEach(cleanup);
 
-const spec: OrderingSpec = {
+const spec: PublicOrderingSpec = {
+  ...PUBLIC_COMMON,
   type: 'ordering',
   items: [
     { id: 'a', text: 'Solar wind' },
@@ -27,7 +28,6 @@ const spec: OrderingSpec = {
     { id: 'c', text: 'Ionosphere' },
     { id: 'd', text: 'Thermosphere' },
   ],
-  key: { itemIds: ['a', 'b', 'c', 'd'] },
 };
 
 const PROMPT = 'Put these layers in order, from the Sun outwards.';

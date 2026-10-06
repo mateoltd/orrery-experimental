@@ -31,14 +31,14 @@ const propsFor = (type: (typeof QUESTION_TYPES)[number]): Record<string, unknown
     case 'single_choice':
       return {
         ...base,
-        spec: { type, choices: [{ id: 'a', text: 'A' }], key: { choiceId: 'a' } },
+        spec: { type, choices: [{ id: 'a', text: 'A' }] },
       };
     case 'true_false':
-      return { ...base, spec: { type, key: { value: true } } };
+      return { ...base, spec: { type } };
     case 'multi_select':
       return {
         ...base,
-        spec: { type, choices: [{ id: 'a', text: 'A' }], key: { choiceIds: ['a'] } },
+        spec: { type, choices: [{ id: 'a', text: 'A' }], partialCredit: 'NC' },
       };
     case 'numeric':
       return { ...base, spec: { type, tolerance: { absolute: 0.1 } } };
@@ -47,7 +47,7 @@ const propsFor = (type: (typeof QUESTION_TYPES)[number]): Record<string, unknown
     case 'ordering':
       return {
         ...base,
-        spec: { type, items: [{ id: 'a', text: 'A' }], key: { itemIds: ['a'] } },
+        spec: { type, items: [{ id: 'a', text: 'A' }] },
         value: ['a'],
         onChange: () => {},
       };
@@ -87,8 +87,8 @@ describe('the registry', () => {
      * element and `inputMode`. Ten components would be ten places for the same a11y bug to be fixed once.
      *
      * `true_false` is deliberately NOT `SingleChoiceQuestion`, even though "they are both choice questions" sounds
-     * right. `SingleChoiceProps.spec` is typed `SingleChoiceSpec`, so the mapped type refuses that mapping outright.
-     * Had the annotation been looser it would have been a runtime crash instead: `TrueFalseSpec` has no `choices`, so
+     * right. `SingleChoiceProps.spec` is typed `PublicSingleChoiceSpec`, so the mapped type refuses that mapping outright.
+     * Had the annotation been looser it would have been a runtime crash instead: `PublicTrueFalseSpec` has no `choices`, so
      * `spec.choices.map` throws on the first render.
      */
     expect(QUESTION_RENDERERS.multi_select).toBe(QUESTION_RENDERERS.true_false);

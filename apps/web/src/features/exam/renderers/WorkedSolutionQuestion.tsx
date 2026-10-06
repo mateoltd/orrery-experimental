@@ -5,7 +5,7 @@
  *
  * ## `step.key` IS THE ANSWER, AND WHEN IT APPEARS IS THE WHOLE DESIGN PROBLEM
  *
- * `WorkedSolutionSpec.steps[].key` is the expected answer for that step, and it is also the only answer text this
+ * `PublicWorkedSolutionSpec.steps[].key` is the expected answer for that step, and it is also the only answer text this
  * renderer is given -- there is no separate "worked reasoning" field. So `key` is not a marker's-only field that a
  * solution politely declines to print: a worked solution that never shows the answer is not a worked solution.
  *
@@ -34,20 +34,29 @@
  * content scrolls a student past the answer they were reading.
  */
 
-import type { WorkedSolutionSpec } from '@orrery/contracts/question';
+import type { PublicWorkedSolutionSpec } from '@orrery/contracts/question';
 import * as React from 'react';
 
 export interface WorkedSolutionProps {
-  readonly spec: WorkedSolutionSpec;
+  readonly spec: PublicWorkedSolutionSpec;
   readonly prompt: string;
   /** Whether the student has already answered, which is what the reveal is *for*. */
   readonly answered?: boolean;
   readonly onReveal?: () => void;
   readonly disabled?: boolean;
+  /**
+   * The worked answers by step id, supplied ONLY from released data -- never from the question spec.
+   * The spec reaching this component is public and carries no keys, so a reveal sourced from it could
+   * never show an answer; sourcing it from an explicit prop keeps the legitimate post-release review
+   * working while making it structurally impossible for the exam runner to pass keys it does not have.
+   * A client-side answered+revealed gate is not a security boundary -- anyone can flip React state --
+   * so the boundary is WHERE THE STRINGS COME FROM, not when they are shown.
+   */
+  readonly solutions?: Readonly<Record<string, string>>;
 }
 
 /** The heading, which is also the region's accessible name. */
-export const solutionHeading = (spec: WorkedSolutionSpec): string =>
+export const solutionHeading = (spec: Pick<PublicWorkedSolutionSpec, 'steps'>): string =>
   `Worked solution: ${String(spec.steps.length)} step${spec.steps.length === 1 ? '' : 's'}`;
 
 /**
@@ -57,7 +66,7 @@ export const solutionHeading = (spec: WorkedSolutionSpec): string =>
  * number. The per-step points are therefore worth stating, and the total is worth stating as a sum of the same
  * numbers -- derived, not hard-coded, so a spec and its display cannot disagree.
  */
-export const solutionSummary = (spec: WorkedSolutionSpec): string => {
+export const solutionSummary = (spec: Pick<PublicWorkedSolutionSpec, 'steps'>): string => {
   const total = spec.steps.reduce((sum, step) => sum + step.points, 0);
   return `${String(spec.steps.length)} steps, ${String(total)} marks.`;
 };
@@ -73,6 +82,7 @@ export function WorkedSolutionQuestion({
   answered = false,
   onReveal,
   disabled = false,
+  solutions,
 }: WorkedSolutionProps) {
   const [revealed, setRevealed] = React.useState(false);
   const regionId = React.useId();
@@ -150,8 +160,8 @@ export function WorkedSolutionQuestion({
               <p>
                 {String(step.points)} mark{step.points === 1 ? '' : 's'}
               </p>
-              {revealed && step.key !== undefined ? (
-                <p data-testid={`reveal-${step.id}`}>{step.key.text}</p>
+              {revealed && solutions?.[step.id] !== undefined ? (
+                <p data-testid={`reveal-${step.id}`}>{solutions?.[step.id]}</p>
               ) : null}
             </li>
           ))}

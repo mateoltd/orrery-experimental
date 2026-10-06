@@ -19,11 +19,11 @@
  * `plans/07`'s significant-figure rule counts digits in the WRITTEN form.
  */
 
-import type { NumericSpec, ShortTextSpec } from '@orrery/contracts/question';
+import type { PublicNumericSpec, PublicShortTextSpec } from '@orrery/contracts/question';
 import * as React from 'react';
 
 export interface TextFieldProps {
-  readonly spec: NumericSpec | ShortTextSpec;
+  readonly spec: PublicNumericSpec | PublicShortTextSpec;
   readonly prompt: string;
   readonly value?: string;
   /**
@@ -106,7 +106,7 @@ export function TextFieldQuestion({
 }
 
 /** The tolerance line, built from the spec so it cannot drift from what the grader will apply. */
-export const toleranceHint = (spec: NumericSpec): string | undefined => {
+export const toleranceHint = (spec: PublicNumericSpec): string | undefined => {
   const parts: string[] = [];
   if (spec.tolerance.absolute !== undefined)
     parts.push(`within ${String(spec.tolerance.absolute)}`);
