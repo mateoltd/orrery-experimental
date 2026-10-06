@@ -52,7 +52,7 @@
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -154,6 +154,92 @@ const manifestNames = existsSync(simsDir)
  * Cycles are found by WALKING, with a step limit as well as a seen-set: the seen-set terminates on a cycle, and the step
  * limit terminates on a chain longer than the catalogue, so neither is the only line of defence.
  */
+/**
+ * EVERY TEXT ALTERNATIVE MUST BE AN ALTERNATIVE.  (P13-T4)
+ *
+ * ## WHAT THIS GUARDS, AND WHY THE DECLARATIONS WERE NOT ENOUGH
+ *
+ * All simulations declare `accessibility.textAlternative`, and measuring them at the time
+ * this check was written shows the content is genuinely
+ * good: **none restates its title, none duplicates its `screenReaderSummary`, and they run well over
+ * the title's length.** So this is not a fix for bad copy that shipped.
+ *
+ * **It is a guard, because nothing checked them.** A declaration that only a human ever read is a promise, and the next
+ * simulation added would ship `"textAlternative": "the simulation"` and pass every existing check. Worse, four gate scripts
+ * in this repository SYNTHESISE manifests whose `textAlternative` is literally `String(entry.title)`
+ * (`sim-conformance.mjs:1644`, `repro-graded-preview.mjs:46`, `repro-init-params.mjs:48`, `sim-sandbox-escape.mjs:204`) --
+ * **so the shape this check exists to reject is already the house style of the fixtures.**
+ *
+ * ## WHAT "AN ALTERNATIVE" MEANS HERE, AND WHY NOT SOMETHING SMARTER
+ *
+ * Four mechanical conditions, each of which is a way the field is currently unfilled in practice:
+ *
+ *   - **present and non-blank.** An absent field falls back to nothing in the embed, and a blank one is read as nothing.
+ *   - **not the title.** "Pythagoras' theorem" tells a screen-reader user nothing about what the frame contains.
+ *   - **not a copy of `screenReaderSummary`.** Two fields holding one string means one of them was filled in twice.
+ *   - **longer than the title.** A proxy for "says something", chosen because it is measurable without judgement and
+ *     cannot be satisfied by a longer title.
+ *
+ * **Deliberately NOT a judgement about whether the prose is GOOD.** That is `P12-T3`'s review with a human in it, and
+ * `P13-T9`'s. A gate that tried to assess prose quality would fail on wording it did not like, and would be switched off
+ * within a week -- the permanently-red lesson this project has paid three times.
+ *
+ * The manifests checked here are read from disk, so this runs whether or not a build has happened.
+ */
+const ACCESSIBILITY_MIN_RATIO = 1.5;
+const manifestFiles = manifestNames.map((name) => join(simsDir, name, 'sim.manifest.json'));
+let accessibilityChecked = 0;
+
+for (const manifestFile of manifestFiles) {
+  if (!existsSync(manifestFile)) continue;
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(manifestFile, 'utf8'));
+  } catch (why) {
+    fail(
+      `UNREADABLE MANIFEST: ${relative(root, manifestFile)} -- ${why instanceof Error ? why.message : String(why)}`,
+    );
+    continue;
+  }
+  const id = String(manifest.id ?? relative(root, manifestFile));
+  const accessibility = manifest.accessibility ?? {};
+  const title = String(manifest.title ?? '').trim();
+  const alternative = String(accessibility.textAlternative ?? '').trim();
+  const summary = String(accessibility.screenReaderSummary ?? '').trim();
+  accessibilityChecked += 1;
+
+  const complain = (why) =>
+    fail(
+      `TEXT ALTERNATIVE IS NOT AN ALTERNATIVE: ${id} -- ${why}\n` +
+        `  A screen-reader user gets this string instead of the frame. Every alternative on disk at the\n` +
+        `  time this check was written was substantive, so this is a guard against the NEXT one, not a\n` +
+        `  repair of a bad copy.\n` +
+        `  Note that four gate scripts already synthesise textAlternative as the bare title, so this shape is\n` +
+        `  the house style of the fixtures -- see this check's header.`,
+    );
+
+  if (alternative.length === 0) {
+    complain('it is absent or blank');
+    continue;
+  }
+  if (title.length > 0 && alternative.toLowerCase() === title.toLowerCase()) {
+    complain(`it is the title, "${title}"`);
+    continue;
+  }
+  if (summary.length > 0 && alternative === summary) {
+    complain(
+      'it is a verbatim copy of screenReaderSummary, so one string was filled into two fields',
+    );
+    continue;
+  }
+  if (title.length > 0 && alternative.length < title.length * ACCESSIBILITY_MIN_RATIO) {
+    complain(
+      `it is ${String(alternative.length)} characters against a ${String(title.length)}-character title, ` +
+        `under the ${String(ACCESSIBILITY_MIN_RATIO)}x floor`,
+    );
+  }
+}
+
 const byId = new Map(entries.map((entry) => [entry.id, entry]));
 
 for (const entry of entries) {
@@ -397,6 +483,7 @@ report(entries.length, bundleFiles, resolvedPinned);
 function report(entryCount, fileCount, resolved) {
   process.stdout.write('SIMULATION REGISTRY ARTEFACT GATE (INV-SIM-1, INV-SIM-2)\n');
   process.stdout.write(`  manifests on disk: ${String(manifestNames.length)}\n`);
+  process.stdout.write(`  text alternatives checked: ${String(accessibilityChecked)}\n`);
   process.stdout.write(`  registry entries: ${String(entryCount)}\n`);
   process.stdout.write(`  bundle files resolved: ${String(fileCount)}\n`);
   process.stdout.write(`  entries resolvable when pinned: ${String(resolved)}\n`);
