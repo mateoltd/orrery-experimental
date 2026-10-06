@@ -197,6 +197,10 @@
     "./accommodations": {
       "types": "./dist/accommodations.d.ts",
       "default": "./dist/accommodations.js"
+    },
+    "./admin": {
+      "types": "./dist/admin.d.ts",
+      "default": "./dist/admin.js"
     }
   },
   "scripts": {

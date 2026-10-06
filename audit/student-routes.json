@@ -96,6 +96,12 @@
       "kind": "layout",
       "reason": "AUDITED SEPARATELY FROM THE PAGE BECAUSE THEY SHARE A PATH AND ARE DIFFERENT FILES. Under a two-kind keying they collided, the Map kept one, and one of the two files was never audited while the summary still reported a clean count -- **the exact 'reports clean because it read the wrong file' failure this script exists to prevent, introduced by the fix for it.** This layout is where `ExamShell` is mounted, so it is where the server clock, the watchdog set and the IndexedDB outbox enter the exam path. It reads no grade data and takes no identity from params: `ExamShell` receives only `attemptId` and the same authentication gap as the page it wraps is recorded on the page's row.",
       "scoreFree": true
+    },
+    {
+      "path": "/admin/users",
+      "kind": "page",
+      "scoreFree": true,
+      "reason": "PLATFORM-ADMIN user list: email, name, suspension state and reason. Declared rather than exempt because it takes an identifier (the search query) and renders per-user rows -- the shape most likely to gain a score column later. Renders no grade data today; the score-key scan and the call-graph walk (server/admin.ts -> db/admin.ts, both score-free) are what establish that, not this sentence. Non-admins receive the same empty list as an empty search, so the page is not an admin-existence oracle."
     }
   ]
 }
