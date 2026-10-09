@@ -12,6 +12,8 @@
  * decoration, and the row says why a late-built one cannot distinguish late-granted from never-granted.
  */
 
+"use server";
+
 import { getPrisma } from '@orrery/db';
 import { grantAccommodation, revokeAccommodation } from '@orrery/db/accommodations';
 import { resolveActorForRequest } from '@orrery/db/classrooms';
@@ -38,8 +40,6 @@ const RELAXATIONS = [
   'DISABLE_TAB_WATCHDOG',
   'EXTRA_TIME_PERCENT',
 ] as const;
-
-('use server');
 
 export async function grantAccommodationAction(input: {
   callerUserId: string;
@@ -72,8 +72,6 @@ export async function grantAccommodationAction(input: {
   });
   return result.ok ? { ok: true, reason: '' } : { ok: false, reason: result.message };
 }
-
-('use server');
 
 export async function revokeAccommodationAction(input: {
   callerUserId: string;
@@ -113,7 +111,6 @@ export async function listAccommodations(input: {
   callerUserId: string;
   classroomId: string;
 }): Promise<readonly AccommodationRow[]> {
-  'use server';
   if (!(await callerCanGrant({ classroomId: input.classroomId, callerUserId: input.callerUserId })))
     return [];
   const db = getPrisma();
